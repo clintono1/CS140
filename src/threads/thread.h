@@ -91,25 +91,19 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
-	/*used for alarm clock */
-	int64_t wake_up_time;               /* Time to wake up current thread */
-	struct list_elem alarm_elem;        /* List element for alarm queue */
-
-    /* used for priority scheduling */
-	int eff_priority;                   /* criterion for priority scheduling */
-	struct list lock_list;              /* a list of my locks waited by others*/
-	struct lock * lock_to_acquire;      /* the lock that I am tracing */
-	/* priority scheduling done*/
-
+    int64_t wake_up_time;               /* Time to wake up current thread */
+    struct list_elem alarm_elem;        /* List element for alarm queue */
+    int eff_priority;                   /* Effective priority */
+    struct lock * lock_to_acquire;      /* Lock this thread is waiting for */
+    struct list locks_waited_by_others; /* Locks held by this thread but
+                                           also waited by other threads*/
+    int recent_cpu;                     /* CPU time received recently */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
     
-    int recent_cpu;                     /* CPU time received recently */
-
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

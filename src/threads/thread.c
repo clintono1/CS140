@@ -472,7 +472,7 @@ init_thread (struct thread *t, const char *name, int priority)
   //initialize the three added members in priority scheduling
   t->eff_priority = priority;
   t->lock_to_acquire = NULL;
-  list_init(& (t->lock_list));
+  list_init(& (t->locks_waited_by_others));
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
