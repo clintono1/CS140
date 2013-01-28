@@ -8,22 +8,24 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Song Han <songhan@stanford.edu>
+Jinchao Ye <jinchao@stanford.edu>
+Bo Wang <bowang@stanford.edu>
 
 ---- PRELIMINARIES ----
 
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+None
+
 >> Describe briefly which parts of the assignment were implemented by
 >> each member of your team. If some team members contributed significantly
 >> more or less than others (e.g. 2x), indicate that here.
 
-FirstName LastName: contribution
-FirstName LastName: contribution
-FirstName LastName: contribution
+Song Han: alarm, priority scheduler
+Jinchao Ye: advanced scheduler
+Bo Wang: priority donation, design document, testing cases
 
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
