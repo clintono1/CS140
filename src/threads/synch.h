@@ -4,6 +4,7 @@
 #include <list.h>
 #include <stdbool.h>
 
+
 /* A counting semaphore. */
 struct semaphore 
   {
@@ -11,6 +12,9 @@ struct semaphore
     struct list waiters;        /* List of waiting threads. */
   };
 
+static bool priority_greater_or_equal (const struct list_elem *, const struct list_elem *, void *aux);
+//void update_eff_priority (struct thread *, int );
+//int  find_max_priority(struct thread * );
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
 bool sema_try_down (struct semaphore *);
@@ -20,8 +24,11 @@ void sema_self_test (void);
 /* Lock. */
 struct lock 
   {
+    unsigned magic;             /* Detects whether it is a lock */
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
+    //added for priority scheduling
+    struct list_elem thread_elem;
   };
 
 void lock_init (struct lock *);
@@ -47,5 +54,10 @@ void cond_broadcast (struct condition *, struct lock *);
    optimization barrier.  See "Optimization Barriers" in the
    reference guide for more information.*/
 #define barrier() asm volatile ("" : : : "memory")
+
+#define get_sema_holder(SEMA) (struct thread *)((void*)SEMA-sizeof(struct thread *))  
+
+#define get_sema_lock(SEMA) (struct lock *)((void*)SEMA-sizeof(struct thread *))
+
 
 #endif /* threads/synch.h */

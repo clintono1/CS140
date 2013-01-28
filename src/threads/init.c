@@ -96,8 +96,11 @@ main (void)
 
   /* Initialize memory system. */
   palloc_init (user_page_limit);
+  //printf("palloc finished\n");
   malloc_init ();
+  //printf("alloc finished\n");
   paging_init ();
+  //printf("alloc finished\n");
 
   /* Segmentation. */
 #ifdef USERPROG

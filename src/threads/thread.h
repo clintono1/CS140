@@ -88,22 +88,30 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int64_t wake_up_time;               /* Time to wake up current thread */
-    struct list_elem alarm_elem;        /* List element for alarm queue */
     struct list_elem allelem;           /* List element for all threads list. */
-
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
+	/*used for alarm clock */
+	int64_t wake_up_time;               /* Time to wake up current thread */
+	struct list_elem alarm_elem;        /* List element for alarm queue */
+
+    /* used for priority scheduling */
+	int eff_priority;                   /* criterion for priority scheduling */
+	struct list lock_list;              /* a list of my locks waited by others*/
+	struct lock * lock_to_acquire;      /* the lock that I am tracing */
+	/* priority scheduling done*/
+
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+    
+    int recent_cpu;                     /* CPU time received recently */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-
-    int recent_cpu;                     /* CPU time received recently */
   };
 
 /* If false (default), use round-robin scheduler.
@@ -141,5 +149,6 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
 
 #endif /* threads/thread.h */

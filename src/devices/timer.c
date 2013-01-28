@@ -7,7 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-#include <list.h>  
+#include <list.h>
 /* See [8254] for hardware details of the 8254 timer chip. */
 
 #if TIMER_FREQ < 19
@@ -87,9 +87,11 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-// TODO: comment + line limit > 80
+
+//compare the wake_up_time of two threads from their list_elem
 static bool
-value_less (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
+value_less (const struct list_elem *a_, const struct list_elem *b_,\
+            void *aux UNUSED)
 {
   const struct thread *a = list_entry (a_, struct thread, alarm_elem);
   const struct thread *b = list_entry (b_, struct thread, alarm_elem);
