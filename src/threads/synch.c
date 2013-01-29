@@ -32,6 +32,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+#define PRINTF(...)
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -387,8 +389,6 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock) 
 {
-  //PRINTF("thread tid=%d is releasing the lock\n", thread_current()->tid);
-  //PRINTF("lock's holder's tid=%d\n", lock->holder->tid);
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
