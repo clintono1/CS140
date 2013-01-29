@@ -357,9 +357,7 @@ thread_set_priority (int new_priority)
   {
     int new_eff_priority = find_max_priority (t);
     update_eff_priority (t, new_eff_priority);
-    struct thread *next_thread = next_thread_to_run();
-    if (t->eff_priority < next_thread->eff_priority)
-      thread_yield();
+    thread_yield();
   }
 }
 

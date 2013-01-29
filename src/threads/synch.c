@@ -32,8 +32,6 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
-#define PRINTF(...)
-
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -92,8 +90,6 @@ find_max_priority (struct thread *t)
 void
 update_eff_priority (struct thread *t, int eff_priority)
 {
-  PRINTF ("Update effective priority of thread %d: %d --> %d\n",
-          t->tid, t->eff_priority, eff_priority);
   if (t->eff_priority == eff_priority) {
     return;
   }
@@ -103,23 +99,15 @@ update_eff_priority (struct thread *t, int eff_priority)
 
   if (l != NULL)
   {
-    PRINTF ("Thread %d is waiting for lock %p\n", t->tid, l);
     struct thread *holder = l->holder;
     list_sort (&l->semaphore.waiters, priority_greater_or_equal, NULL);
     if (eff_priority > holder->eff_priority)
     {
-      PRINTF ("New eff_priority(%d) > lock holder's eff_priority(%d)\n",
-              eff_priority, holder->eff_priority);
       update_eff_priority (holder, eff_priority);
     }
     else if (eff_priority < holder->eff_priority)
     {
-      PRINTF ("New eff_priority(%d) < lock holder's eff_priority(%d)\n",
-              eff_priority, holder->eff_priority);
-
       int p = find_max_priority (holder);
-      PRINTF ("Found max eff_priority of lock holder = %d\n", p);
-
       if (p != holder->eff_priority)
       {
         update_eff_priority (holder, p);
