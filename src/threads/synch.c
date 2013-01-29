@@ -64,7 +64,7 @@ priority_greater_or_equal (const struct list_elem *a,
   return ta->eff_priority >= tb->eff_priority;
 }
 
-/* Return the max priority of all other threads waiting for locks held by the
+/* Return the max priority of all other threads waiting for locks held by
    the given thread and its primitive priority */
 int
 find_max_priority (struct thread *t)
@@ -90,7 +90,6 @@ find_max_priority (struct thread *t)
 void
 update_eff_priority (struct thread *t, int eff_priority)
 {
-  /* TODO: Song, please help me verify this function impl */
   PRINTF ("Update effective priority of thread %d: %d --> %d\n",
           t->tid, t->eff_priority, eff_priority);
   if (t->eff_priority == eff_priority) {
@@ -141,7 +140,6 @@ sema_down (struct semaphore *sema)
   ASSERT (sema != NULL);
   ASSERT (!intr_context ());
   old_level = intr_disable ();
- // PRINTF("sema in lock: %d\n", sema->in_lock);
 
   while (sema->value == 0) 
   {
@@ -155,7 +153,6 @@ sema_down (struct semaphore *sema)
       if (!list_elem_exist (&holder->locks_waited_by_others, &l->thread_elem))
       {
         list_push_back (&holder->locks_waited_by_others,  &l->thread_elem);
-       // PRINTF ("Added lock %p to thread %d waited locks.\n", l, holder->tid);
       }
 
       list_insert_ordered (&(sema->waiters), &thread_current()->elem,
@@ -172,7 +169,7 @@ sema_down (struct semaphore *sema)
     thread_block ();
   }
   sema->value--;
-  //PRINTF("sema value--, acquired it!\n");
+
   if (sema->in_lock) /* Semaphore in a lock */
   {
     struct lock *l = get_sema_lock (sema);
@@ -247,7 +244,6 @@ sema_up (struct semaphore *sema)
                                 struct thread, elem));
     //critical bug fix:
     thread_yield();
-
   }
   sema->value++;
   intr_set_level (old_level);
@@ -289,7 +285,7 @@ sema_test_helper (void *sema_)
       sema_up (&sema[1]);
     }
 }
-
+
 /* Initializes LOCK.  A lock can be held by at most a single
    thread at any given time.  Our locks are not "recursive", that
    is, it is an error for the thread currently holding a lock to
@@ -326,17 +322,11 @@ lock_init (struct lock *lock)
 void
 lock_acquire (struct lock *lock)
 {
-  enum intr_level old_level = intr_disable ();
-
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-  //PRINTF("thread tid=%d is acquiring the lock\n", thread_current()->tid);
+
   sema_down (&lock->semaphore);
-  //PRINTF("holder's tid is %d\n", lock->holder->tid);
-
-
-  intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
