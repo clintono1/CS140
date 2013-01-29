@@ -150,19 +150,25 @@ sema_down (struct semaphore *sema)
 
       thread_current()->lock_to_acquire = l;
 
+      /* If this lock has not been added to the holder's waited_locks_by_others
+         list, do it. */
       if (!list_elem_exist (&holder->locks_waited_by_others, &l->thread_elem))
       {
         list_push_back (&holder->locks_waited_by_others,  &l->thread_elem);
       }
 
+      /* Insert the thread to the waiting list */
       list_insert_ordered (&(sema->waiters), &thread_current()->elem,
           priority_greater_or_equal, NULL);
 
+      /* If this requesting thread's eff_priority is higher than that of the
+         holder thread, do priority donation */
       if (thread_current()->eff_priority > holder->eff_priority)
           update_eff_priority (holder, thread_current()->eff_priority);
     }
     else /* Semaphore not in a lock */
     {
+      /* Insert the thread to the waiting list */
       list_insert_ordered (&(sema->waiters), &thread_current()->elem,
           priority_greater_or_equal, NULL);
     }
@@ -170,9 +176,10 @@ sema_down (struct semaphore *sema)
   }
   sema->value--;
 
-  if (sema->in_lock) /* Semaphore in a lock */
+  if (sema->in_lock)
   {
     struct lock *l = get_sema_lock (sema);
+    /* Lock acquired. Thus reset lock_to_acquire and set holder */
     thread_current()->lock_to_acquire = NULL;
     l->holder = thread_current ();
   }
@@ -222,6 +229,8 @@ sema_up (struct semaphore *sema)
   /* If there are other threads waiting for this semaphore, unblock one */
   if (!list_empty (&sema->waiters)) 
   {
+    /* Since sema->waiters are ordered by priorities, the first one is the one
+       with the largest priority */
     struct thread *next_thread = list_entry (list_pop_front (&sema->waiters),
                                              struct thread, elem);
     if (sema->in_lock)
@@ -233,12 +242,20 @@ sema_up (struct semaphore *sema)
          than that of the lock holder thread */
       ASSERT(holder->eff_priority >= next_thread->eff_priority);
 
+      /* If the effective priority of the holder thread equals to that of
+         the next thread to run, it is possible this effective priority was
+         donated by this next thread. Since the holder thread is about to
+         release this lock, it should check for the new priority. */
       if (holder->eff_priority == next_thread->eff_priority)
       {
         int new_eff_priority = find_max_priority (holder);
+        /* If new effective priority is smaller than that of the next to run,
+           the holder thread should yield after releasing the lock */
         if (new_eff_priority < next_thread->eff_priority)
+        {
           yield_on_return = true;
-        update_eff_priority (holder, new_eff_priority);
+          update_eff_priority (holder, new_eff_priority);
+        }
       }
       /* Remove the lock from the thread's locks_waited_by_others */
       list_remove(&l->thread_elem);
@@ -247,6 +264,7 @@ sema_up (struct semaphore *sema)
     thread_unblock (next_thread);
   }
 
+  /* If semaphore is in a lock, set the holder to null */
   if (sema->in_lock)
   {
     struct lock *l = get_sema_lock (sema);
