@@ -208,7 +208,8 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  thread_yield();
+  if (thread_current()->eff_priority < t->eff_priority)
+    thread_yield ();
 
   return tid;
 }
@@ -344,18 +345,10 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  
-  
   thread_current ()->priority = new_priority;
-  thread_current ()->eff_priority = new_priority;
+  if (new_priority > thread_current()->eff_priority)
+    thread_current ()->eff_priority = new_priority;
   thread_yield();
-  
-  /*
-  int old_priority = thread_current ()->eff_priority;
-  if (old_priority > new_priority)
-  {
-    thread_yield();
-  }*/
 }
 
 /* Returns the current thread's priority. */
@@ -481,7 +474,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  //initialize the three added members in priority scheduling
+
   t->eff_priority = priority;
   t->lock_to_acquire = NULL;
   list_init(& (t->locks_waited_by_others));
@@ -599,7 +592,6 @@ allocate_tid (void)
 
   lock_acquire (&tid_lock);
   tid = next_tid++;
-  PRINTF("in thread.c, the specific lock holder's tid is: %d\n", tid_lock.holder->tid);
   lock_release (&tid_lock);
 
   return tid;

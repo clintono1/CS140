@@ -199,24 +199,24 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
-  // Peek alarm_list's front element to see if the time has arrived
   struct list_elem *e;
   struct thread *t;
-  if (! list_empty(&alarm_list))
+  if (! list_empty (&alarm_list))
   {
-    e=list_front(&alarm_list);
-    t= list_entry (e, struct thread, alarm_elem);  
+    e = list_front (&alarm_list);
+    t = list_entry (e, struct thread, alarm_elem);
     
-    while(t->wake_up_time<=ticks ){
-      thread_unblock(t);
-      intr_yield_on_return ();
-      //thread_yield();
-      list_pop_front(&alarm_list);
-      if (list_empty(&alarm_list))
+    while (t->wake_up_time <= ticks)
+    {
+      thread_unblock (t);
+      if (thread_current()->eff_priority < t->eff_priority)
+        intr_yield_on_return ();
+      list_pop_front (&alarm_list);
+      if (list_empty (&alarm_list))
         break;
-      e = list_front(& alarm_list);
+      e = list_front (&alarm_list);
       t = list_entry (e, struct thread, alarm_elem);  
-    } 
+    }
   }
 }
 
