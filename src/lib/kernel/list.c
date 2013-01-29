@@ -44,9 +44,9 @@ is_head (struct list_elem *elem)
 /* Returns true if ELEM is an interior element,
    false otherwise. */
 static inline bool
-	is_interior (struct list_elem *elem)
+is_interior (struct list_elem *elem)
 {
-	return elem != NULL && elem->prev != NULL && elem->next != NULL;
+  return elem != NULL && elem->prev != NULL && elem->next != NULL;
 }
 
 /* Returns true if ELEM is a tail, false otherwise. */
@@ -458,20 +458,22 @@ list_insert_ordered (struct list *list, struct list_elem *elem,
   return list_insert (e, elem);
 }
 
-//added for priority scheduling: check if a lock is inside the lock_list
+/* Returns true if elem exists in the list */
 bool 
 list_elem_exist (struct list *list, struct list_elem *elem)
 {
-	struct list_elem *e;
+  struct list_elem *e;
 
-	ASSERT (list != NULL);	
-	ASSERT (elem != NULL);
+  ASSERT (list != NULL);
+  ASSERT (elem != NULL);
 
-	for (e = list_begin (list); e != list_end (list); e = list_next (e))
-		if (e == elem)
-			return true;
-	return false;
-
+  for (e = list_begin (list); e != list_end (list); e = list_next (e))
+  {
+    if (e == elem) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /* Iterates through LIST and removes all but the first in each

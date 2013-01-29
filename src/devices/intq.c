@@ -109,6 +109,8 @@ signal (struct intq *q UNUSED, struct thread **waiter)
   if (*waiter != NULL) 
     {
       thread_unblock (*waiter);
+      //TODO: this intq.c is in device folder, do we need modify?
+      thread_yield();
       *waiter = NULL;
     }
 }
