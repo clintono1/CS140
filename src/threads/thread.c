@@ -345,10 +345,22 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *t = thread_current ();
+  if (new_priority == t->priority)
+    return;
+  t->priority = new_priority;
   if (new_priority > thread_current()->eff_priority)
-    thread_current ()->eff_priority = new_priority;
-  thread_yield();
+  {
+    update_eff_priority (t, new_priority);
+  }
+  else
+  {
+    int new_eff_priority = find_max_priority (t);
+    update_eff_priority (t, new_eff_priority);
+    struct thread *next_thread = next_thread_to_run();
+    if (t->eff_priority < next_thread->eff_priority)
+      thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -506,10 +518,10 @@ static struct thread *
 next_thread_to_run (void) 
 {
   int i;
-  for (i=0; i<64; i++)
+  for (i = 0; i < 64; i++)
   {
 	  if (!list_empty ( &ready_list[i] ))
-		  return list_entry (list_pop_front ( &ready_list[i] ), struct thread, elem);
+		  return list_entry (list_pop_front (&ready_list[i]), struct thread, elem);
   }
   return idle_thread; 
 }

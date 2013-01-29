@@ -101,9 +101,9 @@ update_eff_priority (struct thread *t, int eff_priority)
   t->eff_priority = eff_priority;
   struct lock *l = t->lock_to_acquire;
 
-  PRINTF ("Thread %d is waiting for lock %p\n", t->tid, l);
   if (l != NULL)
   {
+    PRINTF ("Thread %d is waiting for lock %p\n", t->tid, l);
     struct thread *holder = l->holder;
     list_sort (&l->semaphore.waiters, priority_greater_or_equal, NULL);
     if (eff_priority > holder->eff_priority)
