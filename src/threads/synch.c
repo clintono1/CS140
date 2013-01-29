@@ -175,7 +175,6 @@ sema_down (struct semaphore *sema)
     struct lock *l = get_sema_lock (sema);
     thread_current()->lock_to_acquire = NULL;
     l->holder = thread_current ();
-    //PRINTF("lock holder binded to tid=%d\n", l->holder->tid);
   }
 
   intr_set_level (old_level);
@@ -215,38 +214,50 @@ void
 sema_up (struct semaphore *sema)
 {
   enum intr_level old_level;
+  bool yield_on_return = false;
 
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
+  /* If there are other threads waiting for this semaphore, unblock one */
   if (!list_empty (&sema->waiters)) 
   {
+    struct thread *next_thread = list_entry (list_pop_front (&sema->waiters),
+                                             struct thread, elem);
     if (sema->in_lock)
     {
       struct lock *l = get_sema_lock (sema);
       struct thread *holder = l->holder;
-      ASSERT (holder == thread_current());
 
-      struct thread *next_thread =
-          list_entry (list_front (&sema->waiters), struct thread, elem);
+      /* The effective priority of the waiting thread should never be larger
+         than that of the lock holder thread */
+      ASSERT(holder->eff_priority >= next_thread->eff_priority);
 
-      if ( holder->eff_priority <= next_thread->eff_priority)
+      if (holder->eff_priority == next_thread->eff_priority)
       {
-        int priority = find_max_priority(holder);
-        update_eff_priority (holder, priority);
+        int new_eff_priority = find_max_priority (holder);
+        if (new_eff_priority < next_thread->eff_priority)
+          yield_on_return = true;
+        update_eff_priority (holder, new_eff_priority);
       }
-
-      l->holder = NULL;
+      /* Remove the lock from the thread's locks_waited_by_others */
       list_remove(&l->thread_elem);
     }
-
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
-    //critical bug fix:
-    thread_yield();
+    /* Add first thread waiting for the semaphore to ready list */
+    thread_unblock (next_thread);
   }
+
+  if (sema->in_lock)
+  {
+    struct lock *l = get_sema_lock (sema);
+    l->holder = NULL;
+  }
+
   sema->value++;
   intr_set_level (old_level);
+
+  if (yield_on_return)
+    thread_yield();
 }
 
 static void sema_test_helper (void *sema_);
