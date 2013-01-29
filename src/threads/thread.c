@@ -351,14 +351,79 @@ thread_set_priority (int new_priority)
   t->priority = new_priority;
   if (new_priority > thread_current()->eff_priority)
   {
-    update_eff_priority (t, new_priority);
+    thread_set_eff_priority (t, new_priority);
   }
   else
   {
-    int new_eff_priority = find_max_priority (t);
-    update_eff_priority (t, new_eff_priority);
+    int new_eff_priority = thread_find_max_priority (t);
+    thread_set_eff_priority (t, new_eff_priority);
     thread_yield();
   }
+}
+
+/* Update the effective priority of a thread. If the thread to update is
+   waiting for a lock held by another thread, priority donation will be
+   triggered. */
+void
+thread_set_eff_priority (struct thread *t, int eff_priority)
+{
+  if (t->eff_priority == eff_priority) {
+    return;
+  }
+
+  t->eff_priority = eff_priority;
+  struct lock *l = t->lock_to_acquire;
+
+  if (l != NULL)
+  {
+    struct thread *holder = l->holder;
+    list_sort (&l->semaphore.waiters, priority_greater_or_equal, NULL);
+    if (eff_priority > holder->eff_priority)
+    {
+      thread_set_eff_priority (holder, eff_priority);
+    }
+    else if (eff_priority < holder->eff_priority)
+    {
+      int p = thread_find_max_priority (holder);
+      if (p != holder->eff_priority)
+      {
+        thread_set_eff_priority (holder, p);
+      }
+    }
+  }
+}
+
+/* Compare the effective priority of two threads given their list_elem.
+   Returns true if A is larger or equal to B, or false if A is less
+   than B. */
+bool
+priority_greater_or_equal (const struct list_elem *a,
+                           const struct list_elem *b,
+                           void *aux UNUSED)
+{
+  const struct thread *ta = list_entry (a, struct thread, elem);
+  const struct thread *tb = list_entry (b, struct thread, elem);
+  return ta->eff_priority >= tb->eff_priority;
+}
+
+/* Return the max priority of all other threads waiting for locks held by
+   the given thread and its primitive priority */
+int
+thread_find_max_priority (struct thread *t)
+{
+  int max_priority = 0;
+  struct list_elem *e;
+  for( e = list_begin(&t->locks_waited_by_others);
+       e != list_end (&t->locks_waited_by_others);
+       e = list_next (e) )
+  {
+    struct lock *l = list_entry (e, struct lock, thread_elem);
+    struct list_elem *frnt = list_front(&l->semaphore.waiters);
+    struct thread *front_thread = list_entry (frnt, struct thread, elem);
+    if (max_priority < front_thread->eff_priority)
+      max_priority = front_thread->eff_priority;
+  }
+  return ( max_priority > t->priority ) ? max_priority : t->priority;
 }
 
 /* Returns the current thread's priority. */

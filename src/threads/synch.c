@@ -51,71 +51,6 @@ sema_init (struct semaphore *sema, unsigned value)
   sema->in_lock = false;
 }
 
-/* Compare the effective priority of two threads given their list_elem.
-   Returns true if A is larger or equal to B, or false if A is less
-   than B. */
-static bool
-priority_greater_or_equal (const struct list_elem *a,
-                           const struct list_elem *b,
-                           void *aux UNUSED)
-{
-  const struct thread *ta = list_entry (a, struct thread, elem);
-  const struct thread *tb = list_entry (b, struct thread, elem);
-  return ta->eff_priority >= tb->eff_priority;
-}
-
-/* Return the max priority of all other threads waiting for locks held by
-   the given thread and its primitive priority */
-int
-find_max_priority (struct thread *t)
-{
-  int max_priority = 0;
-  struct list_elem *e;
-  for( e = list_begin(&t->locks_waited_by_others);
-       e != list_end (&t->locks_waited_by_others);
-       e = list_next (e) )
-  {
-    struct lock *l = list_entry (e, struct lock, thread_elem);
-    struct list_elem *frnt = list_front(&l->semaphore.waiters);
-    struct thread *front_thread = list_entry (frnt, struct thread, elem);
-    if (max_priority < front_thread->eff_priority)
-      max_priority = front_thread->eff_priority;
-  }
-  return ( max_priority > t->priority ) ? max_priority : t->priority;
-}
-
-/* Update the effective priority of a thread. If the thread to update is
-   waiting for a lock held by another thread, priority donation will be
-   triggered. */
-void
-update_eff_priority (struct thread *t, int eff_priority)
-{
-  if (t->eff_priority == eff_priority) {
-    return;
-  }
-
-  t->eff_priority = eff_priority;
-  struct lock *l = t->lock_to_acquire;
-
-  if (l != NULL)
-  {
-    struct thread *holder = l->holder;
-    list_sort (&l->semaphore.waiters, priority_greater_or_equal, NULL);
-    if (eff_priority > holder->eff_priority)
-    {
-      update_eff_priority (holder, eff_priority);
-    }
-    else if (eff_priority < holder->eff_priority)
-    {
-      int p = find_max_priority (holder);
-      if (p != holder->eff_priority)
-      {
-        update_eff_priority (holder, p);
-      }
-    }
-  }
-}
-
 /* Down or "P" operation on a semaphore.  Waits for SEMA's value
    to become positive and then atomically decrements it.
 
@@ -154,7 +89,7 @@ sema_down (struct semaphore *sema)
       /* If this requesting thread's eff_priority is higher than that of the
          holder thread, do priority donation */
       if (thread_current()->eff_priority > holder->eff_priority)
-          update_eff_priority (holder, thread_current()->eff_priority);
+          thread_set_eff_priority (holder, thread_current()->eff_priority);
     }
     else /* Semaphore not in a lock */
     {
@@ -241,13 +176,13 @@ sema_up (struct semaphore *sema)
          release this lock, it should check for the new priority. */
       if (holder->eff_priority == next_thread->eff_priority)
       {
-        int new_eff_priority = find_max_priority (holder);
+        int new_eff_priority = thread_find_max_priority (holder);
         /* If new effective priority is smaller than that of the next to run,
            the holder thread should yield after releasing the lock */
         if (new_eff_priority < next_thread->eff_priority)
         {
           yield_on_return = true;
-          update_eff_priority (holder, new_eff_priority);
+          thread_set_eff_priority (holder, new_eff_priority);
         }
       }
     }
