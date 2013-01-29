@@ -242,6 +242,9 @@ sema_up (struct semaphore *sema)
          than that of the lock holder thread */
       ASSERT(holder->eff_priority >= next_thread->eff_priority);
 
+      /* Remove the lock from the thread's locks_waited_by_others */
+      list_remove(&l->thread_elem);
+
       /* If the effective priority of the holder thread equals to that of
          the next thread to run, it is possible this effective priority was
          donated by this next thread. Since the holder thread is about to
@@ -257,8 +260,6 @@ sema_up (struct semaphore *sema)
           update_eff_priority (holder, new_eff_priority);
         }
       }
-      /* Remove the lock from the thread's locks_waited_by_others */
-      list_remove(&l->thread_elem);
     }
     /* Add first thread waiting for the semaphore to ready list */
     thread_unblock (next_thread);
