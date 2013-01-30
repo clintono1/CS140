@@ -354,6 +354,46 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
+/* calculate advanced priority for a thread */
+void
+calculate_priority_advanced(struct thread * th){
+  if(th != idle_thread){
+    th->priority = 
+    PRI_MAX - DIV_INT(th->recent_cpu, 4) - th->nice * 2;
+    if(th->priority > PRI_MAX){
+      th->priority = PRI_MAX;
+    }
+    if(th->priority < PRI_MIN){
+      th->priority = PRI_MIN;
+    }
+  }
+}
+
+/* calcuate recent_cpu for a thread */
+void
+calculate_recent_cpu(struct thread * th){
+  if(th != idle_thread){
+    int load_2 = MUL_INT(load_avg, 2);
+    int part_a = MUL_FP(DIV_FP(load_2, ADD_INT(load_2, 1)), th->recent_cpu);
+    th->recent_cpu = ADD_FP(part_a, th->nice);
+  }
+}
+
+/* calculate load_avg */
+void
+calculate_load_avg(void){
+  struct thread * cur_thread;
+  cur_thread = thread_current();
+  int ready_threads;
+  //ready_threads = list_size(ready_list)
+  if(cur_thread != idle_thread){
+    ready_threads = ready_threads + 1;
+  }
+  int part_a = MUL_FP(DIV_INT(CONVERT_TO_FP(59), 60), load_avg);
+  int part_b = MUL_INT(DIV_INT(CONVERT_TO_FP(1), 60), ready_threads);
+  load_avg = ADD_FP(part_a, part_b);
+}
+
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) 
@@ -362,7 +402,7 @@ thread_set_nice (int nice UNUSED)
   struct thread * next_thread;
   cur_thread = thread_current();
   cur_thread->nice = nice;
-  //calculate_priority_advanced(cur_thread, );
+  calculate_priority_advanced(cur_thread);
   next_thread = next_thread_to_run();
   if(cur_thread != idle_thread){
     if(next_thread->priority > cur_thread->priority){
@@ -509,7 +549,7 @@ next_thread_to_run (void)
   int i;
   for (i=0; i<64; i++)
   {
-    if (list_empty ( &ready_list[i] ))
+    if (!list_empty ( &ready_list[i] ))
       return list_entry (list_pop_front ( &ready_list[i] ), struct thread, elem);
   }
   return idle_thread; 
