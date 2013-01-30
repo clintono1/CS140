@@ -154,6 +154,11 @@ sema_up (struct semaphore *sema)
   /* If there are other threads waiting for this semaphore, unblock one */
   if (!list_empty (&sema->waiters)) 
   {
+    if (!sema->in_lock)
+    {
+      list_sort(&sema->waiters, priority_greater_or_equal, NULL);
+    }
+
     /* Since sema->waiters are ordered by priorities, the first one is the one
        with the largest priority */
     struct thread *next_thread = list_entry (list_pop_front (&sema->waiters),
@@ -177,15 +182,17 @@ sema_up (struct semaphore *sema)
       if (holder->eff_priority == next_thread->eff_priority)
       {
         int new_eff_priority = thread_find_max_priority (holder);
-        /* If new effective priority is smaller than that of the next to run,
-           the holder thread should yield after releasing the lock */
-        if (new_eff_priority < next_thread->eff_priority)
-        {
-          yield_on_return = true;
-          thread_set_eff_priority (holder, new_eff_priority);
-        }
+        thread_set_eff_priority (holder, new_eff_priority);
       }
     }
+
+    /* If new effective priority is smaller than that of the next to run,
+       the holder thread should yield after releasing the lock */
+    if (thread_current()->eff_priority < next_thread->eff_priority)
+    {
+      yield_on_return = true;
+    }
+
     /* Add first thread waiting for the semaphore to ready list */
     thread_unblock (next_thread);
   }
