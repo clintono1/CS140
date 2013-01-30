@@ -106,7 +106,6 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -320,7 +319,17 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list[ 63-(cur->eff_priority) ], &cur->elem);
+  {
+    if (thread_mlfqs)
+    {
+      list_push_back (&ready_list[ 63-(cur->priority) ], &cur->elem);
+    } 
+    else
+    {
+      list_push_back (&ready_list[ 63-(cur->eff_priority) ], &cur->elem);
+    }
+  }
+   
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -405,7 +414,7 @@ priority_greater_or_equal (const struct list_elem *a,
 {
   const struct thread *ta = list_entry (a, struct thread, elem);
   const struct thread *tb = list_entry (b, struct thread, elem);
-  return ta->eff_priority >= tb->eff_priority;
+  return thread_mlfqs? ( ta->priority >= tb->priority ): ( ta->eff_priority >= tb->eff_priority );
 }
 
 /* Return the max priority of all other threads waiting for locks held by
@@ -447,7 +456,7 @@ calculate_priority_advanced(struct thread * th){
     if(th->priority < PRI_MIN){
       th->priority = PRI_MIN;
     }
-    th->eff_priority = th->priority;
+    //th->eff_priority = th->priority;
   }
 }
 
@@ -475,15 +484,15 @@ calculate_priority_advanced_all(void){
 }
 
 int
-list_size_all(void){
-  int i;
-  int length_all;
-  length_all = 0;
-  for (i = 0; i < 64; i++)
-  {
-    length_all = length_all + list_size( &ready_list[i]);
-  }
-  return length_all;
+  list_size_all(void){
+    int i;
+    int length_all;
+    length_all = 0;
+    for (i = 0; i < 64; i++)
+    {
+      length_all = length_all + list_size( &ready_list[i]);
+    }
+    return length_all;
 }
 
 /* calculate load_avg */

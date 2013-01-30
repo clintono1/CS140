@@ -114,10 +114,9 @@ timer_sleep (int64_t ticks)
 
   ASSERT (intr_get_level () == INTR_ON);
   struct thread *cur=thread_current();
-  enum intr_level old_level;
-  old_level = intr_disable();
-  //if(cur != idle_thread)
   cur->wake_up_time=start+ticks;
+
+  enum intr_level old_level = intr_disable();
   list_insert_ordered(&alarm_list, &cur->alarm_elem, wakeup_time_less, NULL);
   thread_block();
 
