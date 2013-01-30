@@ -23,6 +23,8 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define NICE_MAX 20                     /* Highest nice */
+#define NICE_MIn -20                    /* Lowest nice */
 
 /* A kernel thread or user process.
 
@@ -102,7 +104,12 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+    
+    int eff_priority;                   /* criterion for priority scheduling */
+    struct list lock_list;              /* a list of my locks waited by others*/
+    struct lock * lock_to_acquire;      /* the lock that I am tracing */
 
+    int nice;                           /* nice value of each thread*/
     int recent_cpu;                     /* CPU time received recently */
   };
 
