@@ -358,14 +358,15 @@ thread_get_priority (void)
 void
 calculate_priority_advanced(struct thread * th){
   if(th != idle_thread){
-    th->priority = 
-    PRI_MAX - DIV_INT(th->recent_cpu, 4) - th->nice * 2;
+    th->priority = PRI_MAX - 
+    CONVERT_TO_INT_NEAREST(DIV_INT(th->recent_cpu, 4)) - th->nice * 2;
     if(th->priority > PRI_MAX){
       th->priority = PRI_MAX;
     }
     if(th->priority < PRI_MIN){
       th->priority = PRI_MIN;
     }
+    th->eff_priority = th->priority;
   }
 }
 
@@ -520,6 +521,16 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  if(thread_mlfqs){
+    if(t == initial_thread){
+      t->nice = 0;
+      t->recent_cpu = 0;
+    }
+    else{
+      t->nice = thread_get_nice();
+      t->recent_cpu = thread_get_recent_cpu();
+    }
+  }
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
