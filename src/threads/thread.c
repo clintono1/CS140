@@ -374,7 +374,8 @@ void
 calculate_recent_cpu(struct thread * th){
   if(th != idle_thread){
     int load_2 = MUL_INT(load_avg, 2);
-    int part_a = MUL_FP(DIV_FP(load_2, ADD_INT(load_2, 1)), th->recent_cpu);
+    int coefficient = DIV_FP(load_2, ADD_INT(load_2, 1));
+    int part_a = MUL_FP(coefficient, th->recent_cpu);
     th->recent_cpu = ADD_FP(part_a, th->nice);
   }
 }
