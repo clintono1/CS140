@@ -40,27 +40,88 @@ Bo Wang: priority donation, design document, testing cases
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+---thread.h---
+Added two fields to struct thread:
+	int64_t wake_up_time;               /* Time to wake up current thread */
+	struct list_elem alarm_elem;        /* List element for alarm queue */
+
+---timer.c---
+Added an alarm_list which contains all the sleeping threads.
+	static struct list alarm_list; /* List of blocked threads waiting for alarm */
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+When a a thread calls timer_sleep() it means that it's going to sleep for a 
+while. We first calculate the wake up time, which is given by start+ticks. 
+To avoid busy waiting, a thread in sleep should be blocked, and a new
+thread should get started to run. The way we keep track of all the sleeping 
+thread is through the alarm_list. Since this list is global and shared among
+all threads, it's modification should be protected by disbling interrupts. 
+One more reason to disable interrupt is that blocking a thread will incur schedule(), so when doing context switch we should disable interrupt.
+
+One thing to consider is the sequence in which the sleeping threads are
+inserted. Since at each tick we should check if there's a thread that needs to be waken up, it's better to keep the queue sorted by the wake up time. Hence we did list_insert_ordered for each sleeping thread with their wake up time from small to large. Thus, the searching complexity will be smaller. 
+
+
+
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
 
+We kept a sorted alarm_list at timer_sleep(), so in the timer interrupt handler
+we only need to peek the front of the queue to see if a thread needs to be 
+waken up. This complexity is k*O(1), where k is the number of threads that 
+should be waken up at the same time.
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+The race condition is avoided by disabling interrupts when we manipulate the 
+alarm list and blocking the current thread. Therefore when multiple threads are
+trying to sleep, only one thread can manipulate the alarm_list and block it self.
+This operation is therefore atomic.
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
 
+The timer interrupt handler also manipulates the alarm_list, since it try to see
+if the time comes to wake up some thread and get them out of the list. However,
+in both the timer interrupt handler and the timer_sleep, both manipulation to the
+global variable of this alarm_list is protected by disabling interrupts. So no race
+condition could happen. 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 
+There are several design considerations in current implementation: first the
+sleeping threads are kept track of through the alarm_list, each thread is added
+an additional node, the alarm_elem that link them together. Another additional
+component is the wake_up_time. All these two adds upto 16 Byte to the structure
+of thread, since they are small compared to 4KB space and they are static 
+allocated, they won't lead to stack over flow. The other consideration is the sorted
+alarm_list, which decreased complexity during timer interrupt handler.
+
+One alternative approach, with the motivation of avoid adding more components
+in the thread structure, is to make another structure that points to the waking
+thread and recording this thread's wake up time at same time. It has an additional
+list_elem component that link them together. 
+
+	struct node{
+		struct thread *t;   //pointer to the sleeping thread
+		int64_t wake_up_time; //when to wake up
+		list_elem element;  //link these nodes together
+	}
+
+This approach has the advantage of not occupying additional space to thread
+structure. However, each time a thread trys to sleep we have to dynamically 
+allocate such a node to track the sleeping node, and when it wake up we have 
+to free such a node. This overhead should be taken into consideration. However,
+in our approach, we don't need to dynamically allocate a space to trake the 
+thread, we just link the thread itself to the alarm_list. Neither do we need to free
+the space when we wake up the thread. 
 			 PRIORITY SCHEDULING
 			 ===================
 
