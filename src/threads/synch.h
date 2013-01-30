@@ -10,7 +10,6 @@ struct semaphore
   {
     unsigned value;             /* Current value. */
     struct list waiters;        /* List of waiting threads. */
-    bool in_lock;               /* True if the semaphore in a lock */
   };
 
 void sema_init (struct semaphore *, unsigned value);
