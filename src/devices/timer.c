@@ -88,14 +88,20 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-// TODO: comment + line limit > 80
+
+/* Compare the wake up time of two threads given their list_elem.
+   Returns true if thread A's wake up time is earlier than that of
+   thread B, or false if A is greater or equal to B. */
 static bool
-value_less (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
+wakeup_time_less (const struct list_elem *a,
+            const struct list_elem *b,
+            void *aux UNUSED)
 {
-  const struct thread *a = list_entry (a_, struct thread, alarm_elem);
-  const struct thread *b = list_entry (b_, struct thread, alarm_elem);
-  return a->wake_up_time < b->wake_up_time;
+  const struct thread *ta = list_entry (a, struct thread, alarm_elem);
+  const struct thread *tb = list_entry (b, struct thread, alarm_elem);
+  return ta->wake_up_time < tb->wake_up_time;
 }
+
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must 
    be turned on. */
@@ -112,7 +118,7 @@ timer_sleep (int64_t ticks)
   old_level = intr_disable();
   //if(cur != idle_thread)
   cur->wake_up_time=start+ticks;
-  list_insert_ordered(&alarm_list, &cur->alarm_elem, value_less, NULL);
+  list_insert_ordered(&alarm_list, &cur->alarm_elem, wakeup_time_less, NULL);
   thread_block();
 
   intr_set_level(old_level);
@@ -194,22 +200,24 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
-  // Peek alarm_list's front element to see if the time has arrived
   struct list_elem *e;
   struct thread *t;
-  if (! list_empty(&alarm_list))
+  if (! list_empty (&alarm_list))
   {
-    e=list_front(&alarm_list);
-    t= list_entry (e, struct thread, alarm_elem);  
+    e = list_front (&alarm_list);
+    t = list_entry (e, struct thread, alarm_elem);
     
-    while(t->wake_up_time<=ticks ){
-      thread_unblock(t);
-      list_pop_front(&alarm_list);
-      if (list_empty(&alarm_list))
+    while (t->wake_up_time <= ticks)
+    {
+      thread_unblock (t);
+      if (thread_current()->eff_priority < t->eff_priority)
+        intr_yield_on_return ();
+      list_pop_front (&alarm_list);
+      if (list_empty (&alarm_list))
         break;
-      e = list_front(& alarm_list);
+      e = list_front (&alarm_list);
       t = list_entry (e, struct thread, alarm_elem);  
-    } 
+    }
   }
 
   /* advanced scheduling: update priority automatically */

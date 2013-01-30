@@ -458,6 +458,24 @@ list_insert_ordered (struct list *list, struct list_elem *elem,
   return list_insert (e, elem);
 }
 
+/* Returns true if elem exists in the list */
+bool 
+list_elem_exist (struct list *list, struct list_elem *elem)
+{
+  struct list_elem *e;
+
+  ASSERT (list != NULL);
+  ASSERT (elem != NULL);
+
+  for (e = list_begin (list); e != list_end (list); e = list_next (e))
+  {
+    if (e == elem) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /* Iterates through LIST and removes all but the first in each
    set of adjacent elements that are equal according to LESS
    given auxiliary data AUX.  If DUPLICATES is non-null, then the
@@ -522,3 +540,5 @@ list_min (struct list *list, list_less_func *less, void *aux)
     }
   return min;
 }
+
+

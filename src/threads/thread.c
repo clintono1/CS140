@@ -97,7 +97,7 @@ thread_init (void)
   int i;
   lock_init (&tid_lock);
   for (i=0; i<64; i++)
-  list_init (&ready_list[i]);
+    list_init (&ready_list[i]);
 
   list_init (&all_list);
 
@@ -208,6 +208,8 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  if (thread_current()->eff_priority < t->eff_priority)
+    thread_yield ();
 
   return tid;
 }
@@ -344,14 +346,92 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *t = thread_current ();
+  if (new_priority == t->priority)
+    return;
+  t->priority = new_priority;
+  if (new_priority > thread_current()->eff_priority)
+  {
+    thread_set_eff_priority (t, new_priority);
+  }
+  else
+  {
+    int new_eff_priority = thread_find_max_priority (t);
+    thread_set_eff_priority (t, new_eff_priority);
+    thread_yield();
+  }
+}
+
+/* Update the effective priority of a thread. If the thread to update is
+   waiting for a lock held by another thread, priority donation will be
+   triggered. */
+void
+thread_set_eff_priority (struct thread *t, int eff_priority)
+{
+  if (t->eff_priority == eff_priority) {
+    return;
+  }
+
+  t->eff_priority = eff_priority;
+  struct lock *l = t->lock_to_acquire;
+
+  if (l != NULL)
+  {
+    struct thread *holder = l->holder;
+    list_sort (&l->semaphore.waiters, priority_greater_or_equal, NULL);
+    if (eff_priority > holder->eff_priority)
+    {
+      thread_set_eff_priority (holder, eff_priority);
+    }
+    else if (eff_priority < holder->eff_priority)
+    {
+      int p = thread_find_max_priority (holder);
+      if (p != holder->eff_priority)
+      {
+        thread_set_eff_priority (holder, p);
+      }
+    }
+  }
+}
+
+/* Compare the effective priority of two threads given their list_elem.
+   Returns true if A is larger or equal to B, or false if A is less
+   than B. */
+bool
+priority_greater_or_equal (const struct list_elem *a,
+                           const struct list_elem *b,
+                           void *aux UNUSED)
+{
+  const struct thread *ta = list_entry (a, struct thread, elem);
+  const struct thread *tb = list_entry (b, struct thread, elem);
+  return ta->eff_priority >= tb->eff_priority;
+}
+
+/* Return the max priority of all other threads waiting for locks held by
+   the given thread and its primitive priority */
+int
+thread_find_max_priority (struct thread *t)
+{
+  int max_priority = 0;
+  struct list_elem *e;
+  for( e = list_begin(&t->locks_waited_by_others);
+       e != list_end (&t->locks_waited_by_others);
+       e = list_next (e) )
+  {
+    struct lock *l = list_entry (e, struct lock, thread_elem);
+    struct list_elem *frnt = list_front(&l->semaphore.waiters);
+    struct thread *front_thread = list_entry (frnt, struct thread, elem);
+    if (max_priority < front_thread->eff_priority)
+      max_priority = front_thread->eff_priority;
+  }
+  return ( max_priority > t->priority ) ? max_priority : t->priority;
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return thread_current ()->eff_priority;
 }
 
 /* calculate advanced priority for a thread */
@@ -532,6 +612,10 @@ init_thread (struct thread *t, const char *name, int priority)
     }
   }
 
+  t->eff_priority = priority;
+  t->lock_to_acquire = NULL;
+  list_init(& (t->locks_waited_by_others));
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -559,10 +643,10 @@ static struct thread *
 next_thread_to_run (void) 
 {
   int i;
-  for (i=0; i<64; i++)
+  for (i = 0; i < 64; i++)
   {
     if (!list_empty ( &ready_list[i] ))
-      return list_entry (list_pop_front ( &ready_list[i] ), struct thread, elem);
+      return list_entry (list_pop_front (&ready_list[i]), struct thread, elem);
   }
   return idle_thread; 
 }

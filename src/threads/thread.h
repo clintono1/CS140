@@ -90,27 +90,25 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int64_t wake_up_time;               /* Time to wake up current thread */
-    struct list_elem alarm_elem;        /* List element for alarm queue */
     struct list_elem allelem;           /* List element for all threads list. */
-
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    int64_t wake_up_time;               /* Time to wake up current thread */
+    struct list_elem alarm_elem;        /* List element for alarm queue */
+    int eff_priority;                   /* Effective priority */
+    struct lock * lock_to_acquire;      /* Lock this thread is waiting for */
+    struct list locks_waited_by_others; /* Locks held by this thread but
+                                           also waited by other threads*/
+    int recent_cpu;                     /* CPU time received recently */
+    int nice;                           /* Nice value of each thread*/
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
-
+    
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-    
-    int eff_priority;                   /* criterion for priority scheduling */
-    struct list lock_list;              /* a list of my locks waited by others*/
-    struct lock * lock_to_acquire;      /* the lock that I am tracing */
-
-    int nice;                           /* nice value of each thread*/
-    int recent_cpu;                     /* CPU time received recently */
   };
 
 /* If false (default), use round-robin scheduler.
@@ -143,10 +141,16 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_set_eff_priority (struct thread *, int);
+int thread_find_max_priority (struct thread *t);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+bool priority_greater_or_equal (const struct list_elem *,
+                                const struct list_elem *,
+                                void *);
 
 #endif /* threads/thread.h */

@@ -4,11 +4,13 @@
 #include <list.h>
 #include <stdbool.h>
 
+
 /* A counting semaphore. */
 struct semaphore 
   {
     unsigned value;             /* Current value. */
     struct list waiters;        /* List of waiting threads. */
+    bool in_lock;               /* True if the semaphore in a lock */
   };
 
 void sema_init (struct semaphore *, unsigned value);
@@ -19,9 +21,10 @@ void sema_self_test (void);
 
 /* Lock. */
 struct lock 
-  {
-    struct thread *holder;      /* Thread holding lock (for debugging). */
-    struct semaphore semaphore; /* Binary semaphore controlling access. */
+  {    
+    struct thread *holder;        /* Thread holding lock (for debugging). */
+    struct semaphore semaphore;   /* Binary semaphore controlling access. */
+    struct list_elem thread_elem; /* Hash element for waited lock queue */
   };
 
 void lock_init (struct lock *);
@@ -47,5 +50,8 @@ void cond_broadcast (struct condition *, struct lock *);
    optimization barrier.  See "Optimization Barriers" in the
    reference guide for more information.*/
 #define barrier() asm volatile ("" : : : "memory")
+
+#define get_sema_lock(SEMA) (struct lock *) \
+  ((void*)SEMA-sizeof(struct thread *))
 
 #endif /* threads/synch.h */
