@@ -461,13 +461,37 @@ calculate_recent_cpu(struct thread * th){
   }
 }
 
+/* calculate recent_cpu for all threads */
+void 
+calculate_recent_cpu_all(void){
+  thread_foreach(calculate_recent_cpu, NULL);
+}
+
+/* advanced scheduling: calculate priority for all threads */
+void 
+calculate_priority_advanced_all(void){
+  thread_foreach(calculate_priority_advanced, NULL);
+}
+
+int
+list_size_all(void){
+  int i;
+  int length_all;
+  length_all = 0;
+  for (i = 0; i < 64; i++)
+  {
+    length_all = length_all + list_size( &ready_list[i]);
+  }
+  return length_all;
+}
+
 /* calculate load_avg */
 void
 calculate_load_avg(void){
   struct thread * cur_thread;
   cur_thread = thread_current();
   int ready_threads;
-  //ready_threads = list_size(ready_list)
+  ready_threads = list_size_all();
   if(cur_thread != idle_thread){
     ready_threads = ready_threads + 1;
   }

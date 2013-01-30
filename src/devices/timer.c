@@ -227,10 +227,10 @@ timer_interrupt (struct intr_frame *args UNUSED)
     cur_thread->recent_cpu = ADD_INT(cur_thread->recent_cpu, 1);
     if(ticks % TIMER_FREQ == 0){
       calculate_load_avg();
-      //calculate_recent_cpu_for_all();
+      calculate_recent_cpu_all();
     }
     if(ticks % 4 == 0){
-      //calculate_priority_advanced_for_all();
+      calculate_priority_advanced_all();
     }
   }
 }

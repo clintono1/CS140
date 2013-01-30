@@ -153,4 +153,8 @@ bool priority_greater_or_equal (const struct list_elem *,
                                 const struct list_elem *,
                                 void *);
 
+void calculate_load_avg (void);
+void calculate_recent_cpu_all(void);
+void calculate_priority_advanced_all(void);
+
 #endif /* threads/thread.h */
