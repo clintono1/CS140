@@ -455,34 +455,36 @@ thread_find_max_priority (struct thread *t)
 int
 thread_get_priority (void) 
 {
-  if(thread_mlfqs){
+  if(thread_mlfqs)
     return thread_current ()->priority;
-  }
-  else{
+  else
     return thread_current ()->eff_priority;
-  }
 }
 
 /* calculate advanced priority for a thread */
 void
-calculate_priority_advanced(struct thread * th){
-  if(th != idle_thread){
+calculate_priority_advanced(struct thread * th)
+{
+  ASSERT(thread_mlfqs);
+  if(th != idle_thread)
+  {
     th->priority = PRI_MAX - 
     CONVERT_TO_INT_NEAREST(DIV_INT(th->recent_cpu, 4)) - th->nice * 2;
-    if(th->priority > PRI_MAX){
+    if(th->priority > PRI_MAX)
       th->priority = PRI_MAX;
-    }
-    if(th->priority < PRI_MIN){
+    if(th->priority < PRI_MIN)
       th->priority = PRI_MIN;
-    }
-    //th->eff_priority = th->priority;
   }
 }
 
 /* calcuate recent_cpu for a thread */
 void
-calculate_recent_cpu(struct thread * th){
-  if(th != idle_thread){
+calculate_recent_cpu(struct thread * th)
+{ 
+  ASSERT(thread_mlfqs);
+  ASSERT(is_thread(th));
+  if(th != idle_thread)
+  {
     int load_2 = MUL_INT(load_avg, 2);
     int coefficient = DIV_FP(load_2, ADD_INT(load_2, 1));
     int part_a = MUL_FP(coefficient, th->recent_cpu);
@@ -492,18 +494,22 @@ calculate_recent_cpu(struct thread * th){
 
 /* calculate recent_cpu for all threads */
 void 
-calculate_recent_cpu_all(void){
+calculate_recent_cpu_all(void)
+{
   thread_foreach(calculate_recent_cpu, NULL);
 }
 
 /* advanced scheduling: calculate priority for all threads */
 void 
-calculate_priority_advanced_all(void){
+calculate_priority_advanced_all(void)
+{
   thread_foreach(calculate_priority_advanced, NULL);
 }
 
+
 int
-list_size_all(void){
+list_size_all(void)
+{
     int i;
     int length_all;
     length_all = 0;
@@ -516,12 +522,15 @@ list_size_all(void){
 
 /* calculate load_avg */
 void
-calculate_load_avg(void){
+calculate_load_avg(void)
+{
+  ASSERT(thread_mlfqs);
   struct thread * cur_thread;
   cur_thread = thread_current();
   int ready_threads;
   ready_threads = list_size_all();
-  if(cur_thread != idle_thread){
+  if(cur_thread != idle_thread)
+  {
     ready_threads = ready_threads + 1;
   }
   int part_a = MUL_FP(DIV_INT(CONVERT_TO_FP(59), 60), load_avg);
@@ -531,18 +540,19 @@ calculate_load_avg(void){
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice ) 
 {
+  ASSERT(thread_mlfqs);
   struct thread * cur_thread;
   struct thread * next_thread;
   cur_thread = thread_current();
   cur_thread->nice = nice;
   calculate_priority_advanced(cur_thread);
   next_thread = next_thread_to_run();
-  if(cur_thread != idle_thread){
-    if(next_thread->priority > cur_thread->priority){
+  if(cur_thread != idle_thread)
+  {
+    if(next_thread->priority > cur_thread->priority)
       thread_yield();
-    }
   }
 }
 
