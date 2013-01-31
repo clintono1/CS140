@@ -157,13 +157,16 @@ Three members are added to struct thread
 
 The variable eff_priority denotes the current priority with donation. We use 
 this separate variable to avoid overwrite the generic priority of the thread.
-When a thread acquires a lock, if not successful, it will add itself to the 
-waiting list at lock->semaphore->waiters. Then the acquiring thread will look
-for the lock holder thread and donate priority if the acquiring thread's
-priority is higher. The effective priority update is done by calling 
-thread_set_priority function on the holder thread. This function will check 
-whether its lock_to_acquire is null. If not null, it will recursively call 
-thread_set_eff_priority on the lock holder it is waiting for.
+When a thread A acquires a lock, if not successful, it will add itself to the 
+waiting list at lock->semaphore->waiters. Then thread A will look for the lock
+holder thread and donate priority if A's priority is higher.
+
+The effective priority update is done by calling thread_set_eff_priority 
+function on the holder thread. This function will check whether its 
+lock_to_acquire is null. If not null, it will recursively call 
+itself on the lock holder it is waiting for.
+
+[To Be Done]
 
 ---- ALGORITHMS ----
 
