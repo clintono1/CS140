@@ -237,6 +237,23 @@ thread_set_eff_priority.
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
+thread_set_priority() sets the priority of a thread and updates the effective
+priority as well. The new effective priority is found by comparing the priority
+of all locks held by the thread and its generic priority. When the new
+effective priority is found, it updates thread->eff_priority.
+
+A potential race can occur if a thread A is switch over right after finding the
+new effective priority and before setting it to thread->eff_priority. If at 
+that time, another thread B with a higher priority kicks in and waits on a lock
+A current holds, then it will update A's eff_priority via priority donation. 
+However, after this update, A is switched back, then it updates its own 
+eff_priority with the previous value calculated (which will be lower), then the
+new effective priority is incorrect.
+
+To avoid this issue, a lock does NOT help. That would be just using the problem 
+itself to solve itself. We avoid this race condition by disabling interrupts 
+inside thread_set_priority().
+
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
