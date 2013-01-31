@@ -677,7 +677,8 @@ init_thread (struct thread *t, const char *name, int priority)
     }
     else{
       t->nice = thread_get_nice();
-      t->recent_cpu = thread_get_recent_cpu();
+      //t->recent_cpu = thread_get_recent_cpu();
+      t->recent_cpu = thread_current()->recent_cpu;
     }
   }
 
