@@ -546,20 +546,17 @@ calculate_load_avg(void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice ) 
+thread_set_nice (int nice) 
 {
   ASSERT(thread_mlfqs);
-  struct thread * cur_thread;
-  struct thread * next_thread;
-  cur_thread = thread_current();
+  struct thread * cur_thread = thread_current();
+  int old_priority = cur_thread->priority;
+
   cur_thread->nice = nice;
   calculate_priority_advanced(cur_thread);
-  next_thread = next_thread_to_run();
-  if(cur_thread != idle_thread)
-  {
-    if(next_thread->priority > cur_thread->priority)
-      thread_yield();
-  }
+
+  if (cur_thread->priority < old_priority)
+    thread_yield();
 }
 
 /* Returns the current thread's nice value. */
