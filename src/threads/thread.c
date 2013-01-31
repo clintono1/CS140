@@ -256,7 +256,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  if(thread_mlfqs){
+  if(thread_mlfqs ){
     list_push_back (&ready_list[63- (t->priority)], &t->elem);
   }
   else{
@@ -546,20 +546,17 @@ calculate_load_avg(void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice ) 
+thread_set_nice (int nice) 
 {
   ASSERT(thread_mlfqs);
-  struct thread * cur_thread;
-  struct thread * next_thread;
-  cur_thread = thread_current();
+  struct thread * cur_thread = thread_current();
+  int old_priority = cur_thread->priority;
+
   cur_thread->nice = nice;
   calculate_priority_advanced(cur_thread);
-  next_thread = next_thread_to_run();
-  if(cur_thread != idle_thread)
-  {
-    if(next_thread->priority > cur_thread->priority)
-      thread_yield();
-  }
+
+  if (cur_thread->priority < old_priority)
+    thread_yield();
 }
 
 /* Returns the current thread's nice value. */
@@ -670,14 +667,17 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  if(thread_mlfqs){
-    if(t == initial_thread){
+  if(thread_mlfqs)
+  {
+    if(t == initial_thread)
+    {
       t->nice = 0;
       t->recent_cpu = 0;
     }
-    else{
+    else
+    {
       t->nice = thread_get_nice();
-      t->recent_cpu = thread_get_recent_cpu();
+      t->recent_cpu = thread_current()->recent_cpu;
     }
   }
 
