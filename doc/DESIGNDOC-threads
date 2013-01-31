@@ -170,6 +170,14 @@ thread_set_eff_priority on the lock holder it is waiting for.
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
 
+For locks and semaphores, we keep waiting threads in lock->semaphore->waiters
+in order based on the eff_priority. Thus when waking up, the first thread in 
+the list is the one with the highest priority.
+
+For condition variables, the waiting thread list in its semaphore->waiters list
+is not ordered. Thus we will use list_max to find the one with the highest
+priority and then remove it from the list to wake up.
+
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
 
