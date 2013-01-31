@@ -256,7 +256,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  if(thread_mlfqs){
+  if(thread_mlfqs ){
     list_push_back (&ready_list[63- (t->priority)], &t->elem);
   }
   else{
@@ -334,7 +334,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) 
   {
-    if (thread_mlfqs)
+    if (thread_mlfqs && thread_current()!= idle_thread)
     {
       list_push_back (&ready_list[ 63-(cur->priority) ], &cur->elem);
     } 
