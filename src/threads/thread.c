@@ -257,7 +257,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   if(thread_mlfqs){
-    list_push_back (&ready_list[63- (t->eff_priority)], &t->elem);
+    list_push_back (&ready_list[63- (t->priority)], &t->elem);
   }
   else{
     list_push_back (&ready_list[63- (t->eff_priority)], &t->elem);
