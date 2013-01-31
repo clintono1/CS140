@@ -667,14 +667,16 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  if(thread_mlfqs){
-    if(t == initial_thread){
+  if(thread_mlfqs)
+  {
+    if(t == initial_thread)
+    {
       t->nice = 0;
       t->recent_cpu = 0;
     }
-    else{
+    else
+    {
       t->nice = thread_get_nice();
-      //t->recent_cpu = thread_get_recent_cpu();
       t->recent_cpu = thread_current()->recent_cpu;
     }
   }
