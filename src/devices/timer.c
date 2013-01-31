@@ -209,17 +209,11 @@ timer_interrupt (struct intr_frame *args UNUSED)
     while (t->wake_up_time <= ticks)
     {
       thread_unblock (t);
-      if (thread_mlfqs)
-      {
-        if (thread_current()->priority < t->priority)
-          intr_yield_on_return ();
-      } 
-      else
+      if (!thread_mlfqs)
       {
         if (thread_current()->eff_priority < t->eff_priority)
           intr_yield_on_return ();
       }
-      
       
       list_pop_front (&alarm_list);
       if (list_empty (&alarm_list))
@@ -229,17 +223,22 @@ timer_interrupt (struct intr_frame *args UNUSED)
     }
   }
 
-    /* advanced scheduling: update priority automatically */
-  if(thread_mlfqs){
+  /* advanced scheduling: update priority automatically */
+  if(thread_mlfqs)
+  {
     struct thread * cur_thread = thread_current();
     cur_thread->recent_cpu = ADD_INT(cur_thread->recent_cpu, 1);
-    if(ticks % TIMER_FREQ == 0){
+    if(timer_ticks() % TIMER_FREQ == 0)
+    {
       calculate_load_avg();
       calculate_recent_cpu_all();
     }
-    if(ticks % 4 == 0){
+    if(timer_ticks() % 4 == 0)
+    {
       calculate_priority_advanced_all();
     }
+
+
   }
 }
 
