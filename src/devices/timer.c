@@ -229,7 +229,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
     }
   }
 
-  /* advanced scheduling: update priority automatically */
+    /* advanced scheduling: update priority automatically */
   if(thread_mlfqs){
     struct thread * cur_thread = thread_current();
     cur_thread->recent_cpu = ADD_INT(cur_thread->recent_cpu, 1);

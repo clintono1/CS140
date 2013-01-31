@@ -106,6 +106,8 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
+  load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -208,8 +210,15 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  if (thread_current()->eff_priority < t->eff_priority)
-    thread_yield ();
+  
+  if(thread_mlfqs){
+    if (thread_current()->priority < t->priority)
+      thread_yield ();
+  }
+  else{
+    if (thread_current()->eff_priority < t->eff_priority)
+      thread_yield ();
+  } 
 
   return tid;
 }
@@ -247,7 +256,12 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list[63- (t->eff_priority)], &t->elem);
+  if(thread_mlfqs){
+    list_push_back (&ready_list[63- (t->eff_priority)], &t->elem);
+  }
+  else{
+    list_push_back (&ready_list[63- (t->eff_priority)], &t->elem);
+  }
   t->status = THREAD_READY;
   intr_set_level (old_level);
 
@@ -441,7 +455,12 @@ thread_find_max_priority (struct thread *t)
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->eff_priority;
+  if(thread_mlfqs){
+    return thread_current ()->priority;
+  }
+  else{
+    return thread_current ()->eff_priority;
+  }
 }
 
 /* calculate advanced priority for a thread */
@@ -467,7 +486,7 @@ calculate_recent_cpu(struct thread * th){
     int load_2 = MUL_INT(load_avg, 2);
     int coefficient = DIV_FP(load_2, ADD_INT(load_2, 1));
     int part_a = MUL_FP(coefficient, th->recent_cpu);
-    th->recent_cpu = ADD_FP(part_a, th->nice);
+    th->recent_cpu = ADD_INT(part_a, th->nice);
   }
 }
 
@@ -484,7 +503,7 @@ calculate_priority_advanced_all(void){
 }
 
 int
-  list_size_all(void){
+list_size_all(void){
     int i;
     int length_all;
     length_all = 0;

@@ -301,7 +301,9 @@ lock_release (struct lock *lock)
 
     /* The effective priority of the waiting thread should never be larger
        than that of the lock holder thread */
-    ASSERT(holder->eff_priority >= next_thread->eff_priority);
+    if(!thread_mlfqs){
+      ASSERT(holder->eff_priority >= next_thread->eff_priority);
+    }
 
     /* Remove the lock from the thread's locks_waited_by_others */
     list_remove(&lock->thread_elem);
