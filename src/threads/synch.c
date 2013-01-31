@@ -237,11 +237,12 @@ lock_acquire (struct lock *lock)
     if (!list_elem_exist (&holder->locks_waited_by_others, &lock->thread_elem))
       list_push_back (&holder->locks_waited_by_others,  &lock->thread_elem);
 
-    /* Insert the thread to the waiting list in order */
+    /* Insert the thread to the waiting list in order */  
     list_insert_ordered (&(sema->waiters), &t->elem,
                          priority_greater_or_equal, NULL);
 
-    if(!thread_mlfqs){
+    if(!thread_mlfqs)
+    {
       /* If this requesting thread's eff_priority is higher than that of the
        holder thread, do priority donation */
       if (t->eff_priority > holder->eff_priority)
@@ -313,7 +314,8 @@ lock_release (struct lock *lock)
     /* Remove the lock from the thread's locks_waited_by_others */
     list_remove(&lock->thread_elem);
 
-    if(!thread_mlfqs){
+    if(!thread_mlfqs)
+    {
       /* If the effective priority of the holder thread equals to that of
          the next thread to run, it is possible this effective priority was
          donated by this next thread. Since the holder thread is about to
@@ -327,6 +329,11 @@ lock_release (struct lock *lock)
       /* If new effective priority is smaller than that of the next to run,
          the holder thread should yield after releasing the lock */
       if (thread_current()->eff_priority < next_thread->eff_priority)
+        yield_on_return = true;
+    }
+    else //thread_mlfqs
+    {
+      if (thread_current()->priority < next_thread->priority)
         yield_on_return = true;
     }
 

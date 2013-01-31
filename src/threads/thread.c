@@ -334,7 +334,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) 
   {
-    if (thread_mlfqs && thread_current()!= idle_thread)
+    if (thread_mlfqs)
     {
       list_push_back (&ready_list[ 63-(cur->priority) ], &cur->elem);
     } 
