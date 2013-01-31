@@ -42,12 +42,12 @@ Bo Wang: priority donation, design document, testing cases
 
 ---thread.h---
 Added two fields to struct thread:
-	int64_t wake_up_time;            /* Time to wake up current thread */
-	struct list_elem alarm_elem;     /* List element for alarm queue */
+    int64_t wake_up_time;            /* Time to wake up current thread */
+    struct list_elem alarm_elem;     /* List element for alarm queue */
 
 ---timer.c---
 Added an alarm_list which contains all the sleeping threads.
-	static struct list alarm_list; /* List of threads waiting for alarm */
+    static struct list alarm_list; /* List of threads waiting for alarm */
 
 ---- ALGORITHMS ----
 
@@ -117,11 +117,11 @@ in the thread structure, is to make another structure that points to the waking
 thread and recording this thread's wake up time at same time. It has an 
 additional list_elem component that link them together. 
 
-	struct node{
-		struct thread *t;   //pointer to the sleeping thread
-		int64_t wake_up_time; //when to wake up
-		list_elem element;  //link these nodes together
-	}
+    struct node{
+        struct thread *t;   //pointer to the sleeping thread
+        int64_t wake_up_time; //when to wake up
+        list_elem element;  //link these nodes together
+    }
 
 This approach has the advantage of not occupying additional space to thread
 structure. However, each time a thread trys to sleep we have to dynamically 
@@ -172,6 +172,32 @@ thread_set_eff_priority on the lock holder it is waiting for.
 
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
+
+When the lock to acquire is not available, a priority donation is triggered.
+Thread A: the acquiring thread
+Thread B: the holder thread
+1) Set lock_to_acquire in Thread A
+2) Insert this lock to Thread B's locks_waited_by_others list
+3) Insert Thread A into the lock->semaphore->waiters list based on eff_priority
+4) If A's priority is higher than that of B, set B's eff_priority by calling
+   thread_set_eff_priority on B
+5) Block Thread A
+
+In thread_set_eff_priority function, nested donation is handled.
+When thread_set_eff_priority(struct thread *t, int eff_priority) is called:
+1) Set thread's eff_priority to the new eff_priority
+2) If the thread's lock_to_acquire is not NULL, nested donation is triggered
+   i)   Since the thread's eff_priority is changed, sort the waiters list of
+        lock_to_acquire.
+   ii)  If the thread's eff_priority increases, call thread_set_eff_priority
+        on the holder thread of lock_to_acquire with the new eff_priority
+   iii) If the thread's eff_priority decreases, first search for the highest
+        priority among all locks_waited_by_others and the priority of the 
+        thread itself; then call thread_set_eff_priority on the holder thread
+        of lock_to_acquire with the eff_priority just found
+
+In a nutshell, nested donation is handled by recursive calls to function
+thread_set_eff_priority.
 
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
