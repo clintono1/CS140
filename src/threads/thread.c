@@ -474,6 +474,12 @@ calculate_priority_advanced(struct thread * th)
       th->priority = PRI_MAX;
     if(th->priority < PRI_MIN)
       th->priority = PRI_MIN;
+    // if current thread is in the ready list, change its position!
+    if ( th!=thread_current() && th->status == THREAD_READY)
+    {
+      list_remove(&th->elem);      
+      list_push_back (&ready_list[63- (th->priority)], &th->elem);
+    }
   }
 }
 
