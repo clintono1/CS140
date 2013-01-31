@@ -308,20 +308,22 @@ lock_release (struct lock *lock)
     /* Remove the lock from the thread's locks_waited_by_others */
     list_remove(&lock->thread_elem);
 
-    /* If the effective priority of the holder thread equals to that of
-       the next thread to run, it is possible this effective priority was
-       donated by this next thread. Since the holder thread is about to
-       release this lock, it should check for the new priority. */
-    if (holder->eff_priority == next_thread->eff_priority)
-    {
-      int new_eff_priority = thread_find_max_priority (holder);
-      thread_set_eff_priority (holder, new_eff_priority);
-    }
+    if(!thread_mlfqs){
+      /* If the effective priority of the holder thread equals to that of
+         the next thread to run, it is possible this effective priority was
+         donated by this next thread. Since the holder thread is about to
+         release this lock, it should check for the new priority. */
+      if (holder->eff_priority == next_thread->eff_priority)
+      {
+        int new_eff_priority = thread_find_max_priority (holder);
+        thread_set_eff_priority (holder, new_eff_priority);
+      }
 
-    /* If new effective priority is smaller than that of the next to run,
-       the holder thread should yield after releasing the lock */
-    if (thread_current()->eff_priority < next_thread->eff_priority)
-      yield_on_return = true;
+      /* If new effective priority is smaller than that of the next to run,
+         the holder thread should yield after releasing the lock */
+      if (thread_current()->eff_priority < next_thread->eff_priority)
+        yield_on_return = true;
+    }
 
     /* Add first thread waiting for the semaphore to ready list */
     thread_unblock (next_thread);
