@@ -202,6 +202,24 @@ thread_set_eff_priority.
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
 
+1) Disable interrupt
+2) The lock->semaphore->waiters list is not empty since a higher-priority
+   thread is waiting, pop the first thread B in the list.
+   Since this list is inserted in order and resorted once a thread's 
+   priority changes, the first thread is the one with the highest priority.
+3) Remove the lock from the current thread A's locks_waited_by_others list
+4) If A's eff_priority equals to that of B, it is possible that A's 
+   eff_priority was donated by B. Thus we need to determine A's new 
+   eff_priority.
+   i)  Find the new highest priority after the lock is removed from A's 
+       locks_waited_by_others list.
+   ii) Call thread_set_eff_priority on A with the eff_priority just found.
+5) Set flag yield_on_return to true if A's new eff_priority is smaller than
+   that of B
+6) Unblock thread B
+7) Enable interrupt
+8) Thread A yields if yield_on_return is true
+
 ---- SYNCHRONIZATION ----
 
 >> B6: Describe a potential race in thread_set_priority() and explain
