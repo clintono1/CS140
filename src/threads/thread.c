@@ -370,6 +370,10 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  enum intr_level old_level;
+  old_level = intr_disable ();
+
+  bool yield_on_return = false;
   struct thread *t = thread_current ();
   if (new_priority == t->priority)
     return;
@@ -382,8 +386,12 @@ thread_set_priority (int new_priority)
   {
     int new_eff_priority = thread_find_max_priority (t);
     thread_set_eff_priority (t, new_eff_priority);
-    thread_yield();
+    yield_on_return = true;
   }
+  intr_set_level (old_level);
+
+  if (yield_on_return)
+    thread_yield();
 }
 
 /* Update the effective priority of a thread. If the thread to update is
