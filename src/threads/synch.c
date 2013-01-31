@@ -125,10 +125,13 @@ sema_up (struct semaphore *sema)
     struct thread *next_thread = list_entry (list_pop_front (&sema->waiters),
                                              struct thread, elem);
 
-    /* If new effective priority is smaller than that of the next to run,
-       the holder thread should yield after releasing the lock */
-    if (thread_current()->eff_priority < next_thread->eff_priority)
-      yield_on_return = true;
+    if(!thread_mlfqs){
+      /* If new effective priority is smaller than that of the next to run,
+         the holder thread should yield after releasing the lock */
+      if (thread_current()->eff_priority < next_thread->eff_priority)
+        yield_on_return = true;      
+    }
+
 
     /* Add first thread waiting for the semaphore to ready list */
     thread_unblock (next_thread);
@@ -238,10 +241,12 @@ lock_acquire (struct lock *lock)
     list_insert_ordered (&(sema->waiters), &t->elem,
                          priority_greater_or_equal, NULL);
 
-    /* If this requesting thread's eff_priority is higher than that of the
+    if(!thread_mlfqs){
+      /* If this requesting thread's eff_priority is higher than that of the
        holder thread, do priority donation */
-    if (t->eff_priority > holder->eff_priority)
+      if (t->eff_priority > holder->eff_priority)
         thread_set_eff_priority (holder, t->eff_priority);
+    }
     thread_block ();
   }
   sema->value--;
@@ -414,7 +419,12 @@ sema_priority_less (const struct list_elem *a,
   sb = list_entry (b, struct semaphore_elem, elem);
   ta = list_entry (list_front(&sa->semaphore.waiters), struct thread, elem);
   tb = list_entry (list_front(&sb->semaphore.waiters), struct thread, elem);
-  return ta->eff_priority < tb->eff_priority;
+  if(thread_mlfqs){
+    return ta->priority < tb->priority;
+  }
+  else{
+    return ta->eff_priority < tb->eff_priority;
+  }
 }
 
 /* If any threads are waiting on COND (protected by LOCK), then
