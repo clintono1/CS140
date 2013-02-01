@@ -488,7 +488,7 @@ calculate_priority_advanced(struct thread * th)
   if(th != idle_thread)
   {
     th->priority = PRI_MAX - 
-    CONVERT_TO_INT_NEAREST(DIV_INT(th->recent_cpu, 4)) - th->nice * 2;
+    CONVERT_TO_INT_DOWN(DIV_INT(th->recent_cpu, 4)) - th->nice * 2;
     if(th->priority > PRI_MAX)
       th->priority = PRI_MAX;
     if(th->priority < PRI_MIN)
