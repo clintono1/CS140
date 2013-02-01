@@ -483,6 +483,14 @@ updating priority if we had extra time.
 >> type and/or a set of functions or macros to manipulate fixed-point
 >> numbers, why did you do so?  If not, why not?
 
+We need do many kinds of fixed-point calculations when calculating 
+priority, recent_cpu and load_avg. We defined a set of macros in a new
+header file called "fixed-point.h". There're two kinds of operands, 
+normal int and fixed-point number. There're following kinds of 
+operations: ADD, SUB, MUL, DIV and CONVERT. We use macros so because 
+it is much more readable than just using shifts and normal "+ - / *" 
+directly. We prefer macros to functions because macros are faster.
+
 			   SURVEY QUESTIONS
 			   ================
 
