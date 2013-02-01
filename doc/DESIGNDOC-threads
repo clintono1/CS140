@@ -376,18 +376,19 @@ should add up all the lengths of the 64 ready queues.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-In thread.h
-In struct thread (add following members)
+---thread.h---
+add following members to struct thread: 
 int recent_cpu;                     /* CPU time received recently */
 int nice;                           /* Nice value of each thread*/
 #define NICE_MAX 20                     /* Highest nice */
 #define NICE_MIn -20                    /* Lowest nice */
 
-In thread.c
+---thread.c---
 /* The average number of threads ready to run over the past minute */
 static int load_avg;
 
-add fixed-point.h                  /* Fixed-Point Real Arithmetic */
+---fixed-point.h---                  /* Fixed-Point Real Arithmetic */
+fixed point arithmetic goes here
 
 ---- ALGORITHMS ----
 
@@ -413,6 +414,7 @@ ticks   A   B   C   A   B   C   to run
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
 >> them?  Does this match the behavior of your scheduler?
+
 Yes. At timer ticks 8, 16, 24 and 36, there is ambiguities choosing 
 which thread to run. The scheduler specification doesn't specify which 
 thread to run when there are multiple threads with the same highest 
