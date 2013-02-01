@@ -174,7 +174,7 @@ itself on the lock holder it is waiting for.
 >> a lock, semaphore, or condition variable wakes up first?
 
 For locks and semaphores, we keep waiting threads in lock->semaphore->waiters
-in order based on the eff_priority. Thus when waking up, the first thread in 
+in order, based on the eff_priority. Thus when waking up, the first thread in 
 the list is the one with the highest priority.
 
 For condition variables, the waiting thread list in its semaphore->waiters list
@@ -182,7 +182,8 @@ is not ordered. Thus we will use list_max to find the one with the highest
 priority and then remove it from the list to wake up.
 
 For both cases, if the thread released from the waiting list has higher 
-priority than the current running thread, then the current thread yields immediately
+priority than the current running thread, then the current thread yields 
+immediately.
 
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
@@ -191,8 +192,10 @@ When the lock to acquire is not available, a priority donation is triggered.
 Thread A: the acquiring thread
 Thread B: the holder thread
 1) Set lock_to_acquire in Thread A
-2) Check whether this lock is already on Thread B's locks_waited_by_others list: if not, insert this lock to Thread B's locks_waited_by_others list. 
-3) Insert Thread A into the lock->semaphore->waiters list based on eff_priority from big to small
+2) Check whether this lock is already on Thread B's locks_waited_by_others list.
+   if not, insert this lock to Thread B's locks_waited_by_others list. 
+3) Insert Thread A into the lock->semaphore->waiters list based on eff_priority
+   from big to small.
 4) If A's priority is higher than that of B, set B's eff_priority by calling
    thread_set_eff_priority on B
 5) Block Thread A
@@ -201,15 +204,21 @@ In thread_set_eff_priority function, nested donation is handled.
 When thread_set_eff_priority(struct thread *A, int eff_priority) is called:
 1) Set thread A's eff_priority to the new eff_priority
 2) If thread A's lock_to_acquire is not NULL, nested donation is triggered
+
    i)   Since the thread's eff_priority is changed, sort the waiters list of
         lock_to_acquire.
-   ii)  Find the thread B who is holding the lock that A is trying to acquire
+
+   ii)  Find the thread B who is holding the lock that A is trying to acquire.
+
    iii) If thread A's new eff_priority is higher than that of B, call
         thread_set_eff_priority on the thread B with the new eff_priority. 
-	  (This could potentially trigger next level of nested priority donation,
-	  since thread_set_eff_priority is called recursively)
+	    (This could potentially trigger next level of nested priority donation,
+	    since thread_set_eff_priority is called recursively.)
+
    vi)  If thread A's new eff_priority is less than that of B, first search 
-        for the highest priority among all locks_waited_by_others of B and the priority of thread B itself; Then call thread_set_eff_priority on the thread B with the eff_priority just found
+        for the highest priority among all locks_waited_by_others of B and the
+		priority of thread B itself; Then call thread_set_eff_priority on the
+		thread B with the eff_priority just found.
 
 In a nutshell, nested donation is handled by recursive calls to function
 thread_set_eff_priority.
@@ -218,22 +227,26 @@ thread_set_eff_priority.
 >> on a lock that a higher-priority thread is waiting for.
 
 1) Disable interrupt
+
 2) The lock->semaphore->waiters list is not empty since a higher-priority
    thread is waiting, pop the first thread B in the list.
    Since this list is inserted in order and resorted once a thread's 
    priority changes, the first thread is the one with the highest priority.
+
 3) Remove the lock from the current thread A's locks_waited_by_others list
-4) If A's eff_priority equals to that of B, it is possible that A's 
+
+4) If A's eff_priority equals to that of B, it is possible that A's
    eff_priority was donated by B. Thus we need to determine A's new 
    eff_priority.
    i)  Find the new highest priority after the lock is removed from A's 
        locks_waited_by_others list by calling thread_find_max_priority(A)
    ii) Call thread_set_eff_priority on A with the eff_priority just found.
+
 5) Set flag yield_on_return to true if A's new eff_priority is smaller than
-   that of B
-6) Unblock thread B
-7) Enable interrupt
-8) Thread A yields if yield_on_return is true
+   that of B.
+6) Unblock thread B.
+7) Enable interrupt.
+8) Thread A yields if yield_on_return is true.
 
 ---- SYNCHRONIZATION ----
 
