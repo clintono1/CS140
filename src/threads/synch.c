@@ -331,7 +331,7 @@ lock_release (struct lock *lock)
       if (thread_current()->eff_priority < next_thread->eff_priority)
         yield_on_return = true;
     }
-    else //thread_mlfqs
+    else
     {
       if (thread_current()->priority < next_thread->priority)
         yield_on_return = true;

@@ -393,7 +393,7 @@ thread_set_priority (int new_priority)
         yield_on_return = true;
       }
   }
-  else // thread_mlfqs mode
+  else
   {
       if (new_priority < old_priority)
 		yield_on_return = true;
@@ -480,7 +480,7 @@ thread_get_priority (void)
     return thread_current ()->eff_priority;
 }
 
-/* calculate advanced priority for a thread */
+/* Calculate advanced priority for a thread */
 void
 calculate_priority_advanced(struct thread * th)
 {
@@ -493,7 +493,6 @@ calculate_priority_advanced(struct thread * th)
       th->priority = PRI_MAX;
     if(th->priority < PRI_MIN)
       th->priority = PRI_MIN;
-    // if current thread is in the ready list, change its position!
     if ( th!=thread_current() && th->status == THREAD_READY)
     {
       list_remove(&th->elem);      
@@ -502,7 +501,7 @@ calculate_priority_advanced(struct thread * th)
   }
 }
 
-/* calcuate recent_cpu for a thread */
+/* Calculate recent_cpu for a thread */
 void
 calculate_recent_cpu(struct thread * th)
 { 
@@ -517,14 +516,14 @@ calculate_recent_cpu(struct thread * th)
   }
 }
 
-/* calculate recent_cpu for all threads */
+/* Calculate recent_cpu for all threads */
 void 
 calculate_recent_cpu_all(void)
 {
   thread_foreach(calculate_recent_cpu, NULL);
 }
 
-/* advanced scheduling: calculate priority for all threads */
+/* Advanced scheduling: calculate priority for all threads */
 void 
 calculate_priority_advanced_all(void)
 {
@@ -533,7 +532,7 @@ calculate_priority_advanced_all(void)
 
 
 int
-list_size_all(void)
+get_num_ready_threads(void)
 {
     int i;
     int length_all;
@@ -545,7 +544,7 @@ list_size_all(void)
     return length_all;
 }
 
-/* calculate load_avg */
+/* Calculate load_avg */
 void
 calculate_load_avg(void)
 {
@@ -553,7 +552,7 @@ calculate_load_avg(void)
   struct thread * cur_thread;
   cur_thread = thread_current();
   int ready_threads;
-  ready_threads = list_size_all();
+  ready_threads = get_num_ready_threads();
   if(cur_thread != idle_thread)
   {
     ready_threads = ready_threads + 1;
