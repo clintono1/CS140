@@ -15,6 +15,7 @@
 #define SUB_FP(x, y) (x) - (y)
 
 #define CONVERT_TO_INT_NEAREST(x) ((x) >= 0 ? ((x) + (F)/2)/(F) : ((x) - (F)/2)/(F))
+#define CONVERT_TO_INT_DOWN(x) (x) / (F)
 #define CONVERT_TO_FP(n) (n) * (F)
 
 #endif
