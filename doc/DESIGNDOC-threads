@@ -167,12 +167,12 @@ lock's holder thread and donate priority if A's priority is higher.
 
 The effective priority update is done by calling thread_set_eff_priority 
 function on the holder thread. This function will check whether its 
-lock_to_acquire is null. If not null, it will recursively call 
-itself on the lock holder it is waiting for.
+lock_to_acquire is null. If not null, it will recursively call itself on the 
+lock holder it is waiting for.
 
 Case 1: Nested donation
 This is the case when a donation triggers a chain of donations. The following
-figure illustrates the case when the donation chain involes three threads:
+figure illustrates the case when the donation chain involves three threads:
 Thread H is trying to acquire lock L1, but L1 is currently held by thread M. 
 Therefore, thread H donates its priority to M. At the same time, M is waiting 
 for L2, which is currently held by L. Since M has just increased its priority
@@ -185,46 +185,41 @@ is used for nested donation. When a thread's priority is modified, it triggers
 pointer-tracing to find lock_to_acquire, and then trace this lock's holder to 
 find the thread that is the potential donee.
 
-               _                       _
-              / \                     / \
-            +-----+                 +-----+
-       |--->| L1  |            |--->| L2  |
-     wait   +-----+\         wait   +-----+\
-       |          ho\der       |          ho\der
---------             \----------             \--------
-| High |              | Medium |              | Low  |
---------              ----------              --------
-                      
-
+                       _                       _
+                      / \                     / \
+                    +-----+                 +-----+
+               +--->| L1  |            +--->| L2  |
+             wait   +-----+\         wait   +-----+\
+               |           hold        |           hold
+        +------+             \+--------+             \+------+
+        | High |              | Medium |              | Low  |
+        +------+              +--------+              +------+
 
 Case 2: Multiple donation
-The second senario is multiple donation, in which multiple priorites are 
+The second scenario is multiple donation, in which multiple priorities are 
 donated to a single thread, either via a single lock or via multiple locks.
 What we should consider is how to recover thread L's priority when it
-releases one of its lock (in this exmaple, L releases L2). A naive solution
+releases one of its lock (in this example, L releases L2). A naive solution
 is to recover it back to it's primitive priority, however, this is not true.
 
 The correct solution is to traverse all the remaining locks that L hold (the 
 list locks_waited_by_others, in this example, L1), for each lock, find its 
-waiting threads by traversing lock->semaphore->waiters (in this exmple, 
+waiting threads by traversing lock->semaphore->waiters (in this example, 
 thread M). Pick the highest effective priority among these waiters as well
 as its own primitive priority, and set its effective priority to this value. 
 In this example, L's priority should be recovered to M when it release the 
 lock L2.
 
-
-
-        ----------                              ----------
+        +--------+                              +--------+
         | Medium |                              |  High  | 
-        ----------                              ----------
+        +--------+                              +--------+
             | wait                              wait |
             V                                        V
-		    _                                        _
-		   / \                                      / \
-         +-----+   holder   ---------    holder   +-----+
+            _                                        _
+           / \                                      / \
+         +-----+   hold     +-------+    hold     +-----+
          | L1  | ---------> |  Low  | <---------- | L2  |
-         +-----+            ---------             +-----+
-
+         +-----+            +-------+             +-----+
 
 
 ---- ALGORITHMS ----
@@ -248,36 +243,33 @@ immediately.
 >> causes a priority donation.  How is nested donation handled?
 
 When the lock to acquire is not available, a priority donation is triggered.
-Thread A: the acquiring thread
-Thread B: the holder thread
+  Thread A: the acquiring thread
+  Thread B: the holder thread
 1) Set lock_to_acquire in Thread A
 2) Check whether this lock is already on Thread B's locks_waited_by_others list.
    if not, insert this lock to Thread B's locks_waited_by_others list. 
 3) Insert Thread A into the lock->semaphore->waiters list based on eff_priority
    from big to small.
 4) If A's priority is higher than that of B, set B's eff_priority by calling
-   thread_set_eff_priority on B
+   thread_set_eff_priority() on B
 5) Block Thread A
 
 In thread_set_eff_priority function, nested donation is handled.
-When thread_set_eff_priority(struct thread *A, int eff_priority) is called:
+When thread_set_eff_priority() is called:
 1) Set thread A's eff_priority to the new eff_priority
 2) If thread A's lock_to_acquire is not NULL, nested donation is triggered
 
    i)   Since the thread's eff_priority is changed, sort the waiters list of
         lock_to_acquire.
-
    ii)  Find the thread B who is holding the lock that A is trying to acquire.
-
    iii) If thread A's new eff_priority is higher than that of B, call
         thread_set_eff_priority on the thread B with the new eff_priority. 
-	    (This could potentially trigger next level of nested priority donation,
-	    since thread_set_eff_priority is called recursively.)
-
+        (This could potentially trigger the next level of priority donation,
+         since thread_set_eff_priority is called recursively.)
    vi)  If thread A's new eff_priority is less than that of B, first search 
         for the highest priority among all locks_waited_by_others of B and the
-		priority of thread B itself; Then call thread_set_eff_priority on the
-		thread B with the eff_priority just found.
+        priority of thread B itself; Then call thread_set_eff_priority on the
+        thread B with the eff_priority just found.
 
 In a nutshell, nested donation is handled by recursive calls to function
 thread_set_eff_priority.
@@ -286,21 +278,17 @@ thread_set_eff_priority.
 >> on a lock that a higher-priority thread is waiting for.
 
 1) Disable interrupt
-
 2) The lock->semaphore->waiters list is not empty since a higher-priority
    thread is waiting, pop the first thread B in the list.
    Since this list is inserted in order and resorted once a thread's 
    priority changes, the first thread is the one with the highest priority.
-
 3) Remove the lock from the current thread A's locks_waited_by_others list
-
 4) If A's eff_priority equals to that of B, it is possible that A's
    eff_priority was donated by B. Thus we need to determine A's new 
    eff_priority.
-   i)  Find the new highest priority after the lock is removed from A's 
-       locks_waited_by_others list by calling thread_find_max_priority(A)
-   ii) Call thread_set_eff_priority on A with the eff_priority just found.
-
+    i)  Find the new highest priority after the lock is removed from A's 
+        locks_waited_by_others list by calling thread_find_max_priority(A)
+    ii) Call thread_set_eff_priority on A with the eff_priority just found.
 5) Set flag yield_on_return to true if A's new eff_priority is smaller than
    that of B.
 6) Unblock thread B.
@@ -326,9 +314,9 @@ However, after this update, A is switched back, then it updates its own
 eff_priority with the previous value calculated (which will be lower), then the
 new effective priority is incorrect.
 
-To avoid this issue, a lock does NOT help. That would be just using the problem 
-itself to solve itself. We avoid this race condition by disabling interrupts 
-inside thread_set_priority().
+To avoid this issue, a lock does NOT help since competing on this lock can 
+lead to the priority donations which further changes the eff_priority. We avoid
+this race condition by disabling interrupts inside thread_set_priority().
 
 ---- RATIONALE ----
 
@@ -340,28 +328,26 @@ thread's priority should also change. This is done through the lock. That is, we
 first trace the lock, then trace the holder of the lock. 
 
 One alternative design could be directly link the associate thread to current
-threadto prepare for nested donation. However, this approach has no advantage:
-first, it also add to each thread a thread pointer, it's won't save space. 
-Second, this method is hard to maintain when a lock's owner got changed: we 
+thread to prepare for nested donation. However, this approach has some 
+disadvantages:
+First, it also add to each thread a thread pointer, it wastes space. 
+Second, this method is hard to maintain when a lock's holder is changed: we 
 have to update the waiter's associative thread to the lock's new holder each 
 time the holder changes. Consider these factors, we chose our design which add
 a level of indirection during nested donation. 
 
-The second consideration is the same with part1, to maintain the waiter list
+The second consideration is the same with part 1, to maintain the waiter list
 sorted when inserting. Since this will facilitate picking the highest priority
 thread when lock_release/sema_up/signal
 
 The third consideration has to do with the data structure of ready queue. We 
 used 64 ready queues instead of a single ready queue. This data structure will
-facilitate part3 advanced scheduler as well. We can easily locate where to
+facilitate part 3 advanced scheduler as well. We can easily locate where to
 insert a ready thread: simply insert in the ready_list[63- (t->priority)]. It's 
 complexity is O(1). We can easily find which thread has the highest priority and
 schedule it first, while for the same priority threads we can schedule them 
 round robin. When counting the total number of ready threads for part 3, we 
 should add up all the lengths of the 64 ready queues. 
-
-
-
 
 
 			  ADVANCED SCHEDULER
