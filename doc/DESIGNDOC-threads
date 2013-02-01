@@ -25,7 +25,7 @@ None
 
 Song Han: alarm, priority scheduler, system merge and debug, design document 
 Jinchao Ye: advanced scheduler, design document
-Bo Wang: priority donation, design document, testing cases
+Bo Wang: priority donation, design document
 
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
@@ -360,11 +360,11 @@ should add up all the lengths of the 64 ready queues.
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
 ---thread.h---
-add following members to struct thread: 
-int recent_cpu;                     /* CPU time received recently */
-int nice;                           /* Nice value of each thread*/
-#define NICE_MAX 20                     /* Highest nice */
-#define NICE_MIn -20                    /* Lowest nice */
+Changes to 'struct thread'
+    int recent_cpu;                     /* CPU time received recently */
+    int nice;                           /* Nice value of each thread*/
+    #define NICE_MAX 20                 /* Highest nice */
+    #define NICE_MIn -20                /* Lowest nice */
 
 ---thread.c---
 /* The average number of threads ready to run over the past minute */
@@ -436,7 +436,7 @@ If there is only one ready queue, either "inserting a new thread" or
 "looking for next thread to run" requires O(n) time. In our 
 implementation, however, we have one ready queue for each priority. 
 When inserting a new thread, we push it to the back of the 
-corresonding ready queue,i.e. ready_list[63- (t->priority)]. This 
+corresponding ready queue, i.e. ready_list[63- (t->priority)]. This 
 only takes O(1) time. When looking for the next thread to run, we 
 need to find the first thread in the highest non-empty ready queue, 
 which also only takes O(1) time. We recalculated the priority of every
@@ -444,32 +444,29 @@ thread every 4 ticks. Once the priority of a thread changes, We remove
 the thread from its current ready queue and push it back to the 
 corresponding ready queue.
 
-Disadvantages: In our current implemenatation, we updated priority 
+Disadvantages: In our current implementation, we updated priority 
 every four ticks for every thread.
 However, we observe that both recent_cpu of each thread and load_avg is 
 updated once per second unless the thread is running. Moreover, the 
 priority only changes if recent_cpu changes. Therefore, we can save a 
 lot of computation by doing:
-  udpate priority of each thread once per second, immediately after
-  we updated recent_cpu that second
-  update priority every 4 ticks only for threads who had runned during
-  the last 4 ticks
-
-Future Plan: We might be able to implement the above strategy of 
-updating priority if we had extra time.
+  Update priority of each thread once per second, immediately after
+  we updated recent_cpu that second.
+  Update priority every 4 ticks only for threads who had run during
+  the last 4 ticks.
 
 
 >> C6: The assignment explains arithmetic for fixed-point math in
 >> detail, but it leaves it open to you to implement it.  Why did you
 >> decide to implement it the way you did?  If you created an
 >> abstraction layer for fixed-point math, that is, an abstract data
->> type and/or a set of functions or macros to manipulate fixed-point
+>> type and / or a set of functions or macros to manipulate fixed-point
 >> numbers, why did you do so?  If not, why not?
 
 We need do many kinds of fixed-point calculations when calculating 
 priority, recent_cpu and load_avg. We defined a set of macros in a new
-header file called "fixed-point.h". There're two kinds of operands, 
-normal int and fixed-point number. There're following kinds of 
+header file called "fixed-point.h". There are two kinds of operands, 
+normal int and fixed-point number. There are following kinds of 
 operations: ADD, SUB, MUL, DIV and CONVERT. We use macros so because 
 it is much more readable than just using shifts and normal "+ - / *" 
 directly. We prefer macros to functions because macros are faster.
