@@ -117,10 +117,11 @@ in the thread structure, is to make another structure that points to the waking
 thread and recording this thread's wake up time at same time. It has an 
 additional list_elem component that link them together. 
 
-    struct node{
-        struct thread *t;   //pointer to the sleeping thread
-        int64_t wake_up_time; //when to wake up
-        list_elem element;  //link these nodes together
+    struct node
+    {
+        struct thread *t;     /* pointer to the sleeping thread */
+        int64_t wake_up_time; /* when to wake up */
+        list_elem element;    /* link these nodes together */
     }
 
 This approach has the advantage of not occupying additional space to thread
@@ -145,11 +146,17 @@ One member is added to struct lock.
     struct list_elem thread_elem; /* List element for waited lock queue */
 
 ---thread.h---
-Three members are added to struct thread
+Three members are added to struct thread.
     int eff_priority;                   /* Effective priority */
     struct lock * lock_to_acquire;      /* Lock this thread is waiting for */
     struct list locks_waited_by_others; /* Locks held by this thread but 
                                            also waited by other threads */
+---thread.c--- 
+changed the globle variable ready_list from a singe ready queue into 64 ready
+queues:
+    static struct list ready_list[64];  /* 64 ready queues*/
+										   
+										   
 
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
@@ -166,7 +173,62 @@ function on the holder thread. This function will check whether its
 lock_to_acquire is null. If not null, it will recursively call 
 itself on the lock holder it is waiting for.
 
-[To Be Done]
+Case 1: Nested donation
+This is the case when a donation triggers a chain of donations. The following
+figure illustrates the case when the donation chain involes three threads:
+Thread H is trying to acquire lock L1, but L1 is currently held by thread M. 
+Therefore, thread H donates its priority to M. At the same time, M is waiting 
+for L2, which is currently held by L. Since M has just increased its priority
+due to H's donation, it must propagate this donation to L, which triggers 
+the priority donation from M to L. In the end, both M and L are boosted to H's
+priority.
+
+In our data structure, struct lock * lock_to_acquire inside structure thread
+is used for nested donation. When a thread's priority is modified, it triggers
+pointer-tracing to find lock_to_acquire, and then trace this lock's holder to 
+find the thread that is the potential donee.
+
+               _                       _
+              / \                     / \
+            +-----+                 +-----+
+       |--->| L1  |            |--->| L2  |
+     wait   +-----+\         wait   +-----+\
+       |          ho\der       |          ho\der
+--------             \----------             \--------
+| High |              | Medium |              | Low  |
+--------              ----------              --------
+                      
+
+
+Case 2: Multiple donation
+The second senario is multiple donation, in which multiple priorites are 
+donated to a single thread, either via a single lock or via multiple locks.
+What we should consider is how to recover thread L's priority when it
+releases one of its lock (in this exmaple, L releases L2). A naive solution
+is to recover it back to it's primitive priority, however, this is not true.
+
+The correct solution is to traverse all the remaining locks that L hold (the 
+list locks_waited_by_others, in this example, L1), for each lock, find its 
+waiting threads by traversing lock->semaphore->waiters (in this exmple, 
+thread M). Pick the highest effective priority among these waiters as well
+as its own primitive priority, and set its effective priority to this value. 
+In this example, L's priority should be recovered to M when it release the 
+lock L2.
+
+
+
+        ----------                              ----------
+        | Medium |                              |  High  | 
+        ----------                              ----------
+            | wait                              wait |
+            V                                        V
+		    _                                        _
+		   / \                                      / \
+         +-----+   holder   ---------    holder   +-----+
+         | L1  | ---------> |  Low  | <---------- | L2  |
+         +-----+            ---------             +-----+
+
+
 
 ---- ALGORITHMS ----
 
@@ -275,6 +337,35 @@ inside thread_set_priority().
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+To solve the nested donation case, we added a level of indirection to find which
+thread's priority should also change. This is done through the lock. That is, we
+first trace the lock, then trace the holder of the lock. 
+
+One alternative design could be directly link the associate thread to current
+threadto prepare for nested donation. However, this approach has no advantage:
+first, it also add to each thread a thread pointer, it's won't save space. 
+Second, this method is hard to maintain when a lock's owner got changed: we 
+have to update the waiter's associative thread to the lock's new holder each 
+time the holder changes. Consider these factors, we chose our design which add
+a level of indirection during nested donation. 
+
+The second consideration is the same with part1, to maintain the waiter list
+sorted when inserting. Since this will facilitate picking the highest priority
+thread when lock_release/sema_up/signal
+
+The third consideration has to do with the data structure of ready queue. We 
+used 64 ready queues instead of a single ready queue. This data structure will
+facilitate part3 advanced scheduler as well. We can easily locate where to
+insert a ready thread: simply insert in the ready_list[63- (t->priority). It's 
+complexity is O(1). We can easily find which thread has the highest priority and
+schedule it first, while for the same priority threads we can schedule them 
+round robin. When counting the total number of ready threads for part 3, we 
+should add up all the lengths of the 64 ready queues. 
+
+
+
+
 
 			  ADVANCED SCHEDULER
 			  ==================
