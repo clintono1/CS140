@@ -41,12 +41,12 @@ Bo Wang: priority donation, design document, testing cases
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
 ---thread.h---
-Added two fields to struct thread:
+Changes to 'struct thread'
     int64_t wake_up_time;            /* Time to wake up current thread */
     struct list_elem alarm_elem;     /* List element for alarm queue */
 
 ---timer.c---
-Added an alarm_list which contains all the sleeping threads.
+Changes to 'timer.c'
     static struct list alarm_list; /* List of threads waiting for alarm */
 
 ---- ALGORITHMS ----
@@ -54,29 +54,27 @@ Added an alarm_list which contains all the sleeping threads.
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
-When a a thread calls timer_sleep() it means that it's going to sleep for a 
-while. We first calculate the wake up time, which is given by start+ticks. 
-To avoid busy waiting, a thread in sleep should be blocked, and a new
-thread should get started to run. The way we keep track of all the sleeping 
-thread is through the alarm_list. Since this list is global and shared among
-all threads, it's modification should be protected by disbling interrupts. 
-One more reason to disable interrupt is that blocking a thread will incur 
+When a a thread calls timer_sleep(), we first calculate the wake up time, which
+is given by start + ticks. To avoid busy waiting, a thread in sleep should be 
+blocked, and a new thread should be scheduled to run. We use alarm_list to keep
+track of all sleeping threads. Since this list is globally shared among all 
+threads, its modification is protected by disabling interrupts. 
+Another reason to disable interrupt is that blocking a thread will incur 
 schedule(), so when doing context switch we should disable interrupt.
 
 One thing to consider is the sequence in which the sleeping threads are
 inserted. Since at each tick we should check if there's a thread that needs
-to be waken up, it's better to keep the queue sorted by the wake up time. 
-Hence we did list_insert_ordered for each sleeping thread with their wake 
-up time from small to large. Thus, the searching complexity will be smaller. 
-
+to be waken up, it's better to sort the queue by the wake up time. 
+Thus we implemented and use list_insert_ordered() for thread insertion so that
+their ordering is chronological. Thus, the searching complexity is O(1).
 
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
 
-We kept a sorted alarm_list at timer_sleep(), so in the timer interrupt 
+We keep a sorted alarm_list at timer_sleep(), so in the timer interrupt 
 handler we only need to peek the front of the queue to see if a thread 
-needs to be waken up. This complexity is k*O(1), where k is the number of
+needs to be waken up. This complexity is O(k), where k is the number of
 threads that should be waken up at the same time.
 
 ---- SYNCHRONIZATION ----
@@ -94,9 +92,9 @@ and block it self. This operation is therefore atomic.
 
 The timer interrupt handler also manipulates the alarm_list, since it try to
 see if the time comes to wake up some thread and get them out of the list. 
-However,in both the timer interrupt handler and the timer_sleep, both 
+However, in both the timer interrupt handler and the timer_sleep, 
 manipulation to the global variable of this alarm_list is protected by 
-disabling interrupts. So no race condition could happen. 
+disabling interrupts. So race conditions are avoided. 
 
 ---- RATIONALE ----
 
@@ -106,8 +104,8 @@ disabling interrupts. So no race condition could happen.
 There are several design considerations in current implementation: first 
 the sleeping threads are kept track of through the alarm_list, each thread
 is added an additional node, the alarm_elem that link them together. 
-Another additional component is the wake_up_time. All these two adds upto 
-16 Byte to the structure of thread, since they are small compared to 4KB 
+Another additional component is the wake_up_time. All these two adds up to 
+16 bytes to the structure of thread, since they are small compared to 4KB 
 space and they are static allocated, they won't lead to stack over flow. The
 other consideration is the sorted alarm_list, which decreased complexity 
 during timer interrupt handler. 
@@ -125,10 +123,10 @@ additional list_elem component that link them together.
     }
 
 This approach has the advantage of not occupying additional space to thread
-structure. However, each time a thread trys to sleep we have to dynamically 
+structure. However, each time a thread tries to sleep we have to dynamically 
 allocate such a node to track the sleeping node, and when it wake up we have 
 to free such a node. This overhead should be taken into consideration. However,
-in our approach, we don't need to dynamically allocate a space to trake the 
+in our approach, we don't need to dynamically allocate a space to track the 
 thread, we just link the thread itself to the alarm_list. Neither do we need 
 to free the space when we wake up the thread. 
 
@@ -142,21 +140,20 @@ to free the space when we wake up the thread.
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
 ---sync.h---
-One member is added to struct lock.
+Changes to 'struct lock'
     struct list_elem thread_elem; /* List element for waited lock queue */
 
 ---thread.h---
-Three members are added to struct thread.
+Changes to 'struct thread'
     int eff_priority;                   /* Effective priority */
     struct lock * lock_to_acquire;      /* Lock this thread is waiting for */
     struct list locks_waited_by_others; /* Locks held by this thread but 
                                            also waited by other threads */
+
 ---thread.c--- 
-changed the globle variable ready_list from a singe ready queue into 64 ready
-queues:
+Changes to global variable ready_list
     static struct list ready_list[64];  /* 64 ready queues*/
-										   
-										   
+
 
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
