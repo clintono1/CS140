@@ -372,21 +372,32 @@ thread_set_priority (int new_priority)
 {
   enum intr_level old_level;
   old_level = intr_disable ();
-
+  
   bool yield_on_return = false;
   struct thread *t = thread_current ();
+  int old_priority = t->priority;
   if (new_priority == t->priority)
     return;
   t->priority = new_priority;
-  if (new_priority > thread_current()->eff_priority)
+  if (!thread_mlfqs)
   {
-    thread_set_eff_priority (t, new_priority);
+
+      if (new_priority > thread_current()->eff_priority)
+      {
+        thread_set_eff_priority (t, new_priority);
+      }
+      else
+      {
+        int new_eff_priority = thread_find_max_priority (t);
+        thread_set_eff_priority (t, new_eff_priority);
+        yield_on_return = true;
+      }
   }
-  else
+  else // thread_mlfqs mode
   {
-    int new_eff_priority = thread_find_max_priority (t);
-    thread_set_eff_priority (t, new_eff_priority);
-    yield_on_return = true;
+      if (new_priority < old_priority)
+		yield_on_return = true;
+
   }
   intr_set_level (old_level);
 
