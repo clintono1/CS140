@@ -310,18 +310,31 @@ ticks   A   B   C   A   B   C   to run
 -----  --  --  --  --  --  --   ------
  0     0   0   0   63  61  59   A
  4     4   0   0   62  61  59   A
- 8     8   0   0   61  61  59   B           Round-Robin
+ 8     8   0   0   61  61  59   B           Round-Robin, FCFS
 12     8   4   0   61  60  59   A
-16     12  4   0   60  60  59   B           Round-Robin
+16     12  4   0   60  60  59   B           Round-Robin, FCFS
 20     12  8   0   60  59  59   A
-24     16  8   0   59  59  59   C           Round-Robin
+24     16  8   0   59  59  59   C           Round-Robin, FCFS
 28     16  8   4   59  59  58   B
 32     16  12  4   59  58  58   A
-36     20  12  4   58  58  58   C           Round-Robin
+36     20  12  4   58  58  58   C           Round-Robin, FCFS
 
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
 >> them?  Does this match the behavior of your scheduler?
+Yes. At timer ticks 8, 16, 24 and 36, there is ambiguities choosing 
+which thread to run. The scheduler specification doesn't specify which 
+thread to run when there are multiple threads with the same highest 
+priority in the ready queue. In case of tie, we use round-robin among 
+highest priority threads. We choose the thread to run according to the 
+First-Come-First-Serve policy. We use 64 ready queues, 1 queue per 
+priority. Once there're multiple threads with highest priority in the 
+non-empty ready queues, push current thread to the end of the ready 
+queue with corresponding priority. Then we run the first thread in the 
+highest non-emtpy ready queue.
+
+Also, we don't know TIMER_FREQ in the above question. We assume that 
+it's larger than 36.
 
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
