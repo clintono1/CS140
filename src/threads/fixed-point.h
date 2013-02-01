@@ -11,6 +11,8 @@
 #define DIV_FP(x, y) ((int64_t)(x)) * (F) / (y)
 #define ADD_INT(x, n) (x) + (n) * (F)
 #define ADD_FP(x, y) (x) + (y) 
+#define SUB_INT(x, n) (x) + (n) * (F)
+#define SUB_FP(x, y) (x) - (y)
 
 #define CONVERT_TO_INT_NEAREST(x) ((x) >= 0 ? ((x) + (F)/2)/(F) : ((x) - (F)/2)/(F))
 #define CONVERT_TO_FP(n) (n) * (F)

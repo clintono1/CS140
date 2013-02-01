@@ -285,6 +285,19 @@ inside thread_set_priority().
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+In thread.h
+In struct thread (add following members)
+int recent_cpu;                     /* CPU time received recently */
+int nice;                           /* Nice value of each thread*/
+#define NICE_MAX 20                     /* Highest nice */
+#define NICE_MIn -20                    /* Lowest nice */
+
+In thread.c
+/* The average number of threads ready to run over the past minute */
+static int load_avg;
+
+add fixed-point.h                  /* Fixed-Point Real Arithmetic */
+
 ---- ALGORITHMS ----
 
 >> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
