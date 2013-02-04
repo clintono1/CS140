@@ -1,3 +1,4 @@
+
 #include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
@@ -21,6 +22,19 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+void get_first_string(const char * src_str, char *dst_str)
+{
+  char * begin=src_str;
+  char * end;
+  while (*begin==' ')
+    begin++;
+  end=begin;
+  while(*end!=' ' && *end!='\0')
+    end++;
+  ASSERT(end-begin+1<=16);
+  strlcpy(dst_str, begin, end-begin+1);
+}
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -37,9 +51,11 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+  char func_name[16];
+  get_first_string(fn_copy, func_name);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (func_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -201,6 +217,80 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
 
+void argc_counter(const char*str, int *word_cnt, int *char_cnt)
+{
+  char *begin=str;
+  int in_word=0;
+  do 
+  {
+    while (*begin==' ')
+      begin++;
+    while (*begin!=' '&&*begin!='\0')
+    {
+      begin++;
+      (*char_cnt)++;
+      in_word=1;
+    }
+    if(in_word)
+      (*word_cnt)++;
+    in_word=0;
+  } while (*begin!='\0');
+}
+
+bool argument_pasing(char *cmd_line, char **esp)
+{
+    int argc=0;
+  int char_cnt=0;
+  int mem_size=0;
+  char * arg_data;
+  char **arg_pointer;
+  char *token, *save_ptr;
+  //**esp = 'a';
+  if (cmd_line==NULL)
+    return 0;
+  /* calculate the number of arguments and argument size */
+  argc_counter(cmd_line, &argc, &char_cnt );
+  mem_size = char_cnt + argc;
+  /* round up to multiples of 4 Bytes */
+
+  mem_size = ROUND_UP (mem_size, sizeof(int));
+  /* check if the argument size is greater than a page */
+  if (mem_size+(argc+1)*sizeof(char *)+sizeof(char **)+sizeof(int) > PGSIZE)
+    return 0;
+  /* decrease the stack pointer */
+  *esp -= mem_size;
+  arg_data = (char *)(*esp);
+  /* decrease the stack pointer */
+  *esp -= (argc+1)*sizeof(char *);
+  arg_pointer = (char **)(*esp);
+
+  for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
+    token = strtok_r (NULL, " ", &save_ptr))
+  {
+    printf ("'%s'\n", token);
+    strlcpy(arg_data, token, strlen(token)+1);
+    *arg_pointer = arg_data;
+
+    arg_data += strlen(token)+1;
+    arg_pointer++;
+  }
+  *arg_pointer = 0;
+  /* save then decrease the stack pointer */
+  arg_pointer = (char **)(*esp);
+  *esp -= sizeof(char **);
+  **esp = arg_pointer;
+  /* decrease the stack pointer */
+  *esp -= sizeof(int);
+  **esp = argc;
+  /* decrease the stack pointer */
+  *esp -= sizeof(void*);
+      **esp = NULL;
+
+    return 1;
+
+}
+
+
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
@@ -304,11 +394,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
+  //TODO: move arguments to stack
+  printf("argument passing\n\n");
+  bool succ=argument_pasing(file_name, esp);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
-  success = true;
+  success = success && succ;
 
  done:
   /* We arrive here whether the load is successful or not. */
