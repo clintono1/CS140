@@ -221,22 +221,22 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 void argc_counter(const char*str, int *word_cnt, int *char_cnt)
 {
-  char *begin=str;
-  int in_word=0;
+  char *begin = str;
+  int in_word = 0;
   do
   {
-    while (*begin==' ')
-      begin++;
-    while (*begin!=' '&&*begin!='\0')
+    while (*begin == ' ')
+      begin ++;
+    while (*begin != ' ' && *begin != '\0')
     {
-      begin++;
-      (*char_cnt)++;
-      in_word=1;
+      begin ++;
+      (*char_cnt) ++;
+      in_word = 1;
     }
     if(in_word)
-      (*word_cnt)++;
-    in_word=0;
-  } while (*begin!='\0');
+      (*word_cnt) ++;
+    in_word = 0;
+  } while (*begin != '\0');
 }
 
 bool argument_pasing(char *cmd_line, char **esp)
@@ -247,33 +247,33 @@ bool argument_pasing(char *cmd_line, char **esp)
   char * arg_data;
   char **arg_pointer;
   char *token, *save_ptr;
-  if (cmd_line==NULL)
+  if ( cmd_line == NULL)
     return 0;
   /* Calculate the number of arguments and argument size */
-  argc_counter(cmd_line, &argc, &char_cnt );
+  argc_counter (cmd_line, &argc, &char_cnt );
   mem_size = char_cnt + argc;
 
   /* Round up to multiples of 4 Bytes */
   mem_size = ROUND_UP (mem_size, sizeof(int));
 
   /* Check if the argument size is greater than a page */
-  //TODO
-  if (mem_size+(argc+1)*sizeof(char *)+sizeof(char **)+sizeof(int) > PGSIZE)
+  //TODO: Song, can you check Piazza and see if there are any discussion on this
+  if (mem_size + (argc + 1)*sizeof(char*) + sizeof(char**)+sizeof(int) > PGSIZE)
     return 0;
 
   *esp -= mem_size;
   arg_data = (char *)(*esp);
 
-  *esp -= (argc+1)*sizeof(char *);
+  *esp -= (argc + 1) * sizeof(char *);
   arg_pointer = (char **)(*esp);
 
   for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
     token = strtok_r (NULL, " ", &save_ptr))
   {
-    strlcpy(arg_data, token, strlen(token)+1);
+    strlcpy (arg_data, token, strlen (token) + 1);
     *arg_pointer = arg_data;
 
-    arg_data += strlen(token)+1;
+    arg_data += strlen (token)+1;
     arg_pointer++;
   }
   *arg_pointer = 0;
@@ -284,7 +284,6 @@ bool argument_pasing(char *cmd_line, char **esp)
   WRITE_BYTE_4(esp, *esp+4);
 
   /* Decrease the stack pointer */
-  // TODO
   *esp -= sizeof(int);
   WRITE_BYTE_4(esp, argc);
   *esp -= sizeof(void*);
@@ -293,7 +292,6 @@ bool argument_pasing(char *cmd_line, char **esp)
   hex_dump (0, *esp, 400, true);
   return 1;
 }
-
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
