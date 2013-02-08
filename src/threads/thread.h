@@ -82,6 +82,13 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
+//struct load_success
+//{
+//	semaphore sema_load;
+//	bool is_load_success; 
+//};
+
 struct thread
   {
     /* Owned by thread.c. */
@@ -105,12 +112,36 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+	//maybe these two items could be wrapped with a structure?
+	//the function of this extra_data * is 指向thread的遗产。即便thread死了，他的exit_data保存在遗产结构体中（extra_data）
+	//这样wait他的进程就可以取出遗产中的exit_data。清理遗产比较tricky：current policy is that we free the extra_data when the 
+	//parent died, therefore the parent should signal the child that their extra_data no longer exist, so dont's try to access this 
+	//extra data (mainly to write it's exit_status and to sema up the sema_exited when it exits). This is achieved by writting the 
+	//owner thread's extra_data pointer to NULL. But this owner_thread is not always not NULL, consider if the owner thread has
+	//already died. 
+
+	struct extra_data* extra_data;
+	struct lock extra_data_lock;
+
 #endif
-    
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+struct extra_data
+{
+	pid_t process_id;
+	bool was_waited;//might be elimintated.
+	int exit_status;
+	//struct load_success * load_success;
+	semaphore sema_exited;
+	semaphore sema_loaded;
+	bool load_success;
+	
+
+	struct thread * owner_thread;
+	struct lock owner_thread_lock;
+};
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
