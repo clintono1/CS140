@@ -38,12 +38,67 @@ FirstName LastName: contribution
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+There's no change of data structures for argument passing
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+The call stack of the program is as following:
+main() -> run_actions(argv)
+run_actions() -> run_task(argv)
+run_task() -> process_wait(process execute(task))
+
+Curently process_execute() will creat a thread that runs start_process().
+Frist, the thread's name should be the first word of the command line,
+thus we implement a function get_first_word() to extract the first word form 
+the command line as the user program's name.
+
+Inside start_process() it calls load(*filename, **esp,...), we implement a 
+procedure argument_passing(const char *filename, void **esp)  to extract 
+all the arguments from filename and set up the stack inside this fuction. 
+The procedure is as follows:
+
+--save a copy of the filename as cmd_line
+--each char is exactly 1 byte, find total number of bytes for the argument, 
+  and find the total argument count (argc). That's done by find the number
+  of tokens seperated by the delimiter " " in the cmd_line. 
+         for (token = strtok_r (s, " ", &save_ptr); token != NULL;
+               token = strtok_r (NULL, " ", &save_ptr))
+			   cnt++; 
+			   length+=strlen(token)+1;			   
+			   //note: s must be modifiable
+
+--if the total stack space exceed's a page, return false			   
+
+--ROUNRD_UP the cmd_line's length to multiples of 4 Byte as new length
+
+--decrease esp by length, set this as the start address of arg_data
+
+--decrease esp by the (number of arguments+1)*sizeof(char *). 
+   (The reason for +1 is due to putting a zero at the end of the pointers).
+  -Set this adress as arg_pointer
+
+--iterate the cmd_line again by strtok(), for each token
+  -fill the argument's address into arg_pointer
+  -fill the argument string into arg_data
+  -update the arg_data by increasing the string length+1
+  -update the arg_pointer by increasing it sizeof(char *)
+  
+--save the previous esp as argv, decrease esp by sizeof(char **)
+  -fill in esp's value as the address of argv[0]
+   
+--decrease esp by sizeof(int)
+  -fill in esp's value as argc
+  
+--decrease esp by sizeof(void *)
+  -fill in esp's value as the fake return address 0
+   
+
+   
+--
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
