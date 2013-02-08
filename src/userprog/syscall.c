@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 
 static void syscall_handler (struct intr_frame *);
+static void exit(int status);
 
 void
 syscall_init (void) 
@@ -15,6 +16,15 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  printf ("system call!\n");
+  switch(*((int *)f->esp)){
+   case SYS_EXIT:
+     exit(0);
+     break;
+  }
+}
+
+static void exit(int status){
+  struct thread * cur_thread = thread_current();
+  printf("%s: exit(%d)\n", cur_thread->name, status);
   thread_exit ();
 }
