@@ -270,7 +270,6 @@ bool argument_pasing(char *cmd_line, char **esp)
   for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
     token = strtok_r (NULL, " ", &save_ptr))
   {
-    printf ("'%s'\n", token);
     strlcpy(arg_data, token, strlen(token)+1);
     *arg_pointer = arg_data;
 
