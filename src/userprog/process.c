@@ -1,4 +1,3 @@
-
 #include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
@@ -22,6 +21,8 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+#define WRITE_BYTE_4(addr, value) **((int**) addr) = (int)value
+
 void get_first_string(const char * src_str, char *dst_str)
 {
   char * begin=src_str;
@@ -40,7 +41,7 @@ void get_first_string(const char * src_str, char *dst_str)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *file_path) 
 {
   char *fn_copy;
   tid_t tid;
@@ -50,12 +51,12 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
-  char func_name[16];
-  get_first_string(fn_copy, func_name);
+  strlcpy (fn_copy, file_path, PGSIZE);
+  char file_name[16];
+  get_first_string(fn_copy, file_name);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (func_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -104,6 +105,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  while(1);
   return -1;
 }
 
@@ -221,7 +223,7 @@ void argc_counter(const char*str, int *word_cnt, int *char_cnt)
 {
   char *begin=str;
   int in_word=0;
-  do 
+  do
   {
     while (*begin==' ')
       begin++;
@@ -239,28 +241,29 @@ void argc_counter(const char*str, int *word_cnt, int *char_cnt)
 
 bool argument_pasing(char *cmd_line, char **esp)
 {
-    int argc=0;
+  int argc=0;
   int char_cnt=0;
   int mem_size=0;
   char * arg_data;
   char **arg_pointer;
   char *token, *save_ptr;
-  //**esp = 'a';
   if (cmd_line==NULL)
     return 0;
-  /* calculate the number of arguments and argument size */
+  /* Calculate the number of arguments and argument size */
   argc_counter(cmd_line, &argc, &char_cnt );
   mem_size = char_cnt + argc;
-  /* round up to multiples of 4 Bytes */
 
+  /* Round up to multiples of 4 Bytes */
   mem_size = ROUND_UP (mem_size, sizeof(int));
-  /* check if the argument size is greater than a page */
+
+  /* Check if the argument size is greater than a page */
+  //TODO
   if (mem_size+(argc+1)*sizeof(char *)+sizeof(char **)+sizeof(int) > PGSIZE)
     return 0;
-  /* decrease the stack pointer */
+
   *esp -= mem_size;
   arg_data = (char *)(*esp);
-  /* decrease the stack pointer */
+
   *esp -= (argc+1)*sizeof(char *);
   arg_pointer = (char **)(*esp);
 
@@ -275,19 +278,21 @@ bool argument_pasing(char *cmd_line, char **esp)
     arg_pointer++;
   }
   *arg_pointer = 0;
-  /* save then decrease the stack pointer */
+
+  /* Save and decrease the stack pointer */
   arg_pointer = (char **)(*esp);
   *esp -= sizeof(char **);
-  **esp = arg_pointer;
-  /* decrease the stack pointer */
+  WRITE_BYTE_4(esp, *esp+4);
+
+  /* Decrease the stack pointer */
+  // TODO
   *esp -= sizeof(int);
-  **esp = argc;
-  /* decrease the stack pointer */
+  WRITE_BYTE_4(esp, argc);
   *esp -= sizeof(void*);
-      **esp = NULL;
+  **esp = NULL;
 
-    return 1;
-
+  hex_dump (0, *esp, 400, true);
+  return 1;
 }
 
 
@@ -296,7 +301,7 @@ bool argument_pasing(char *cmd_line, char **esp)
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (const char *file_path, void (**eip) (void), void **esp)
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -311,6 +316,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  /* Extract the func_name */
+  char file_name[16];
+  get_first_string(file_path, file_name);
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
@@ -328,7 +336,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
-      printf ("load: %s: error loading executable\n", file_name);
+      printf ("load: %s: error loading executable\n", file_path);
       goto done; 
     }
 
@@ -396,7 +404,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   //TODO: move arguments to stack
   printf("argument passing\n\n");
-  bool succ=argument_pasing(file_name, esp);
+  bool succ=argument_pasing(file_path, esp);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
