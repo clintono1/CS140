@@ -285,7 +285,10 @@ run_task (char **argv)
   
   printf ("Executing '%s':\n", task);
 #ifdef USERPROG
-  process_wait (process_execute (task));
+  struct load_status ls;
+  sema_init(&ls.sema_load, 0);
+  ls.load_success = false;
+  process_wait (process_execute (task, &ls));
 #else
   run_test (task);
 #endif

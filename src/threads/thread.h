@@ -7,6 +7,11 @@
 #include "threads/synch.h"
 #include "threads/malloc.h"
 
+// TODO: Remove before submit
+#ifndef USERPROG
+#define USERPROG
+#endif
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -84,13 +89,6 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
-
-//struct load_success
-//{
-//	semaphore sema_load;
-//	bool is_load_success; 
-//};
-
 struct thread
   {
     /* Owned by thread.c. */
@@ -114,34 +112,30 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct exit_status *exit_status;    /* Exit status of this thread */
+    struct list child_list;             /* List of child processes */
 #endif
-    //TODO: this should be put in ifdef
-    struct extra_data* extra;      /* thread's legacy storing information as child*/
-    struct list child_list;
-    /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
 
-//storing child information even if the child has died
-struct extra_data
-{
-  struct list_elem elem;  //elem used for chaining all the children for parent
-	int pid;
-  struct thread *parent_thread;
-	bool was_waited;//might be elimintated.
-	int exit_status;
-	
-  bool load_success;
-  struct semaphore sema_loaded;
-	struct semaphore sema_exited;
-	
-  int counter;
-  struct lock counter_lock;
-};
+/* Exit status of a process */
+struct exit_status
+  {
+    int pid;                            /* Process Id. Same as tid in Pintos */
+    int exit_value;                     /* Exit value */
+    struct semaphore sema_wait;         /* Semaphore to sync on wait() */
+    int ref_counter;                    /* Reference counter for release */
+    struct lock counter_lock;           /* Lock on accessing ref_counter */
+    struct list_elem elem;              /* List element for exit_status list */
+  };
 
-
-
-
+/* Load status of a process */
+struct load_status
+  {
+    struct semaphore sema_load;              /* Semaphore to sync on load() */
+    bool load_success;                  /* True if load successfully */
+    char *file_name;                    /* Name of the executable file */
+  };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -191,5 +185,5 @@ void calculate_recent_cpu(struct thread * th);
 void calculate_recent_cpu_all(void);
 void calculate_priority_advanced(struct thread * th);
 void calculate_priority_advanced_all(void);
-bool init_extra_data(struct thread *, tid_t );
+bool init_exit_status(struct thread *, tid_t );
 #endif /* threads/thread.h */

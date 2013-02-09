@@ -115,7 +115,8 @@ thread_start (void)
 {
   /* Create the idle thread. */
   struct semaphore idle_started;
-    init_extra_data(initial_thread, initial_thread->tid);
+  init_exit_status (initial_thread, initial_thread->tid);
+
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
 
@@ -191,13 +192,8 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
- // printf("\n thread with tid %d creating thread tid=%d, name =%s\n", thread_current()->tid, tid, t->name) ;
-  // Initialize t's extra data
-  // this is a major function to be debugged
-  bool succ=init_extra_data(t, tid);
-  if (succ == false)
+  if (!init_exit_status (t, tid))
     return TID_ERROR;
-
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -229,39 +225,21 @@ thread_create (const char *name, int priority,
   return tid;
 }
 
-bool init_extra_data(struct thread *t, tid_t tid)
+/* Initialize the exit_status */
+bool init_exit_status(struct thread *t, tid_t tid)
 {
-  struct extra_data* extra= (struct extra_data*)malloc(sizeof(struct extra_data));
-  if (extra == NULL)
+  struct exit_status* es;
+  es = (struct exit_status*) malloc(sizeof(struct exit_status));
+  if (es == NULL)
     return false;
-  
-  extra->pid=tid;
-  
-  if ( t != initial_thread ) //for the initial thread, don't have a parent
-  {
-      //printf("\nparent is pid=%d, name=%s \n", thread_current()->tid, thread_current()->name);
-      //printf("\ncreating child pid=%d, name=%s \n", extra->pid, t->name);
-      extra->parent_thread=thread_current();
-      list_push_front(&thread_current()->child_list, &extra->elem);
-  }
- 
-  extra->exit_status=0;
-  extra->was_waited=false;
-
-  extra->load_success=false;
-  sema_init( &extra->sema_loaded,0);
-  sema_init( &extra->sema_exited,0);
-
-  //initialize counter. parent down this when die, child also donw this when die
-  //who downs this to zero is responsible of freeing the extra_data
-  extra->counter = 2;  
-  lock_init(&extra->counter_lock);
-  t->extra=extra;
+  t->exit_status = es;
+  es->pid = tid;
+  es->exit_value = 0;
+  es->ref_counter = 2;
+  lock_init ( &es->counter_lock );
+  sema_init( &es->sema_wait,0);
   return true;
 }
-
-
-
 
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().

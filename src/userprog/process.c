@@ -41,11 +41,11 @@ void get_first_string(const char * src_str, char *dst_str)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_path) 
+process_execute (const char *file_path, struct load_status *ls)
 {
   char *fn_copy;
   tid_t tid;
-  //printf("process execute called\n");
+
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -54,9 +54,10 @@ process_execute (const char *file_path)
   strlcpy (fn_copy, file_path, PGSIZE);
   char file_name[16];
   get_first_string(fn_copy, file_name);
+  ls->file_name = fn_copy;
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, ls);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   return tid;
@@ -65,28 +66,25 @@ process_execute (const char *file_path)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *aux)
 {
-  char *file_name = file_name_;
+  struct load_status *ls = aux;
   struct intr_frame if_;
   bool success;
-  struct thread *cur_thread;
-  struct thread *parent_thread;
-  cur_thread = thread_current();
-  parent_thread = cur_thread->extra->parent_thread;
   
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
-  //write to parent's load information
-  parent_thread->extra->load_success =success;
-  sema_up(&parent_thread->extra->sema_loaded);
+  success = load (ls->file_name, &if_.eip, &if_.esp);
+
+  /* Set load result and wake up parent process */
+  ls->load_success = success;
+  sema_up (&ls->sema_load);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  palloc_free_page (ls->file_name);
   if (!success) 
     thread_exit ();
 
@@ -110,36 +108,28 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid ) 
+process_wait (tid_t child_tid )
 {
-  //printf("process wait called\n");
-  struct thread *cur=thread_current();
+  struct thread *cur = thread_current();
   struct list_elem *e;
-  //printf("\n\nchild list size=%d\n", list_size(&cur->child_list));
-  for (e = list_begin (&cur->child_list); e != list_end (&cur->child_list);
-    e = list_next (e))
+  for (e  = list_begin (&cur->child_list);
+       e != list_end (&cur->child_list);
+       e  = list_next (e) )
   {
-    struct extra_data *extra = list_entry (e, struct extra_data, elem);
-    //printf("child's pid=%d\n", extra->pid);
-    if (extra->pid ==  child_tid)
+    struct exit_status *es = list_entry (e, struct exit_status, elem);
+    if (es->pid == child_tid && es->ref_counter > 0)
     {
-      if(extra->was_waited)
-      {return -1;
-      }
-      else
-      {
-        extra->was_waited=true;
-        sema_down(&extra->sema_exited);
-        //printf("wait finish\n");
-        return extra->exit_status;
-      }
+      sema_down (&es->sema_wait);
+      ASSERT(es->ref_counter == 1);
+      int exit_value = es->exit_value;
+      list_remove (&es->elem);
+      free (es);
+      return exit_value;
     }
   }
-  //here means we didn't find the child
   return -1;
 }
 
-/* Free the current process's resources. */
 void
 process_exit (void)
 {
@@ -164,63 +154,38 @@ process_exit (void)
     }
 
 
-  /* 1. free the child list's extra_data if the child is already dead
-      no need to maintain the child list   */
-
+  /* Free the exit_status of children processes */
   struct list_elem *e;
-  for (e = list_begin (&cur->child_list); e != list_end (&cur->child_list);
-    e = list_next (e))
+  for (e  = list_begin (&cur->child_list);
+       e != list_end (&cur->child_list);
+       e  = list_next (e))
   {
-    struct extra_data *extra = list_entry (e, struct extra_data, elem);
-    lock_acquire(&extra->counter_lock);
-    if (extra->counter==0)
+    struct exit_status *es = list_entry (e, struct exit_status, elem);
+    lock_acquire (&es->counter_lock);
+    ASSERT(es->ref_counter > 0);
+    es->ref_counter --;
+    if(es->ref_counter == 0)
     {
-      lock_release(&extra->counter_lock);
+      list_remove (&es->elem);
+      free (es);
     }
-    else
-    {
-      extra->counter--;
-      if(extra->counter == 0)
-      {
-        list_remove(&extra->elem);
-        lock_release(&extra->counter_lock);
-        free(extra);
-      }
-      else
-      {
-        lock_release(&extra->counter_lock);
-      }
-    }
+    lock_release (&es->counter_lock);
   }
 
-  /*2. free the current thread's extra data, if should do so */
-
-  lock_acquire(&cur->extra->counter_lock);
-  if (cur->extra->counter == 0)
-  {  
-    //here means others are about to free the extra_data but interrupted
-    lock_release(&cur->extra->counter_lock);
-  } 
+  /* Try to free the exit_status of the current process */
+  lock_acquire (&cur->exit_status->counter_lock);
+  ASSERT(cur->exit_status->ref_counter > 0);
+  cur->exit_status->ref_counter --;
+  if(cur->exit_status->ref_counter == 0)
+  {
+    lock_release (&cur->exit_status->counter_lock);
+    free(cur->exit_status);
+  }
   else
   {
-    cur->extra->counter--;
-    ASSERT(cur->extra->counter>=0);
-    if(cur->extra->counter == 0)
-    {
-      lock_release(&cur->extra->counter_lock);
-      free(cur->extra);
-    }  
-    else  //signal the waiting parent that I'm finished
-    {
-      lock_release(&cur->extra->counter_lock);
-      sema_up(&cur->extra->sema_exited);
-    }
+    lock_release (&cur->exit_status->counter_lock);
+    sema_up (&cur->exit_status->sema_wait);
   }
-  
-
-
-
-
 }
 
 /* Sets up the CPU for running user code in the current
@@ -310,22 +275,23 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 void argc_counter(const char*str, int *word_cnt, int *char_cnt)
 {
-  char *begin=str;
-  int in_word=0;
+  char *begin = str;
+  int in_word = 0;
   do
   {
-    while (*begin==' ')
-      begin++;
-    while (*begin!=' '&&*begin!='\0')
+    while (*begin == ' ')
+      begin ++;
+    while (*begin != ' ' && *begin != '\0')
     {
-      begin++;
-      (*char_cnt)++;
-      in_word=1;
+      begin ++;
+      (*char_cnt) ++;
+      in_word = 1;
     }
-    if(in_word)
-      (*word_cnt)++;
-    in_word=0;
-  } while (*begin!='\0');
+    if (in_word)
+      (*word_cnt) ++;
+    in_word = 0;
+  }
+  while (*begin != '\0');
 }
 
 bool argument_pasing(char *cmd_line, char **esp)
@@ -336,10 +302,11 @@ bool argument_pasing(char *cmd_line, char **esp)
   char * arg_data;
   char **arg_pointer;
   char *token, *save_ptr;
-  if (cmd_line==NULL)
+  if (cmd_line == NULL)
     return 0;
+
   /* Calculate the number of arguments and argument size */
-  argc_counter(cmd_line, &argc, &char_cnt );
+  argc_counter (cmd_line, &argc, &char_cnt );
   mem_size = char_cnt + argc;
 
   /* Round up to multiples of 4 Bytes */
@@ -347,22 +314,23 @@ bool argument_pasing(char *cmd_line, char **esp)
 
   /* Check if the argument size is greater than a page */
   //TODO
-  if (mem_size+(argc+1)*sizeof(char *)+sizeof(char **)+sizeof(int) > PGSIZE)
+  if (mem_size + (argc + 1) * sizeof(char*) + sizeof(char**) + sizeof(int)
+      > PGSIZE)
     return 0;
 
   *esp -= mem_size;
   arg_data = (char *)(*esp);
 
-  *esp -= (argc+1)*sizeof(char *);
-  arg_pointer = (char **)(*esp);
+  *esp -= (argc + 1) * sizeof(char*);
+  arg_pointer = (char**)(*esp);
 
   for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
     token = strtok_r (NULL, " ", &save_ptr))
   {
-    strlcpy(arg_data, token, strlen(token)+1);
+    strlcpy (arg_data, token, strlen(token) + 1);
     *arg_pointer = arg_data;
 
-    arg_data += strlen(token)+1;
+    arg_data += strlen(token) + 1;
     arg_pointer++;
   }
   *arg_pointer = 0;
@@ -379,7 +347,6 @@ bool argument_pasing(char *cmd_line, char **esp)
   *esp -= sizeof(void*);
   **esp = NULL;
 
-  //hex_dump (0, *esp, 40, true);
   return 1;
 }
 
@@ -491,7 +458,7 @@ load (const char *file_path, void (**eip) (void), void **esp)
   if (!setup_stack (esp))
     goto done;
   //TODO: move arguments to stack
-  bool succ=argument_pasing(file_path, esp);
+  bool succ = argument_pasing(file_path, esp);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
