@@ -194,6 +194,7 @@ process_exit (void)
   cur->exit_status->ref_counter --;
   if(cur->exit_status->ref_counter == 0)
   {
+    list_remove (&cur->exit_status->elem);
     lock_release (&cur->exit_status->counter_lock);
     free(cur->exit_status);
   }
