@@ -27,7 +27,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   /* convert ESP to a int pointer */
   int * esp = (int *)f->esp;
-  uint32_t arg1;
+  uint32_t arg1, arg2, arg3;
 
   /* Get syscall number */
   int syscall_no = *esp;
@@ -35,20 +35,24 @@ syscall_handler (struct intr_frame *f UNUSED)
   {
     case SYS_EXEC:
       arg1 = GET_ARGUMENT(esp, 1);
-      printf ("argument is %s \n", (char*) arg1);
       f->eax = (uint32_t) _exec ((char*) arg1);
       break;
 
     case SYS_EXIT:
       arg1 = GET_ARGUMENT(esp, 1);
-      printf ("argument is %d \n", arg1);
       _exit (arg1);
       break;
 
     case SYS_WAIT:
       arg1 = GET_ARGUMENT(esp, 1);
-      printf ("argument is %d \n", arg1);
       f->eax = (uint32_t) _wait ((int) arg1);
+      break;
+
+    case SYS_WRITE:
+      arg1 = GET_ARGUMENT(esp, 1);
+      arg2 = GET_ARGUMENT(esp, 2);
+      arg3 = GET_ARGUMENT(esp, 3);
+      f->eax = (uint32_t) _write ((int)arg1, (const void*)arg2, (unsigned)arg3);
       break;
 
     default:
@@ -73,28 +77,18 @@ _exec (const char *cmd_line)
   if (!checkvaddr (cmd_line, 0) || !checkvaddr(cmd_line, strlen(cmd_line)))
     _exit (-1);
 
-  struct load_status ls;
-  sema_init(&ls.sema_load, 0);
-  ls.load_success = false;
-
-  pid_t pid = (pid_t) process_execute(cmd_line, &ls);
+  pid_t pid = (pid_t) process_execute(cmd_line);
   if (pid == (pid_t) TID_ERROR)
     return -1;
-
-  sema_down (&ls.sema_load);
-
-  if (ls.load_success == false)
-    return -1;
-  else
-    return pid;
+  return pid;
 }
 
 void
 _exit(int status)
 {
   struct thread * cur_thread = thread_current();
-  printf("%s: exit(%d)\n", cur_thread->name, status);
   cur_thread->exit_status->exit_value = status;
+  printf ("%s: exit(%d)\n", thread_name(), status);
   thread_exit ();
 }
 
@@ -109,5 +103,12 @@ _wait(pid_t pid)
 int
 _write(int fd, const void *buffer, unsigned size)
 {
-  return 0;
+  // TODO: A simple write added for testing purpose. Need more work
+  int result = 0;
+  if (fd == STDOUT_FILENO)
+  {
+    putbuf (buffer, size);
+    result = size;
+  }
+  return result;
 }

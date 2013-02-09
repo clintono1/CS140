@@ -41,7 +41,7 @@ void get_first_string(const char * src_str, char *dst_str)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_path, struct load_status *ls)
+process_execute (const char *file_path)
 {
   char *fn_copy;
   tid_t tid;
@@ -54,13 +54,23 @@ process_execute (const char *file_path, struct load_status *ls)
   strlcpy (fn_copy, file_path, PGSIZE);
   char file_name[16];
   get_first_string(fn_copy, file_name);
-  ls->file_name = fn_copy;
+
+  struct load_status ls;
+  sema_init (&ls.sema_load, 0);
+  ls.load_success = false;
+  ls.file_name = fn_copy;
+  ls.parent_thread = thread_current();
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, ls);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, &ls);
+
+  /* Wait till the process is loaded */
+  sema_down (&ls.sema_load);
+
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
-  return tid;
+
+  return ls.load_success ? tid : TID_ERROR;
 }
 
 /* A thread function that loads a user process and starts it
@@ -71,7 +81,7 @@ start_process (void *aux)
   struct load_status *ls = aux;
   struct intr_frame if_;
   bool success;
-  
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -79,8 +89,14 @@ start_process (void *aux)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (ls->file_name, &if_.eip, &if_.esp);
 
-  /* Set load result and wake up parent process */
+  /* Set load result */
   ls->load_success = success;
+
+  if (success)
+    list_push_back (&ls->parent_thread->child_exit_status,
+        &thread_current()->exit_status->elem);
+
+  /* and wake up parent process */
   sema_up (&ls->sema_load);
 
   /* If load failed, quit. */
@@ -112,8 +128,8 @@ process_wait (tid_t child_tid )
 {
   struct thread *cur = thread_current();
   struct list_elem *e;
-  for (e  = list_begin (&cur->child_list);
-       e != list_end (&cur->child_list);
+  for (e  = list_begin (&cur->child_exit_status);
+       e != list_end (&cur->child_exit_status);
        e  = list_next (e) )
   {
     struct exit_status *es = list_entry (e, struct exit_status, elem);
@@ -156,8 +172,8 @@ process_exit (void)
 
   /* Free the exit_status of children processes */
   struct list_elem *e;
-  for (e  = list_begin (&cur->child_list);
-       e != list_end (&cur->child_list);
+  for (e  = list_begin (&cur->child_exit_status);
+       e != list_end (&cur->child_exit_status);
        e  = list_next (e))
   {
     struct exit_status *es = list_entry (e, struct exit_status, elem);
@@ -273,7 +289,8 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
 
-void argc_counter(const char*str, int *word_cnt, int *char_cnt)
+void
+argc_counter(const char*str, int *word_cnt, int *char_cnt)
 {
   char *begin = str;
   int in_word = 0;
@@ -294,7 +311,8 @@ void argc_counter(const char*str, int *word_cnt, int *char_cnt)
   while (*begin != '\0');
 }
 
-bool argument_pasing(char *cmd_line, char **esp)
+bool
+argument_pasing(char *cmd_line, char **esp)
 {
   int argc=0;
   int char_cnt=0;
@@ -316,7 +334,7 @@ bool argument_pasing(char *cmd_line, char **esp)
   //TODO
   if (mem_size + (argc + 1) * sizeof(char*) + sizeof(char**) + sizeof(int)
       > PGSIZE)
-    return 0;
+    return false;
 
   *esp -= mem_size;
   arg_data = (char *)(*esp);
@@ -347,7 +365,7 @@ bool argument_pasing(char *cmd_line, char **esp)
   *esp -= sizeof(void*);
   **esp = NULL;
 
-  return 1;
+  return true;
 }
 
 
@@ -457,13 +475,11 @@ load (const char *file_path, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
-  //TODO: move arguments to stack
-  bool succ = argument_pasing(file_path, esp);
+
+  success = argument_pasing(file_path, esp);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
-
-  success = success && succ;
 
  done:
   /* We arrive here whether the load is successful or not. */

@@ -113,7 +113,8 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct exit_status *exit_status;    /* Exit status of this thread */
-    struct list child_list;             /* List of child processes */
+    struct list child_exit_status;      /* List of the exit status of child
+                                           processes */
 #endif
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -132,9 +133,10 @@ struct exit_status
 /* Load status of a process */
 struct load_status
   {
-    struct semaphore sema_load;              /* Semaphore to sync on load() */
+    struct semaphore sema_load;         /* Semaphore to sync on load() */
     bool load_success;                  /* True if load successfully */
     char *file_name;                    /* Name of the executable file */
+    struct thread *parent_thread;       /* Pointer to the parent thread */
   };
 
 /* If false (default), use round-robin scheduler.

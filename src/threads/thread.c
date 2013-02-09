@@ -213,11 +213,13 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
   
-  if(thread_mlfqs){
+  if(thread_mlfqs)
+  {
     if (thread_current()->priority < t->priority)
       thread_yield ();
   }
-  else{
+  else
+  {
     if (thread_current()->eff_priority < t->eff_priority)
       thread_yield ();
   } 
@@ -237,7 +239,7 @@ bool init_exit_status(struct thread *t, tid_t tid)
   es->exit_value = 0;
   es->ref_counter = 2;
   lock_init ( &es->counter_lock );
-  sema_init( &es->sema_wait,0);
+  sema_init( &es->sema_wait, 0);
   return true;
 }
 
@@ -720,7 +722,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->eff_priority = priority;
   t->lock_to_acquire = NULL;
   list_init(& (t->locks_waited_by_others));
-  list_init(& t->child_list);
+  list_init(& t->child_exit_status);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
