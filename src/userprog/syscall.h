@@ -2,9 +2,9 @@
 #define USERPROG_SYSCALL_H
 #include "lib/user/syscall.h"
 
-/* Retrieve the n-th argument */
-#define GET_ARGUMENT(sp, n) (*(sp + n))
+
 
 void syscall_init (void);
+static bool checkvaddr(const void * vaddr, unsigned size);
 
 #endif /* userprog/syscall.h */

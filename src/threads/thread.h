@@ -4,6 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
+#include "threads/malloc.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -112,36 +114,35 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-	//maybe these two items could be wrapped with a structure?
-	//the function of this extra_data * is 指向thread的遗产。即便thread死了，他的exit_data保存在遗产结构体中（extra_data）
-	//这样wait他的进程就可以取出遗产中的exit_data。清理遗产比较tricky：current policy is that we free the extra_data when the 
-	//parent died, therefore the parent should signal the child that their extra_data no longer exist, so dont's try to access this 
-	//extra data (mainly to write it's exit_status and to sema up the sema_exited when it exits). This is achieved by writting the 
-	//owner thread's extra_data pointer to NULL. But this owner_thread is not always not NULL, consider if the owner thread has
-	//already died. 
-
-	struct extra_data* extra_data;
-	struct lock extra_data_lock;
-
 #endif
+    //TODO: this should be put in ifdef
+    struct extra_data* extra;      /* thread's legacy storing information as child*/
+    struct list child_list;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+//storing child information even if the child has died
 struct extra_data
 {
-	pid_t process_id;
+  struct list_elem elem;  //elem used for chaining all the children for parent
+	int pid;
+  struct thread *parent_thread;
 	bool was_waited;//might be elimintated.
 	int exit_status;
-	//struct load_success * load_success;
-	semaphore sema_exited;
-	semaphore sema_loaded;
-	bool load_success;
 	
-
-	struct thread * owner_thread;
-	struct lock owner_thread_lock;
+  bool load_success;
+  struct semaphore sema_loaded;
+	struct semaphore sema_exited;
+	
+  int counter;
+  struct lock counter_lock;
 };
+
+
+
+
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -190,5 +191,5 @@ void calculate_recent_cpu(struct thread * th);
 void calculate_recent_cpu_all(void);
 void calculate_priority_advanced(struct thread * th);
 void calculate_priority_advanced_all(void);
-
+bool init_extra_data(struct extra_data *, tid_t);
 #endif /* threads/thread.h */

@@ -58,7 +58,7 @@ process_execute (const char *file_path)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
   return tid;
 }
 
@@ -70,13 +70,20 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-
+  struct thread *cur_thread;
+  struct thread *parent_thread;
+  cur_thread = thread_current();
+  parent_thread = cur_thread->extra->parent_thread;
+  
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+  //write to parent's load information
+  parent_thread->extra->load_success =success;
+  sema_up(&parent_thread->extra->sema_loaded);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -103,9 +110,28 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid ) 
 {
-  while(1);
+
+  struct thread *cur=thread_current();
+  struct list_elem *e;
+  for (e = list_begin (&cur->child_list); e != list_end (&cur->child_list);
+    e = list_next (e))
+  {
+    struct extra_data *extra = list_entry (e, struct extra_data, elem);
+    if (extra->pid ==  child_tid)
+    {
+      if(extra->was_waited)
+        return -1;
+      else
+      {
+        extra->was_waited=1;
+        sema_down(&extra->sema_exited);
+        return extra->exit_status;
+      }
+    }
+  }
+  //here means we didn't find the child
   return -1;
 }
 
@@ -132,6 +158,65 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+
+  /* 1. free the child list's extra_data if the child is already dead
+      no need to maintain the child list   */
+
+  struct list_elem *e;
+  for (e = list_begin (&cur->child_list); e != list_end (&cur->child_list);
+    e = list_next (e))
+  {
+    struct extra_data *extra = list_entry (e, struct extra_data, elem);
+    lock_acquire(&extra->counter_lock);
+    if (extra->counter==0)
+    {
+      lock_release(&extra->counter_lock);
+    }
+    else
+    {
+      extra->counter--;
+      if(extra->counter == 0)
+      {
+        list_remove(&extra->elem);
+        lock_release(&extra->counter_lock);
+        free(extra);
+      }
+      else
+      {
+        lock_release(&extra->counter_lock);
+      }
+    }
+  }
+
+  /*2. free the current thread's extra data, if should do so */
+
+  lock_acquire(&cur->extra->counter_lock);
+  if (cur->extra->counter == 0)
+  {  
+    //here means others are about to free the extra_data but interrupted
+    lock_release(&cur->extra->counter_lock);
+  } 
+  else
+  {
+    cur->extra->counter--;
+    ASSERT(cur->extra->counter>=0);
+    if(cur->extra->counter == 0)
+    {
+      lock_release(&cur->extra->counter_lock);
+      free(cur->extra);
+    }  
+    else  //signal the waiting parent that I'm finished
+    {
+      lock_release(&cur->extra->counter_lock);
+      sema_up(&cur->extra->sema_exited);
+    }
+  }
+  
+
+
+
+
 }
 
 /* Sets up the CPU for running user code in the current

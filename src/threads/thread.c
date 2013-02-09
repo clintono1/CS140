@@ -192,6 +192,12 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+ 
+  // Initialize t's extra data
+  bool succ=init_extra_data(t->extra, tid);
+  if (succ == false)
+    return TID_ERROR;
+
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -222,6 +228,30 @@ thread_create (const char *name, int priority,
 
   return tid;
 }
+
+bool init_extra_data(struct extra_data * extra, tid_t tid)
+{
+  extra = (struct extra_data*)malloc(sizeof(struct extra_data));
+  if (extra == NULL)
+    return false;
+  extra->pid=tid;
+  if (tid != 0) //for the initial thread, don't have a parent
+    extra->parent_thread=thread_current();
+  extra->exit_status=0;
+  extra->was_waited=false;
+
+  extra->load_success=false;
+  sema_init( &extra->sema_loaded,0);
+  sema_init( &extra->sema_exited,0);
+
+  //initialize counter. parent down this when die, child also donw this when die
+  //who downs this to zero is responsible of freeing the extra_data
+  extra->counter = 2;  
+  lock_init(&extra->counter_lock);
+}
+
+
+
 
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
@@ -702,6 +732,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->eff_priority = priority;
   t->lock_to_acquire = NULL;
   list_init(& (t->locks_waited_by_others));
+  list_init(& t->child_list);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
