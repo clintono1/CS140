@@ -115,6 +115,7 @@ struct thread
     struct exit_status *exit_status;    /* Exit status of this thread */
     struct list child_exit_status;      /* List of the exit status of child
                                            processes */
+    struct lock list_lock;              /* Lock on list modification */
 #endif
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -128,6 +129,7 @@ struct exit_status
     int ref_counter;                    /* Reference counter for release */
     struct lock counter_lock;           /* Lock on accessing ref_counter */
     struct list_elem elem;              /* List element for exit_status list */
+    struct lock *list_lock;             /* Lock on list modification */
   };
 
 /* Load status of a process */

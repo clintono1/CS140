@@ -93,8 +93,12 @@ start_process (void *aux)
   ls->load_success = success;
 
   if (success)
-    list_push_back (&ls->parent_thread->child_exit_status,
-        &thread_current()->exit_status->elem);
+  {
+    struct exit_status *es = thread_current()->exit_status;
+    lock_acquire (es->list_lock);
+    list_push_back (&ls->parent_thread->child_exit_status, &es->elem);
+    lock_release (es->list_lock);
+  }
 
   /* and wake up parent process */
   sema_up (&ls->sema_load);
@@ -128,6 +132,8 @@ process_wait (tid_t child_tid )
 {
   struct thread *cur = thread_current();
   struct list_elem *e;
+  /* Acquire the lock on the list to prevent any changes when traversing */
+  lock_acquire (&cur->list_lock);
   for (e  = list_begin (&cur->child_exit_status);
        e != list_end (&cur->child_exit_status);
        e  = list_next (e) )
@@ -135,14 +141,29 @@ process_wait (tid_t child_tid )
     struct exit_status *es = list_entry (e, struct exit_status, elem);
     if (es->pid == child_tid && es->ref_counter > 0)
     {
+      /* Down the semaphore on wait. If child process has already finished,
+         this sema_down should return immediately.
+         Here the process may sleep while holding list_lock. But this is not
+         a problem since when the parent process is alive, no child process
+         should modify the list, i.e. removing their own exit_status.
+         Sleep without releasing list_lock avoids the overhead to acquire it
+         again for list_remove once wake up. */
       sema_down (&es->sema_wait);
+
+      /* ref_counter must be 1 since child process is dead but parent process
+         is still alive. */
       ASSERT(es->ref_counter == 1);
       int exit_value = es->exit_value;
+
+      /* The same process can be only waited once. Thus remove it now. */
       list_remove (&es->elem);
       free (es);
+      lock_release (&cur->list_lock);
       return exit_value;
     }
   }
+  lock_release (&cur->list_lock);
+  /* No child process with child_tid found */
   return -1;
 }
 
@@ -170,31 +191,48 @@ process_exit (void)
     }
 
 
-  /* Free the exit_status of children processes */
+  /* Free the exit_status of children processes
+     Order of acquiring locks:
+      1. list_lock
+      2. counter_lock
+  */
   struct list_elem *e;
+  /* Lock the list to prevent any changes when traversing */
+  lock_acquire (&cur->list_lock);
   for (e  = list_begin (&cur->child_exit_status);
        e != list_end (&cur->child_exit_status);
        e  = list_next (e))
   {
     struct exit_status *es = list_entry (e, struct exit_status, elem);
+    /* Obtain the counter_lock and decrease the ref_counter */
     lock_acquire (&es->counter_lock);
-    ASSERT(es->ref_counter > 0);
+    /* Sanity check: if the ref_counter is 0, it should have been removed */
+    ASSERT (es->ref_counter > 0);
     es->ref_counter --;
     if(es->ref_counter == 0)
     {
+      /* list_lock is already held. Remove it directly */
       list_remove (&es->elem);
       free (es);
     }
     lock_release (&es->counter_lock);
   }
+  lock_release (&cur->list_lock);
 
   /* Try to free the exit_status of the current process */
   lock_acquire (&cur->exit_status->counter_lock);
-  ASSERT(cur->exit_status->ref_counter > 0);
+  ASSERT (cur->exit_status->ref_counter > 0);
   cur->exit_status->ref_counter --;
   if(cur->exit_status->ref_counter == 0)
   {
+    /* Although the ordering of acquiring list_lock and counter_lock is reverse
+       of that in freeing exit_status of children processes (above), it will not
+       lead to deadlock since ref_counter guarantees once it comes to here the
+       parent process is dead and no others will try to acquire list_lock
+       while holding counter_lock */
+    lock_acquire (cur->exit_status->list_lock);
     list_remove (&cur->exit_status->elem);
+    lock_release (cur->exit_status->list_lock);
     lock_release (&cur->exit_status->counter_lock);
     free(cur->exit_status);
   }

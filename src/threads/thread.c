@@ -237,9 +237,10 @@ bool init_exit_status(struct thread *t, tid_t tid)
   t->exit_status = es;
   es->pid = tid;
   es->exit_value = 0;
+  sema_init( &es->sema_wait, 0);
   es->ref_counter = 2;
   lock_init ( &es->counter_lock );
-  sema_init( &es->sema_wait, 0);
+  es->list_lock = &thread_current() ->list_lock;
   return true;
 }
 
@@ -721,8 +722,9 @@ init_thread (struct thread *t, const char *name, int priority)
 
   t->eff_priority = priority;
   t->lock_to_acquire = NULL;
-  list_init(& (t->locks_waited_by_others));
-  list_init(& t->child_exit_status);
+  list_init (&(t->locks_waited_by_others));
+  list_init (&t->child_exit_status);
+  lock_init (&t->list_lock);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
