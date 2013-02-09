@@ -45,7 +45,7 @@ process_execute (const char *file_path)
 {
   char *fn_copy;
   tid_t tid;
-
+  //printf("process execute called\n");
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -112,21 +112,25 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid ) 
 {
-
+  //printf("process wait called\n");
   struct thread *cur=thread_current();
   struct list_elem *e;
+  //printf("\n\nchild list size=%d\n", list_size(&cur->child_list));
   for (e = list_begin (&cur->child_list); e != list_end (&cur->child_list);
     e = list_next (e))
   {
     struct extra_data *extra = list_entry (e, struct extra_data, elem);
+    //printf("child's pid=%d\n", extra->pid);
     if (extra->pid ==  child_tid)
     {
       if(extra->was_waited)
-        return -1;
+      {return -1;
+      }
       else
       {
-        extra->was_waited=1;
+        extra->was_waited=true;
         sema_down(&extra->sema_exited);
+        //printf("wait finish\n");
         return extra->exit_status;
       }
     }
@@ -306,22 +310,22 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 void argc_counter(const char*str, int *word_cnt, int *char_cnt)
 {
-  char *begin = str;
-  int in_word = 0;
+  char *begin=str;
+  int in_word=0;
   do
   {
-    while (*begin == ' ')
-      begin ++;
-    while (*begin != ' ' && *begin != '\0')
+    while (*begin==' ')
+      begin++;
+    while (*begin!=' '&&*begin!='\0')
     {
-      begin ++;
-      (*char_cnt) ++;
-      in_word = 1;
+      begin++;
+      (*char_cnt)++;
+      in_word=1;
     }
     if(in_word)
-      (*word_cnt) ++;
-    in_word = 0;
-  } while (*begin != '\0');
+      (*word_cnt)++;
+    in_word=0;
+  } while (*begin!='\0');
 }
 
 bool argument_pasing(char *cmd_line, char **esp)
@@ -332,33 +336,33 @@ bool argument_pasing(char *cmd_line, char **esp)
   char * arg_data;
   char **arg_pointer;
   char *token, *save_ptr;
-  if ( cmd_line == NULL)
+  if (cmd_line==NULL)
     return 0;
   /* Calculate the number of arguments and argument size */
-  argc_counter (cmd_line, &argc, &char_cnt );
+  argc_counter(cmd_line, &argc, &char_cnt );
   mem_size = char_cnt + argc;
 
   /* Round up to multiples of 4 Bytes */
   mem_size = ROUND_UP (mem_size, sizeof(int));
 
   /* Check if the argument size is greater than a page */
-  //TODO: Song, can you check Piazza and see if there are any discussion on this
-  if (mem_size + (argc + 1)*sizeof(char*) + sizeof(char**)+sizeof(int) > PGSIZE)
+  //TODO
+  if (mem_size+(argc+1)*sizeof(char *)+sizeof(char **)+sizeof(int) > PGSIZE)
     return 0;
 
   *esp -= mem_size;
   arg_data = (char *)(*esp);
 
-  *esp -= (argc + 1) * sizeof(char *);
+  *esp -= (argc+1)*sizeof(char *);
   arg_pointer = (char **)(*esp);
 
   for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
     token = strtok_r (NULL, " ", &save_ptr))
   {
-    strlcpy (arg_data, token, strlen (token) + 1);
+    strlcpy(arg_data, token, strlen(token)+1);
     *arg_pointer = arg_data;
 
-    arg_data += strlen (token)+1;
+    arg_data += strlen(token)+1;
     arg_pointer++;
   }
   *arg_pointer = 0;
@@ -369,14 +373,16 @@ bool argument_pasing(char *cmd_line, char **esp)
   WRITE_BYTE_4(esp, *esp+4);
 
   /* Decrease the stack pointer */
+  // TODO
   *esp -= sizeof(int);
   WRITE_BYTE_4(esp, argc);
   *esp -= sizeof(void*);
   **esp = NULL;
 
-  hex_dump (0, *esp, 400, true);
+  //hex_dump (0, *esp, 40, true);
   return 1;
 }
+
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -485,7 +491,6 @@ load (const char *file_path, void (**eip) (void), void **esp)
   if (!setup_stack (esp))
     goto done;
   //TODO: move arguments to stack
-  printf("argument passing\n\n");
   bool succ=argument_pasing(file_path, esp);
 
   /* Start address. */

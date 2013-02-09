@@ -30,15 +30,18 @@ syscall_handler (struct intr_frame *f UNUSED)
   {
     case SYS_EXEC:
       arg1=GET_ARGUMENT(esp, 1);
+      printf("argument is %s \n", (char*)arg1);
       f->eax = (uint32_t)_exec ((char*)arg1);
       break;
 
     case SYS_EXIT:
       arg1=GET_ARGUMENT(esp, 1);
+      printf("argument is %d \n", arg1);
       _exit(arg1); break;
 
     case SYS_WAIT:
       arg1=GET_ARGUMENT(esp, 1);
+      printf("argument is %d \n", arg1);
       f->eax = (uint32_t)_wait ((int)arg1);
 
     default:

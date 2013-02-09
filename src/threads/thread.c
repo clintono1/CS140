@@ -14,7 +14,6 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
-
 #include "threads/fixed-point.h"
 
 /* Random value for struct thread's `magic' member.
@@ -106,7 +105,6 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-
   load_avg = 0;
 }
 
@@ -117,6 +115,7 @@ thread_start (void)
 {
   /* Create the idle thread. */
   struct semaphore idle_started;
+    init_extra_data(initial_thread, initial_thread->tid);
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
 
@@ -192,9 +191,10 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
- 
+ // printf("\n thread with tid %d creating thread tid=%d, name =%s\n", thread_current()->tid, tid, t->name) ;
   // Initialize t's extra data
-  bool succ=init_extra_data(t->extra, tid);
+  // this is a major function to be debugged
+  bool succ=init_extra_data(t, tid);
   if (succ == false)
     return TID_ERROR;
 
@@ -229,14 +229,22 @@ thread_create (const char *name, int priority,
   return tid;
 }
 
-bool init_extra_data(struct extra_data * extra, tid_t tid)
+bool init_extra_data(struct thread *t, tid_t tid)
 {
-  extra = (struct extra_data*)malloc(sizeof(struct extra_data));
+  struct extra_data* extra= (struct extra_data*)malloc(sizeof(struct extra_data));
   if (extra == NULL)
     return false;
+  
   extra->pid=tid;
-  if (tid != 0) //for the initial thread, don't have a parent
-    extra->parent_thread=thread_current();
+  
+  if ( t != initial_thread ) //for the initial thread, don't have a parent
+  {
+      //printf("\nparent is pid=%d, name=%s \n", thread_current()->tid, thread_current()->name);
+      //printf("\ncreating child pid=%d, name=%s \n", extra->pid, t->name);
+      extra->parent_thread=thread_current();
+      list_push_front(&thread_current()->child_list, &extra->elem);
+  }
+ 
   extra->exit_status=0;
   extra->was_waited=false;
 
@@ -248,6 +256,8 @@ bool init_extra_data(struct extra_data * extra, tid_t tid)
   //who downs this to zero is responsible of freeing the extra_data
   extra->counter = 2;  
   lock_init(&extra->counter_lock);
+  t->extra=extra;
+  return true;
 }
 
 

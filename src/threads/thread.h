@@ -191,5 +191,5 @@ void calculate_recent_cpu(struct thread * th);
 void calculate_recent_cpu_all(void);
 void calculate_priority_advanced(struct thread * th);
 void calculate_priority_advanced_all(void);
-bool init_extra_data(struct extra_data *, tid_t);
+bool init_extra_data(struct thread *, tid_t );
 #endif /* threads/thread.h */
