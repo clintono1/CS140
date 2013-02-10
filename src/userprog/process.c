@@ -197,6 +197,7 @@ process_exit (void)
       2. counter_lock
   */
   struct list_elem *e;
+  /* First step: Travers the list and free the child who has already died */
   /* Lock the list to prevent any changes when traversing */
   lock_acquire (&cur->list_lock);
   for (e  = list_begin (&cur->child_exit_status);
@@ -219,7 +220,7 @@ process_exit (void)
   }
   lock_release (&cur->list_lock);
 
-  /* Try to free the exit_status of the current process */
+  /* Second step: Try to free the exit_status of the current process */
   lock_acquire (&cur->exit_status->counter_lock);
   ASSERT (cur->exit_status->ref_counter > 0);
   cur->exit_status->ref_counter --;

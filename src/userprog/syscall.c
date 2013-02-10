@@ -4,6 +4,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "devices/shutdown.h"
 
 /* Retrieve the n-th argument */
 #define GET_ARGUMENT(sp, n) (*(sp + n))
@@ -125,16 +126,23 @@ syscall_handler (struct intr_frame *f UNUSED)
 inline bool
 valid_vaddr_range(const void * vaddr, unsigned size)
 {
-  /* If the address exceeds PHYS_BASE, exit -1 */
+  /* false type1: null pointer: */
+  if (vaddr == NULL)
+    return false;
+  /* false type2: pointsto KERNEL virtual address space */
   if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + size))
+    return false;
+  /* false type3: pointer to unmapped virtual memory */
+  if (!pagedir_get_page(thread_current()->pagedir,vaddr) || !pagedir_get_page(thread_current()->pagedir,vaddr+size))
     return false;
   return true;
 }
 
+/* syscalls for process control*/
 void
 _halt (void)
 {
-  // TODO
+  shutdown_power_off();
 }
 
 pid_t
@@ -162,13 +170,14 @@ _exit(int status)
   thread_exit ();
 }
 
-
 int
 _wait(pid_t pid)
 {
   return process_wait(pid);
 }
 
+
+/* syscalls for file system */
 bool
 _create (const char *file, unsigned initial_size)
 {

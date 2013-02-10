@@ -99,7 +99,8 @@ static inline uint32_t pte_create_user (void *page, bool writable) {
 
 /* Returns a pointer to the page that page table entry PTE points
    to. */
-static inline void *pte_get_page (uint32_t pte) {
+static inline void *pte_get_page (uint32_t pte) 
+{
   return ptov (pte & PTE_ADDR);
 }
 
