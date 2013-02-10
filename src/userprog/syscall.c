@@ -172,8 +172,10 @@ _wait(pid_t pid)
 bool
 _create (const char *file, unsigned initial_size)
 {
-  if (!valid_vaddr_range (file, strlen (file)))
+  if (file == NULL)
     _exit (-1);
+  if (!valid_vaddr_range (file, strlen (file)))
+    return false;
 
   lock_acquire (&global_lock_filesys);
   bool success = filesys_create (file, initial_size);
@@ -184,8 +186,8 @@ _create (const char *file, unsigned initial_size)
 bool
 _remove (const char *file)
 {
-  if (!valid_vaddr_range (file, strlen (file)))
-    _exit (-1);
+  if (file == NULL || !valid_vaddr_range (file, strlen (file)))
+    return false;
 
   lock_acquire (&global_lock_filesys);
   bool success = filesys_remove (file);
@@ -196,15 +198,17 @@ _remove (const char *file)
 int
 _open (const char *file)
 {
-  if (!valid_vaddr_range (file, strlen (file)))
-    _exit (-1);
+  if (file == NULL || !valid_vaddr_range (file, strlen (file)))
+    return -1;
 
   lock_acquire (&global_lock_filesys);
-  struct file* f_struct = filesys_open (file);
+  struct file* f = filesys_open (file);
   lock_release (&global_lock_filesys);
 
-  // TODO not finished yet
-  return -1;
+  if (file == NULL)
+    return -1;
+
+  return thread_add_file_handler (thread_current(), f);
 }
 
 int
@@ -250,6 +254,14 @@ _tell (int fd)
 void
 _close (int fd)
 {
-  // TODO
+  struct thread* t = thread_current();
+  if (fd == 0 || fd == 1 || !valid_file_handler(t, fd))
+    return;
+
+  lock_acquire (&global_lock_filesys);
+  file_close (t->file_handlers[fd]);
+  lock_release (&global_lock_filesys);
+
+  thread_remove_file_handler (t, fd);
 }
 

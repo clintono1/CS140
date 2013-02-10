@@ -32,6 +32,7 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 #define NICE_MAX 20                     /* Highest nice */
 #define NICE_MIn -20                    /* Lowest nice */
+#define FILE_HDL_SIZE 128               /* Default size of file handlers */
 
 /* A kernel thread or user process.
 
@@ -116,6 +117,9 @@ struct thread
     struct list child_exit_status;      /* List of the exit status of child
                                            processes */
     struct lock list_lock;              /* Lock on list modification */
+    struct file **file_handlers;        /* File handler array */
+    int file_handlers_size;             /* Size of allocated file handlers */
+    int file_handlers_num;              /* Num of current file handlers */
 #endif
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -183,11 +187,17 @@ bool priority_greater_or_equal (const struct list_elem *,
                                 const struct list_elem *,
                                 void *);
 
-int get_num_ready_threads(void);
+int get_num_ready_threads (void);
 void calculate_load_avg (void);
-void calculate_recent_cpu(struct thread * th);
-void calculate_recent_cpu_all(void);
-void calculate_priority_advanced(struct thread * th);
-void calculate_priority_advanced_all(void);
-bool init_exit_status(struct thread *, tid_t );
+void calculate_recent_cpu (struct thread * th);
+void calculate_recent_cpu_all (void);
+void calculate_priority_advanced (struct thread * th);
+void calculate_priority_advanced_all (void);
+
+bool init_exit_status (struct thread *, tid_t );
+
+bool valid_file_handler (struct thread* thread, int fd);
+int thread_add_file_handler (struct thread* thread, struct file* file);
+void thread_remove_file_handler (struct thread* thread, int fd);
+
 #endif /* threads/thread.h */

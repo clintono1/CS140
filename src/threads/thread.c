@@ -726,6 +726,11 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->child_exit_status);
   lock_init (&t->list_lock);
 
+  /* Lazy allocation */
+  t->file_handlers = NULL;
+  t->file_handlers_size = 0;
+  t->file_handlers_num = 0;
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -847,3 +852,83 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+bool
+valid_file_handler (struct thread* thread, int fd)
+{
+  if (fd == 0 || fd == 1)
+    return true;
+
+  if (thread == NULL ||
+      fd >= thread->file_handlers_size ||
+      thread->file_handlers[fd] == NULL)
+    return false;
+
+  return true;
+}
+
+int
+thread_add_file_handler (struct thread* thread, struct file* file)
+{
+  if (file == NULL || thread == NULL)
+    _exit (-1);
+
+  if (thread->file_handlers_num < thread->file_handlers_size)
+  {
+    int i;
+    for (i = 0; i < thread->file_handlers_size; i++)
+    {
+      if (thread->file_handlers[i] == NULL)
+      {
+        thread->file_handlers[i] = file;
+        thread->file_handlers_num ++;
+        return i;
+      }
+    }
+    /* Should never arrive here */
+    NOT_REACHED();
+    return -1;
+  }
+  else
+  {
+    ASSERT (thread->file_handlers_num == thread->file_handlers_size);
+    struct file **new_file_handlers;
+    if (thread->file_handlers == NULL) /* Allocate file_handlers for 1st time */
+    {
+      thread->file_handlers_size = FILE_HDL_SIZE;
+      new_file_handlers = (struct file**)
+          malloc (FILE_HDL_SIZE * sizeof(struct file*));
+      memset (new_file_handlers, 0, FILE_HDL_SIZE * sizeof(struct file*));
+      /* Reserver fd = 0, 1 with a placeholder */
+      new_file_handlers[0] = (struct file*) 1;
+      new_file_handlers[1] = (struct file*) 1;
+      thread->file_handlers_num = 2;
+    }
+    else /* Double the space once full */
+    {
+      thread->file_handlers_size *= 2;
+      new_file_handlers = (struct file**)
+          malloc (thread->file_handlers_size * sizeof(struct file*));
+      memcpy (new_file_handlers, thread->file_handlers,
+              thread->file_handlers_num * sizeof(struct file*));
+      memset (&new_file_handlers[thread->file_handlers_num], 0,
+              thread->file_handlers_num);
+    }
+    thread->file_handlers = new_file_handlers;
+    int index = thread->file_handlers_num;
+    thread->file_handlers[index] = file;
+    return index;
+  }
+}
+
+void
+thread_remove_file_handler (struct thread* thread, int fd)
+{
+  if (valid_file_handler (thread, fd))
+    _exit (-1);
+
+  free (thread->file_handlers[fd]);
+  thread->file_handlers[fd] = NULL;
+  thread->file_handlers_num --;
+}
+
