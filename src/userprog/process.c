@@ -241,6 +241,9 @@ process_exit (void)
     lock_release (&cur->exit_status->counter_lock);
     sema_up (&cur->exit_status->sema_wait);
   }
+
+  // TODO: check whether it is a kernel thread before printing this
+  printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);
 }
 
 /* Sets up the CPU for running user code in the current

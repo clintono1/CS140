@@ -88,7 +88,6 @@ _exit(int status)
 {
   struct thread * cur_thread = thread_current();
   cur_thread->exit_status->exit_value = status;
-  printf ("%s: exit(%d)\n", thread_name(), status);
   thread_exit ();
 }
 
