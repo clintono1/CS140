@@ -188,8 +188,10 @@ _wait(pid_t pid)
 bool
 _create (const char *file, unsigned initial_size)
 {
-  if (file == NULL)
+  
+  if (!valid_vaddr_range (file, 0))
     _exit (-1);
+
   if (!valid_vaddr_range (file, strlen (file)))
     _exit (-1);
 
@@ -202,6 +204,9 @@ _create (const char *file, unsigned initial_size)
 bool
 _remove (const char *file)
 {
+  if (!valid_vaddr_range (file, 0))
+    _exit (-1);
+
   if (!valid_vaddr_range (file, strlen (file)))
     _exit (-1);
 
@@ -214,6 +219,9 @@ _remove (const char *file)
 int
 _open (const char *file)
 {
+  if (!valid_vaddr_range (file, 0))
+    _exit (-1);
+
   if (!valid_vaddr_range (file, strlen (file)))
     _exit (-1);
 
@@ -221,7 +229,7 @@ _open (const char *file)
   struct file *f = filesys_open (file);
   lock_release (&global_lock_filesys);
 
-  if (file == NULL)
+  if (f == NULL)
     return -1;
 
   return thread_add_file_handler (thread_current(), f);
@@ -306,14 +314,31 @@ _write (int fd, const void *buffer, unsigned size)
 void
 _seek (int fd, unsigned position)
 {
-  // TODO
+  struct thread *t = thread_current ();
+  struct file *file = t->file_handlers[fd];
+
+  if ( !valid_file_handler (t, fd) || fd <2 )
+    _exit(-1);
+
+   lock_acquire (&global_lock_filesys);
+   file_seek (file, position);
+   lock_release (&global_lock_filesys);
+
 }
 
 unsigned
 _tell (int fd)
 {
-  // TODO
-  return 0;
+  struct thread *t  = thread_current();
+  struct file *file = t->file_handlers[fd];
+
+  if ( !valid_file_handler (t, fd) || fd <2)
+    _exit(-1);
+
+  lock_acquire (&global_lock_filesys);
+  off_t n= file_tell (file);
+  lock_release (&global_lock_filesys);
+  return n;
 }
 
 void
