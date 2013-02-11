@@ -5,6 +5,11 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
+#include "userprog/pagedir.h"
+#include "userprog/process.h"
+#include "lib/string.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 
 /* Retrieve the n-th argument */
 #define GET_ARGUMENT(sp, n) (*(sp + n))
@@ -129,16 +134,17 @@ valid_vaddr_range(const void * vaddr, unsigned size)
   /* false type1: null pointer: */
   if (vaddr == NULL)
     return false;
-  /* false type2: pointsto KERNEL virtual address space */
-  if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + size))
+  /* false type2: points to KERNEL virtual address space */
+  if (!is_user_vaddr (vaddr) || !is_user_vaddr ((uintptr_t)vaddr + size))
     return false;
   /* false type3: pointer to unmapped virtual memory */
-  if (!pagedir_get_page(thread_current()->pagedir,vaddr) || !pagedir_get_page(thread_current()->pagedir,vaddr+size))
+  if (!pagedir_get_page(thread_current()->pagedir,vaddr) || \
+      !pagedir_get_page(thread_current()->pagedir,((uintptr_t)vaddr+size) ))
     return false;
   return true;
 }
 
-/* syscalls for process control*/
+/* Part1:syscalls for process control*/
 void
 _halt (void)
 {
@@ -177,7 +183,7 @@ _wait(pid_t pid)
 }
 
 
-/* syscalls for file system */
+/* Part2: syscalls for file system */
 bool
 _create (const char *file, unsigned initial_size)
 {
@@ -195,7 +201,7 @@ _create (const char *file, unsigned initial_size)
 bool
 _remove (const char *file)
 {
-  if (file == NULL || !valid_vaddr_range (file, strlen (file)))
+  if (!valid_vaddr_range (file, strlen (file)))
     return false;
 
   lock_acquire (&global_lock_filesys);
@@ -207,7 +213,7 @@ _remove (const char *file)
 int
 _open (const char *file)
 {
-  if (file == NULL || !valid_vaddr_range (file, strlen (file)))
+  if (!valid_vaddr_range (file, strlen (file)))
     return -1;
 
   lock_acquire (&global_lock_filesys);
@@ -230,6 +236,8 @@ _filesize (int fd)
 int
 _read (int fd, void *buffer, unsigned size)
 {
+  if (!valid_vaddr_range (buffer, size))
+    return -1;
   // TODO
   return 0;
 }
@@ -237,6 +245,8 @@ _read (int fd, void *buffer, unsigned size)
 int
 _write (int fd, const void *buffer, unsigned size)
 {
+  if (!valid_vaddr_range (buffer, size))
+    return -1;
   // TODO: A simple write added for testing purpose. Need more work
   int result = 0;
   if (fd == STDOUT_FILENO)
