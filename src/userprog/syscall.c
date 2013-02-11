@@ -98,7 +98,6 @@ syscall_handler (struct intr_frame *f UNUSED)
       arg2 = GET_ARGUMENT(esp, 2);
       arg3 = GET_ARGUMENT(esp, 3);
       f->eax = (uint32_t) _read ((int)arg1, (void*)arg2, (unsigned)arg3);
-     // printf("return value == %d \n\n", f->eax);
       break;
 
     case SYS_WRITE:
@@ -245,7 +244,6 @@ _filesize (int fd)
 int
 _read (int fd, void *buffer, unsigned size)
 {
- // printf("read called, size = %d fd = %d\n", size, fd);
   if (!valid_vaddr_range (buffer, size))
     _exit (-1);
   if (size < 0)
@@ -264,7 +262,6 @@ _read (int fd, void *buffer, unsigned size)
         result++;
         buffer++;
       }
-      //printf("result = %d \n", result);
       return result;
   }
   else if(valid_file_handler(t, fd))
@@ -273,10 +270,8 @@ _read (int fd, void *buffer, unsigned size)
       lock_acquire(&global_lock_filesys );
       result = file_read(file, buffer, size);
       lock_release(&global_lock_filesys);
-     // printf("result = %d \n", result);
       return result;
   }
-  //printf("invalid file\n");
   return -1;
 }
 
