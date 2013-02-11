@@ -109,6 +109,7 @@ struct thread
                                            also waited by other threads*/
     int recent_cpu;                     /* CPU time received recently */
     int nice;                           /* Nice value of each thread*/
+    bool is_kernel;                     /* True if this is a kernel process */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

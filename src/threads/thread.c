@@ -731,6 +731,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->file_handlers_size = 0;
   t->file_handlers_num = 0;
 
+  t->is_kernel = true;
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
