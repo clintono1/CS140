@@ -258,18 +258,21 @@ process_exit (void)
     sema_up (&cur->exit_status->sema_wait);
   }
 
-  /* Release resources hold by current thread */
-  int fd;
-  for (fd = 2; fd < cur->file_handlers_size; fd++)
+  /* Release file resources hold by current thread */
+  if (cur->file_handlers != NULL)
   {
-    if (cur->file_handlers[fd] != NULL)
+    int fd;
+    for (fd = 2; fd < cur->file_handlers_size; fd++)
     {
-      lock_acquire (&global_lock_filesys);
-      file_close (cur->file_handlers[fd]);
-      lock_release (&global_lock_filesys);
+      if (cur->file_handlers[fd] != NULL)
+      {
+        lock_acquire (&global_lock_filesys);
+        file_close (cur->file_handlers[fd]);
+        lock_release (&global_lock_filesys);
+      }
     }
+    free (cur->file_handlers);
   }
-  free (cur->file_handlers);
 
   // TODO: check whether it is a kernel thread before printing this
   printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);
