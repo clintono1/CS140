@@ -229,8 +229,15 @@ _open (const char *file)
 int
 _filesize (int fd)
 {
-  // TODO
-  return 0;
+  struct thread* t = thread_current();
+  if (fd == 0 || fd == 1 || !valid_file_handler(t, fd))
+    _exit (-1);
+
+  lock_acquire (&global_lock_filesys);
+  int size = (int) file_length (t->file_handlers[fd]);
+  lock_release (&global_lock_filesys);
+
+  return size;
 }
 
 int
