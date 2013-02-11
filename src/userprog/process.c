@@ -100,10 +100,6 @@ start_process (void *aux)
     /* Deny writes to the executable file */
     t->process_file = filesys_open(ls->file_path);
     file_deny_write (t->process_file);
-
-    /* Set is_kernel to false since it is used by a user process */
-    t->is_kernel = false;
-
     struct exit_status *es = t->exit_status;
     /* No need to check if list_lock is NULL here since the parent process
        must be waiting before the child process is loaded */
@@ -286,8 +282,8 @@ process_exit (void)
   file_allow_write (cur->process_file);
   file_close (cur->process_file);
 
-  if (!cur->is_kernel)
-    printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);
+  // TODO: check whether it is a kernel thread before printing this
+  printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -417,7 +413,6 @@ argument_pasing(char *cmd_line, char **esp)
   mem_size = ROUND_UP (mem_size, sizeof(int));
 
   /* Check if the argument size is greater than a page */
-  //TODO
   if (mem_size + (argc + 1) * sizeof(char*) + sizeof(char**) + sizeof(int)
       > PGSIZE)
     return false;
@@ -445,7 +440,6 @@ argument_pasing(char *cmd_line, char **esp)
   WRITE_BYTE_4(esp, *esp+4);
 
   /* Decrease the stack pointer */
-  // TODO
   *esp -= sizeof(int);
   WRITE_BYTE_4(esp, argc);
   *esp -= sizeof(void*);
