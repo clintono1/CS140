@@ -248,11 +248,11 @@ _read (int fd, void *buffer, unsigned size)
     _exit (-1);
   if (size < 0)
     return -1;
-  int result = 0;
-  struct thread *t=thread_current();
   if (fd == STDOUT_FILENO)
     return -1;
-  
+
+  int result = 0;
+  struct thread *t=thread_current();
   if (fd == STDIN_FILENO)
   {
       unsigned i = 0;
@@ -264,6 +264,7 @@ _read (int fd, void *buffer, unsigned size)
       }
       return result;
   }
+
   else if(valid_file_handler(t, fd))
   {
       struct file *file = t->file_handlers[fd];
@@ -282,9 +283,10 @@ _write (int fd, const void *buffer, unsigned size)
     _exit (-1);
   if (size <= 0)
     return 0;
-  int result = 0;
   if (fd == STDIN_FILENO)
     return -1;
+
+  int result = 0;
   struct thread *t = thread_current ();
   if (fd == STDOUT_FILENO)
   {
