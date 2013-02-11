@@ -12,9 +12,6 @@
 #include "filesys/file.h"
 #include "devices/input.h"
 
-
-
-
 static void syscall_handler (struct intr_frame *);
 bool valid_vaddr_range(const void * vaddr, unsigned size);
 

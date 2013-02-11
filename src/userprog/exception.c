@@ -8,6 +8,8 @@
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
+extern struct lock global_lock_filesys;
+
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 
@@ -148,8 +150,8 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* Currently we only handle page_faults triggered in system calls */
-  if (!thread_current()->in_syscall)
+  /* If fault in kernel execpt in system calls, kill the kernel */
+  if (!user && !thread_current()->in_syscall)
   {
     /* To implement virtual memory, delete the rest of the function
        body, and replace it with code that brings in the page to
