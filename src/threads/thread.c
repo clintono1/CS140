@@ -876,7 +876,7 @@ thread_add_file_handler (struct thread* thread, struct file* file)
   if (thread->file_handlers_num < thread->file_handlers_size)
   {
     int i;
-    for (i = 0; i < thread->file_handlers_size; i++)
+    for (i = 2; i < thread->file_handlers_size; i++)
     {
       if (thread->file_handlers[i] == NULL)
       {
@@ -899,9 +899,6 @@ thread_add_file_handler (struct thread* thread, struct file* file)
       new_file_handlers = (struct file**)
           malloc (FILE_HDL_SIZE * sizeof(struct file*));
       memset (new_file_handlers, 0, FILE_HDL_SIZE * sizeof(struct file*));
-      /* Reserver fd = 0, 1 with a placeholder */
-      new_file_handlers[0] = (struct file*) 1;
-      new_file_handlers[1] = (struct file*) 1;
       thread->file_handlers_num = 2;
     }
     else /* Double the space once full */

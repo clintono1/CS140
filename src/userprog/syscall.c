@@ -135,11 +135,11 @@ valid_vaddr_range(const void * vaddr, unsigned size)
   if (vaddr == NULL)
     return false;
   /* false type2: points to KERNEL virtual address space */
-  if (!is_user_vaddr (vaddr) || !is_user_vaddr ((uintptr_t)vaddr + size))
+  if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + size))
     return false;
   /* false type3: pointer to unmapped virtual memory */
-  if (!pagedir_get_page(thread_current()->pagedir,vaddr) || \
-      !pagedir_get_page(thread_current()->pagedir,((uintptr_t)vaddr+size) ))
+  if (!pagedir_get_page (thread_current()->pagedir, vaddr) || \
+      !pagedir_get_page (thread_current()->pagedir, (vaddr + size) ))
     return false;
   return true;
 }
@@ -217,7 +217,7 @@ _open (const char *file)
     return -1;
 
   lock_acquire (&global_lock_filesys);
-  struct file* f = filesys_open (file);
+  struct file *f = filesys_open (file);
   lock_release (&global_lock_filesys);
 
   if (file == NULL)
@@ -253,13 +253,22 @@ int
 _write (int fd, const void *buffer, unsigned size)
 {
   if (!valid_vaddr_range (buffer, size))
-    return -1;
-  // TODO: A simple write added for testing purpose. Need more work
+    return 0;
+  if (size <= 0)
+    return 0;
   int result = 0;
+  struct thread *t = thread_current ();
   if (fd == STDOUT_FILENO)
   {
     putbuf (buffer, size);
     result = size;
+  }
+  else if (valid_file_handler (t, fd))
+  {
+    struct file *file = t->file_handlers[fd];
+    lock_acquire (&global_lock_filesys);
+    result = file_write (file, buffer, size);
+    lock_release (&global_lock_filesys);
   }
   return result;
 }
