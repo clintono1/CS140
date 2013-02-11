@@ -924,7 +924,6 @@ thread_remove_file_handler (struct thread* thread, int fd)
   if (valid_file_handler (thread, fd))
     _exit (-1);
 
-  free (thread->file_handlers[fd]);
   thread->file_handlers[fd] = NULL;
   thread->file_handlers_num --;
 }
