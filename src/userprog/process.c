@@ -285,8 +285,10 @@ process_exit (void)
   /* Reenable write to this file */
   if (cur->process_file)
   {
+    lock_acquire (&global_lock_filesys);
     file_allow_write (cur->process_file);
     file_close (cur->process_file);
+    lock_release (&global_lock_filesys);
   }
 
   if (!cur->is_kernel)
