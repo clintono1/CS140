@@ -96,7 +96,11 @@ start_process (void *aux)
 
   if (success)
   {
-    struct exit_status *es = thread_current()->exit_status;
+    struct thread *t = thread_current();
+    /* Deny writes to the executable file */
+    t->process_file = filesys_open(ls->file_path);
+    file_deny_write (t->process_file);
+    struct exit_status *es = t->exit_status;
     /* No need to check if list_lock is NULL here since the parent process
        must be waiting before the child process is loaded */
     lock_acquire (es->list_lock);
@@ -273,6 +277,10 @@ process_exit (void)
     }
     free (cur->file_handlers);
   }
+
+  /* Reenable write to this file */
+  file_allow_write (cur->process_file);
+  file_close (cur->process_file);
 
   // TODO: check whether it is a kernel thread before printing this
   printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);

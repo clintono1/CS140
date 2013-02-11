@@ -120,6 +120,7 @@ struct thread
     struct file **file_handlers;        /* File handler array */
     int file_handlers_size;             /* Size of allocated file handlers */
     int file_handlers_num;              /* Num of current file handlers */
+    struct file *process_file;          /* File of this current process */
 #endif
     unsigned magic;                     /* Detects stack overflow. */
   };
