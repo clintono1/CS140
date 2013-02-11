@@ -921,7 +921,7 @@ thread_add_file_handler (struct thread* thread, struct file* file)
 void
 thread_remove_file_handler (struct thread* thread, int fd)
 {
-  if (valid_file_handler (thread, fd))
+  if (!valid_file_handler (thread, fd))
     _exit (-1);
 
   thread->file_handlers[fd] = NULL;
