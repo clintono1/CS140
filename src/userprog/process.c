@@ -95,6 +95,8 @@ start_process (void *aux)
   if (success)
   {
     struct exit_status *es = thread_current()->exit_status;
+    /* No need to check if list_lock is NULL here since the parent process
+       must be waiting before the child process is loaded */
     lock_acquire (es->list_lock);
     list_push_back (&ls->parent_thread->child_exit_status, &es->elem);
     lock_release (es->list_lock);
@@ -132,7 +134,9 @@ process_wait (tid_t child_tid )
 {
   struct thread *cur = thread_current();
   struct list_elem *e;
-  /* Acquire the lock on the list to prevent any changes when traversing */
+  /* Acquire the lock on the list to prevent any changes when traversing.
+     No need to check if list_lock is NULL since the process is waiting for
+     the list_lock in its own thread struct */
   lock_acquire (&cur->list_lock);
   for (e  = list_begin (&cur->child_exit_status);
        e != list_end (&cur->child_exit_status);
@@ -191,14 +195,15 @@ process_exit (void)
     }
 
 
-  /* Free the exit_status of children processes
+  /* First step: free the exit_status of terminated children processes
      Order of acquiring locks:
       1. list_lock
       2. counter_lock
   */
   struct list_elem *e;
-  /* First step: Travers the list and free the child who has already died */
-  /* Lock the list to prevent any changes when traversing */
+  /* Lock the list to prevent any changes when traversing.
+     No need to check if list_lock is NULL since the process is waiting for
+     the list_lock in its own thread struct */
   lock_acquire (&cur->list_lock);
   for (e  = list_begin (&cur->child_exit_status);
        e != list_end (&cur->child_exit_status);
@@ -209,16 +214,24 @@ process_exit (void)
     lock_acquire (&es->counter_lock);
     /* Sanity check: if the ref_counter is 0, it should have been removed */
     ASSERT (es->ref_counter > 0);
+    /* Set list_lock pointer in thread struct to NULL since list_lock will be
+       released in the parent thread block */
+    es->list_lock = NULL;
     es->ref_counter --;
+    bool to_be_freed = false;
     if(es->ref_counter == 0)
+    {
       /* list_lock is already held. Remove it directly */
       list_remove (&es->elem);
+      to_be_freed = true;
+    }
     lock_release (&es->counter_lock);
-    free (es);
+    if (to_be_freed)
+      free (es);
   }
   lock_release (&cur->list_lock);
 
-  /* Second step: Try to free the exit_status of the current process */
+  /* Second step: try to free the exit_status of the current process */
   lock_acquire (&cur->exit_status->counter_lock);
   ASSERT (cur->exit_status->ref_counter > 0);
   cur->exit_status->ref_counter --;
@@ -229,9 +242,11 @@ process_exit (void)
        lead to deadlock since ref_counter guarantees once it comes to here the
        parent process is dead and no others will try to acquire list_lock
        while holding counter_lock */
-    lock_acquire (cur->exit_status->list_lock);
+    if (cur->exit_status->list_lock != NULL)
+      lock_acquire (cur->exit_status->list_lock);
     list_remove (&cur->exit_status->elem);
-    lock_release (cur->exit_status->list_lock);
+    if (cur->exit_status->list_lock != NULL)
+      lock_release (cur->exit_status->list_lock);
     lock_release (&cur->exit_status->counter_lock);
     free(cur->exit_status);
   }
