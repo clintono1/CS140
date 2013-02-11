@@ -110,6 +110,7 @@ struct thread
     int recent_cpu;                     /* CPU time received recently */
     int nice;                           /* Nice value of each thread*/
     bool is_kernel;                     /* True if this is a kernel process */
+    bool in_syscall;                    /* True if thread is in system call */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

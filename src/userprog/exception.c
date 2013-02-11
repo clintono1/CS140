@@ -148,14 +148,25 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
+  /* Currently we only handle page_faults triggered in system calls */
+  if (!thread_current()->in_syscall)
+  {
+    /* To implement virtual memory, delete the rest of the function
+       body, and replace it with code that brings in the page to
+       which fault_addr refers. */
+    printf ("Page fault at %p: %s error %s page in %s context.\n",
+            fault_addr,
+            not_present ? "not present" : "rights violation",
+            write ? "writing" : "reading",
+            user ? "user" : "kernel");
+    kill (f);
+  }
+
+  /* Release the locks possibly held by the thread */
+  if (lock_held_by_current_thread (&global_lock_filesys))
+    lock_release (&global_lock_filesys);
+
+  /* Release the rest resources (memory, file handlers) in process_exit */
+  _exit (-1);
 }
 
