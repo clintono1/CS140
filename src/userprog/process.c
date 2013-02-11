@@ -39,32 +39,32 @@ void get_first_string(const char * src_str, char *dst_str)
 }
 
 /* Starts a new thread running a user program loaded from
-   FILENAME.  The new thread may be scheduled (and may even exit)
+   CMD_LINE.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_path)
+process_execute (const char *cmd_line)
 {
   char *fn_copy;
   tid_t tid;
 
-  /* Make a copy of FILE_NAME.
+  /* Make a copy of CMD_LINE.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_path, PGSIZE);
-  char file_name[16];
-  get_first_string(fn_copy, file_name);
+  strlcpy (fn_copy, cmd_line, PGSIZE);
+  char file_path[16];
+  get_first_string(fn_copy, file_path);
 
   struct load_status ls;
   sema_init (&ls.sema_load, 0);
   ls.load_success = false;
-  ls.file_name = fn_copy;
+  ls.file_path = fn_copy;
   ls.parent_thread = thread_current();
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, &ls);
+  /* Create a new thread to execute FILE_PATH. */
+  tid = thread_create (file_path, PRI_DEFAULT, start_process, &ls);
 
   /* Wait till the process is loaded */
   sema_down (&ls.sema_load);
@@ -89,7 +89,7 @@ start_process (void *aux)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (ls->file_name, &if_.eip, &if_.esp);
+  success = load (ls->file_path, &if_.eip, &if_.esp);
 
   /* Set load result */
   ls->load_success = success;
@@ -108,7 +108,7 @@ start_process (void *aux)
   sema_up (&ls->sema_load);
 
   /* If load failed, quit. */
-  palloc_free_page (ls->file_name);
+  palloc_free_page (ls->file_path);
   if (!success) 
     thread_exit ();
 
@@ -443,12 +443,12 @@ argument_pasing(char *cmd_line, char **esp)
 }
 
 
-/* Loads an ELF executable from FILE_NAME into the current thread.
+/* Loads an ELF executable from CMD_LINE into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_path, void (**eip) (void), void **esp)
+load (const char *cmd_line, void (**eip) (void), void **esp)
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -463,14 +463,14 @@ load (const char *file_path, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
-  /* Extract the func_name */
-  char file_name[16];
-  get_first_string(file_path, file_name);
+  /* Extract the path to the executable file */
+  char file_path[16];
+  get_first_string(cmd_line, file_path);
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (file_path);
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", file_name);
+      printf ("load: %s: open failed\n", file_path);
       goto done; 
     }
 
@@ -483,7 +483,7 @@ load (const char *file_path, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
-      printf ("load: %s: error loading executable\n", file_path);
+      printf ("load: %s: error loading executable\n", cmd_line);
       goto done; 
     }
 
@@ -550,7 +550,7 @@ load (const char *file_path, void (**eip) (void), void **esp)
   if (!setup_stack (esp))
     goto done;
 
-  success = argument_pasing(file_path, esp);
+  success = argument_pasing(cmd_line, esp);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
