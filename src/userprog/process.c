@@ -211,12 +211,10 @@ process_exit (void)
     ASSERT (es->ref_counter > 0);
     es->ref_counter --;
     if(es->ref_counter == 0)
-    {
       /* list_lock is already held. Remove it directly */
       list_remove (&es->elem);
-      free (es);
-    }
     lock_release (&es->counter_lock);
+    free (es);
   }
   lock_release (&cur->list_lock);
 
