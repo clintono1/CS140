@@ -100,6 +100,10 @@ start_process (void *aux)
     /* Deny writes to the executable file */
     t->process_file = filesys_open(ls->file_path);
     file_deny_write (t->process_file);
+
+    /* Set is_kernel to false since it is used by a user process */
+    t->is_kernel = false;
+
     struct exit_status *es = t->exit_status;
     /* No need to check if list_lock is NULL here since the parent process
        must be waiting before the child process is loaded */
@@ -279,11 +283,14 @@ process_exit (void)
   }
 
   /* Reenable write to this file */
-  file_allow_write (cur->process_file);
-  file_close (cur->process_file);
+  if (cur->process_file)
+  {
+    file_allow_write (cur->process_file);
+    file_close (cur->process_file);
+  }
 
-  // TODO: check whether it is a kernel thread before printing this
-  printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);
+  if (!cur->is_kernel)
+    printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -477,7 +484,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_path);
-      goto done; 
+      goto done ; 
     }
 
   /* Read and verify executable header. */
