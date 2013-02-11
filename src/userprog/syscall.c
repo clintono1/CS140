@@ -252,6 +252,9 @@ _read (int fd, void *buffer, unsigned size)
     return -1;
   int result = 0;
   struct thread *t=thread_current();
+  if (fd == STDOUT_FILENO)
+    return -1;
+  
   if (fd == STDIN_FILENO)
   {
       unsigned i = 0;
@@ -285,6 +288,8 @@ _write (int fd, const void *buffer, unsigned size)
   if (size <= 0)
     return 0;
   int result = 0;
+  if (fd == STDIN_FILENO)
+    return -1;
   struct thread *t = thread_current ();
   if (fd == STDOUT_FILENO)
   {
