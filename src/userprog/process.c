@@ -21,6 +21,8 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+extern struct lock global_lock_filesys;
+
 #define WRITE_BYTE_4(addr, value) **((int**) addr) = (int)value
 
 void get_first_string(const char * src_str, char *dst_str)
@@ -255,6 +257,19 @@ process_exit (void)
     lock_release (&cur->exit_status->counter_lock);
     sema_up (&cur->exit_status->sema_wait);
   }
+
+  /* Release resources hold by current thread */
+  int fd;
+  for (fd = 2; fd < cur->file_handlers_size; fd++)
+  {
+    if (cur->file_handlers[fd] != NULL)
+    {
+      lock_acquire (&global_lock_filesys);
+      file_close (cur->file_handlers[fd]);
+      lock_release (&global_lock_filesys);
+    }
+  }
+  free (cur->file_handlers);
 
   // TODO: check whether it is a kernel thread before printing this
   printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);
