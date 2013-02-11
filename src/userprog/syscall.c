@@ -10,6 +10,7 @@
 #include "lib/string.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "devices/input.h"
 
 /* Retrieve the n-th argument */
 #define GET_ARGUMENT(sp, n) (*(sp + n))
@@ -97,6 +98,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       arg2 = GET_ARGUMENT(esp, 2);
       arg3 = GET_ARGUMENT(esp, 3);
       f->eax = (uint32_t) _read ((int)arg1, (void*)arg2, (unsigned)arg3);
+     // printf("return value == %d \n\n", f->eax);
       break;
 
     case SYS_WRITE:
@@ -121,7 +123,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       arg1 = GET_ARGUMENT(esp, 1);
       _close ((int)arg1);
       break;
-
+                                         
     default:
       break;
   }
@@ -190,7 +192,7 @@ _create (const char *file, unsigned initial_size)
   if (file == NULL)
     _exit (-1);
   if (!valid_vaddr_range (file, strlen (file)))
-    return false;
+    _exit (-1);
 
   lock_acquire (&global_lock_filesys);
   bool success = filesys_create (file, initial_size);
@@ -202,7 +204,7 @@ bool
 _remove (const char *file)
 {
   if (!valid_vaddr_range (file, strlen (file)))
-    return false;
+    _exit (-1);
 
   lock_acquire (&global_lock_filesys);
   bool success = filesys_remove (file);
@@ -214,7 +216,7 @@ int
 _open (const char *file)
 {
   if (!valid_vaddr_range (file, strlen (file)))
-    return -1;
+    _exit (-1);
 
   lock_acquire (&global_lock_filesys);
   struct file *f = filesys_open (file);
@@ -243,17 +245,43 @@ _filesize (int fd)
 int
 _read (int fd, void *buffer, unsigned size)
 {
+ // printf("read called, size = %d fd = %d\n", size, fd);
   if (!valid_vaddr_range (buffer, size))
+    _exit (-1);
+  if (size < 0)
     return -1;
-  // TODO
-  return 0;
+  int result = 0;
+  struct thread *t=thread_current();
+  if (fd == STDIN_FILENO)
+  {
+      unsigned i = 0;
+      for (i = 0; i < size; i++)
+      {
+        *(uint8_t *)buffer = input_getc();
+        result++;
+        buffer++;
+      }
+      //printf("result = %d \n", result);
+      return result;
+  }
+  else if(valid_file_handler(t, fd))
+  {
+      struct file *file = t->file_handlers[fd];
+      lock_acquire(&global_lock_filesys );
+      result = file_read(file, buffer, size);
+      lock_release(&global_lock_filesys);
+     // printf("result = %d \n", result);
+      return result;
+  }
+  //printf("invalid file\n");
+  return -1;
 }
 
 int
 _write (int fd, const void *buffer, unsigned size)
 {
   if (!valid_vaddr_range (buffer, size))
-    return 0;
+    _exit (-1);
   if (size <= 0)
     return 0;
   int result = 0;

@@ -858,7 +858,8 @@ valid_file_handler (struct thread* thread, int fd)
 {
   if (fd == 0 || fd == 1)
     return true;
-
+  if (fd < 0)
+    return false;
   if (thread == NULL ||
       fd >= thread->file_handlers_size ||
       thread->file_handlers[fd] == NULL)
