@@ -279,7 +279,12 @@ process_exit (void)
   }
 
   /* Reenable write to this file */
-  file_allow_write (cur->process_file);
+  if (cur->process_file)
+  {
+    file_allow_write (cur->process_file);
+  }
+  
+  
   file_close (cur->process_file);
 
   // TODO: check whether it is a kernel thread before printing this
@@ -477,7 +482,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_path);
-      goto done; 
+      goto done ; 
     }
 
   /* Read and verify executable header. */

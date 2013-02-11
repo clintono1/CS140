@@ -12,8 +12,8 @@
 #include "filesys/file.h"
 #include "devices/input.h"
 
-/* Retrieve the n-th argument */
-#define GET_ARGUMENT(sp, n) (*(sp + n))
+
+
 
 static void syscall_handler (struct intr_frame *);
 bool valid_vaddr_range(const void * vaddr, unsigned size);
@@ -40,6 +40,16 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
   lock_init (&global_lock_filesys);
 }
+/* Check then Retrieve the n-th argument */
+static uint32_t
+ get_argument (int *esp, int offset)
+{
+  /* Check address */
+  if (!is_user_vaddr (esp + offset)) 
+    _exit(-1);
+
+  return *(esp + offset);
+}
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
@@ -49,8 +59,13 @@ syscall_handler (struct intr_frame *f UNUSED)
   int * esp = (int *)f->esp;
   uint32_t arg1, arg2, arg3;
 
+  //TODO: this is for sc-bad-sp test. It passed. but is this check correct?
+  if ( !valid_vaddr_range(esp, 0) )
+    _exit(-1);
+
   /* Get syscall number */
   int syscall_no = *esp;
+
   switch(syscall_no)
   {
     case SYS_HALT:
@@ -58,68 +73,68 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
 
     case SYS_EXIT:
-      arg1 = GET_ARGUMENT(esp, 1);
+      arg1 = get_argument(esp, 1);
       _exit (arg1);
       break;
 
     case SYS_EXEC:
-      arg1 = GET_ARGUMENT(esp, 1);
+      arg1 = get_argument(esp, 1);
       f->eax = (uint32_t) _exec ((char*) arg1);
       break;
 
     case SYS_WAIT:
-      arg1 = GET_ARGUMENT(esp, 1);
+      arg1 = get_argument(esp, 1);
       f->eax = (uint32_t) _wait ((int) arg1);
       break;
 
     case SYS_CREATE:
-      arg1 = GET_ARGUMENT(esp, 1);
-      arg2 = GET_ARGUMENT(esp, 2);
+      arg1 = get_argument(esp, 1);
+      arg2 = get_argument(esp, 2);
       f->eax = (uint32_t) _create ((const char*)arg1, (unsigned)arg2);
       break;
 
     case SYS_REMOVE:
-      arg1 = GET_ARGUMENT(esp, 1);
+      arg1 = get_argument(esp, 1);
       f->eax = (uint32_t) _remove ((const char*)arg1);
       break;
 
     case SYS_OPEN:
-      arg1 = GET_ARGUMENT(esp, 1);
+      arg1 = get_argument(esp, 1);
       f->eax = (uint32_t) _open ((const char*)arg1);
       break;
 
     case SYS_FILESIZE:
-      arg1 = GET_ARGUMENT(esp, 1);
+      arg1 = get_argument(esp, 1);
       f->eax = (uint32_t) _filesize ((int)arg1);
       break;
 
     case SYS_READ:
-      arg1 = GET_ARGUMENT(esp, 1);
-      arg2 = GET_ARGUMENT(esp, 2);
-      arg3 = GET_ARGUMENT(esp, 3);
+      arg1 = get_argument(esp, 1);
+      arg2 = get_argument(esp, 2);
+      arg3 = get_argument(esp, 3);
       f->eax = (uint32_t) _read ((int)arg1, (void*)arg2, (unsigned)arg3);
       break;
 
     case SYS_WRITE:
-      arg1 = GET_ARGUMENT(esp, 1);
-      arg2 = GET_ARGUMENT(esp, 2);
-      arg3 = GET_ARGUMENT(esp, 3);
+      arg1 = get_argument(esp, 1);
+      arg2 = get_argument(esp, 2);
+      arg3 = get_argument(esp, 3);
       f->eax = (uint32_t) _write ((int)arg1, (const void*)arg2, (unsigned)arg3);
       break;
 
     case SYS_SEEK:
-      arg1 = GET_ARGUMENT(esp, 1);
-      arg2 = GET_ARGUMENT(esp, 2);
+      arg1 = get_argument(esp, 1);
+      arg2 = get_argument(esp, 2);
       _seek ((int)arg1, (unsigned)arg2);
       break;
 
     case SYS_TELL:
-      arg1 = GET_ARGUMENT(esp, 1);
+      arg1 = get_argument(esp, 1);
       f->eax = (uint32_t) _tell ((int)arg1);
       break;
 
     case SYS_CLOSE:
-      arg1 = GET_ARGUMENT(esp, 1);
+      arg1 = get_argument(esp, 1);
       _close ((int)arg1);
       break;
                                          
@@ -156,11 +171,21 @@ pid_t
 _exec (const char *cmd_line)
 {
   /* Check address */
-  if (!valid_vaddr_range(cmd_line, strlen(cmd_line)))
+  if (!valid_vaddr_range (cmd_line, 0))
     _exit (-1);
 
+  if (!valid_vaddr_range(cmd_line, strlen(cmd_line)))
+    _exit (-1);
+  char file_path[16];
+  get_first_string(cmd_line, file_path);
   /* Lock on process_execute since it needs to open the executable file */
   lock_acquire (&global_lock_filesys);
+  struct file *file = filesys_open (file_path);
+  if (file == NULL ) 
+  { 
+     lock_release (&global_lock_filesys);
+     return -1; 
+  }
   pid_t pid = (pid_t) process_execute(cmd_line);
   lock_release (&global_lock_filesys);
 
@@ -253,7 +278,8 @@ int
 _read (int fd, void *buffer, unsigned size)
 {
   if (!valid_vaddr_range (buffer, size))
-    _exit (-1);
+      _exit (-1);
+
   if (size < 0)
     return -1;
   if (fd == STDOUT_FILENO)
