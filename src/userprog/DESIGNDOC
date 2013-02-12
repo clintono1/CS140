@@ -17,17 +17,21 @@ Bo Wang <bowang@stanford.edu>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+None. But we built PA2 on top of PA1 and things work great :-)
+
 >> Describe briefly which parts of the assignment were implemented by
 >> each member of your team. If some team members contributed significantly
 >> more or less than others (e.g. 2x), indicate that here.
 
-FirstName LastName: contribution
-FirstName LastName: contribution
-FirstName LastName: contribution
+Song Han: argument passing, process exit status, system calls, design doc
+Jinchao Ye: design doc
+Bo Wang: accessing user memory, process exit status, system calls, design doc
 
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
+
+None.
 
 			   ARGUMENT PASSING
 			   ================
