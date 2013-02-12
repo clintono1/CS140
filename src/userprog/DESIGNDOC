@@ -48,14 +48,14 @@ FirstName LastName: contribution
 >> How do you avoid overflowing the stack page?
 
 The algorithm is as follows:
-process_execute() will creat a thread that runs start_process().
-Frist, the thread's name should be the first word of the command line,
+process_execute() will create a thread that runs start_process().
+First, the thread's name should be the first word of the command line,
 thus we implement a function get_first_word() to extract the first word form 
 the command line as the user program's name. It's limited to 15 characters.
 
 Inside start_process() it calls load(*filename, **esp,...), we implement a 
 procedure: argument_passing(const char *filename, void **esp)  to extract 
-all the arguments from filename and set up the stack inside this fuction. 
+all the arguments from filename and set up the stack inside this function. 
 The procedure is as follows:
 
 --save a copy of the filename as cmd_line.
@@ -65,7 +65,7 @@ The procedure is as follows:
    
 --Each char is exactly 1 byte, find total number of bytes for the argument, 
    and find the total argument count (argc). That's done by find the number of
-   tokens seperated by the delimiter " " in the cmd_line with strtok_r function.
+   tokens separated by the delimiter " " in the cmd_line with strtok_r function.
 
 --*To avoid overflowing the stack page*, we check if the total stack space 
    exceeds a page, must return false if so:
@@ -78,7 +78,7 @@ The procedure is as follows:
 
 --Decrease esp by the (number of arguments+1)*sizeof(char *). 
    -The reason for +1 is due to putting a zero at the end of the pointers.
-   -Set this adress as arg_pointer
+   -Set this address as arg_pointer
 
 --Iterate the cmd_line again by strtok(), for each token
   -fill the argument's address into arg_pointer
@@ -196,7 +196,7 @@ is made to be 128.
 
 Each file descriptor act as an index to the file pointer array. When we open 
 a file, we first check if there's enough space in the pointer array, if not, we 
-double the size. Otherwise we search from begining (which is index 2 
+double the size. Otherwise we search from beginning (which is index 2 
 since index 0 and 1 are reserved for STDIN and STDOUT) for an empty 
 place to put this file pointer, and return this index as the file descriptor.
 
@@ -209,8 +209,8 @@ is just an index number, different process may have the same file descriptor.
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
 
-During syscalls, the user program pass it's data to kernel by pointers. Before
-derefernce the pointer, we pass the pointer to a function valid_vaddr_range
+During sys-calls, the user program pass it's data to kernel by pointers. Before
+dereference the pointer, we pass the pointer to a function valid_vaddr_range
 to check the validity of this pointer. It has three steps:
 
 1. check if the pointer is NULL. If NULL, return false
@@ -360,7 +360,7 @@ stack pointer is valid and then read from the stack the arguments. Then we
 check if the *buffer pointer points to a valid address. Then we check if the
 file descriptor is possessed by the current thread. If any of these check 
 fails, the current process calls the _exit() system call which leads to freeing
-all the resoursed: the page directory, the open files, the exit_status 
+all the recourses: the page directory, the open files, the exit_status 
 structure and all its locks. Finally we make
 the executable file able to be written.
 
@@ -375,7 +375,7 @@ the executable file able to be written.
 
 =======
 The "exec" system call calls process_execute() and we handle this issue
-primarity in process_excute(). 
+primarily in process_excute(). 
 
 We create a struct called "load_status", defined as follows:
 struct load_status
@@ -389,7 +389,7 @@ struct load_status
 Every time a thread calls "exec", it will create a load_status struct,
 whose sema_load member is initialized as 0. The load_success member is
 initialized as false, parent_thread member is initialized as current
-thread and file_path is initialized the path of the excutable file. In
+thread and file_path is initialized the path of the executable file. In
 process_execute, after calling "thread_create", current thread will wait
 until the child process finishes loading, no matter succeeds or fails.
 This is implemented by using sema_down(&ls.sema_load), here "ls" is an
