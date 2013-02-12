@@ -255,8 +255,53 @@ cases, which is rare.
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
 
-//TODO: by Jinchao
+The "wait" system call is the same as process_wait(tid_t child_tid). We
+implement most stuff in process_wait(tid_t) and implement "wait" simply
+by calling process_wait(tid_t).
 
+We create a struct called exit_status for each process and in the struct
+thread of each process, we have a pointer to its own exit_status. The 
+exit_status struct is defined as follows:
+
+/* Exit status of a process */
+struct exit_status
+  {
+    int pid;                            /* Process Id. Same as tid in Pintos */
+    int exit_value;                     /* Exit value */
+    struct semaphore sema_wait;         /* Semaphore to sync on wait() */
+    int ref_counter;                    /* Reference counter for release */
+    struct lock counter_lock;           /* Lock on accessing ref_counter */
+    struct list_elem elem;              /* List element for exit_status list */
+    struct lock *list_lock;             /* Lock on list modification */
+  };
+
+This struct might exist even if the corresponding process has exited.
+If this process exits after its parent process, then its exit_status 
+struct is released when this process exits. If the process exits
+before its parent process, then its exit_status struct is released 
+when the parent thread exits. ref_counter denotes the reference counter
+for this struct. It is initialized as 2 because both the parent thread 
+and the child thread itself refer to it. Therefore, when ref_counter > 0,
+this struct cannot be released.
+
+Each process has a child_exist_status list which records the exit states
+of its child processes. 
+
+Whenever a process P waits on another process C, we will check whether 
+the exit_status of process C is in the child_exit_status list of P. If 
+it is not, which means C is not a child of P or P has waited C before, 
+return -1. 
+
+If C is in the child_exit_status of P, sema_down on sema_wait in the 
+exit_status of C. C calls sema_up on sema_wait when C exits. Therefore,
+If C has already exited, P can retrieve the exit_value of C immediately.
+If C hasn't exited, P has to wait until C exits before it can retrieve
+this info.
+
+An important step in our implementation is that once P has waited C, we 
+will remove C from P's child_exit_status list. This is because the same
+child can be waited only once. Hence next time P waits on C, it will not
+be able to find C in its child_exit_status and will return -1.  
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
@@ -332,7 +377,7 @@ the executable file able to be written.
 The "exec" system call calls process_execute() and we handle this issue
 primarity in process_excute(). 
 
-We create a struct called "load_status", defined as following:
+We create a struct called "load_status", defined as follows:
 struct load_status
   {
     struct semaphore sema_load;         /* Semaphore to sync on load() */
@@ -365,17 +410,12 @@ process. Otherwise no exit_status will be created for the child process
 and nothing will be inserted into the child_exit_status list of the
 parent process.
 
-
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
 >> calls wait(C) before C exits?  After C exits?  How do you ensure
 >> that all resources are freed in each case?  How about when P
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
-
-//TODO: by Jinchao
-
-
 
 
 ---- RATIONALE ----
