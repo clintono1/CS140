@@ -187,6 +187,11 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  /* should print out the information before we destroy the struct that 
+     contains exit_status */
+  if (!cur->is_kernel)
+    printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -203,7 +208,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-
 
   /* First step: free the exit_status of terminated children processes
      Order of acquiring locks:
@@ -285,12 +289,12 @@ process_exit (void)
   /* Reenable write to this file */
   if (cur->process_file)
   {
-    file_allow_write (cur->process_file);
-    file_close (cur->process_file);
+    lock_acquire (&global_lock_filesys);
+      file_allow_write (cur->process_file);
+      file_close (cur->process_file);
+    lock_release (&global_lock_filesys);
   }
 
-  if (!cur->is_kernel)
-    printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);
 }
 
 /* Sets up the CPU for running user code in the current
