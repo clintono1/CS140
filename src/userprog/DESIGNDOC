@@ -224,7 +224,8 @@ So the parent process has to wait until the child process sema_up
 ls->sema_load before it can continue to run. Since both the child
 process and the parent process can access the load_status struct, the
 parent thread can know the success/failure status from the load_sucess
-variable in the load_status struct.
+variable in the load_status struct. If load_success is true, "exec" will
+return pid of the child process. Otherwise, it will return -1.
 
 If the child process loads successfully, it will generate its 
 exit_status and insert it into the child_exit_status list of its parent
