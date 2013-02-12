@@ -29,7 +29,7 @@ void  _seek (int fd, unsigned position);
 unsigned _tell (int fd);
 void  _close (int fd);
 
-struct lock global_lock_filesys;
+struct lock global_lock_filesys;  /* global lock for file system*/
 
 void
 syscall_init (void) 
@@ -155,7 +155,7 @@ valid_vaddr_range(const void * vaddr, unsigned size)
   if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + size) 
       || vaddr< 0x08048000)
     return false;
-  /* false type3: pointer to unmapped virtual memory */
+  /* false type3: points to unmapped virtual memory */
   if (!pagedir_get_page (thread_current()->pagedir, vaddr) || \
       !pagedir_get_page (thread_current()->pagedir, (vaddr + size) ))
     return false;
