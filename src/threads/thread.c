@@ -241,6 +241,8 @@ bool init_exit_status(struct thread *t, tid_t tid)
   es->ref_counter = 2;
   lock_init ( &es->counter_lock );
   es->list_lock = &thread_current() ->list_lock;
+  es->elem.next = NULL;
+  es->elem.prev = NULL;
   return true;
 }
 

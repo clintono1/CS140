@@ -111,13 +111,17 @@ start_process (void *aux)
     lock_release (es->list_lock);
   }
 
-  /* and wake up parent process */
+  /* Wake up parent process */
   sema_up (&ls->sema_load);
 
   /* If load failed, quit. */
   palloc_free_page (ls->file_path);
-  if (!success) 
+  if (!success)
+  {
+    /* Set ref_counter to 1 so that it can be collected */
+    thread_current()->exit_status->ref_counter = 1;
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -257,7 +261,12 @@ process_exit (void)
        while holding counter_lock */
     if (cur->exit_status->list_lock != NULL)
       lock_acquire (cur->exit_status->list_lock);
-    list_remove (&cur->exit_status->elem);
+    /* Check whether the element is in a list before removing it
+       since it is possible that this element is dangling due to
+       process start failure */
+    if (cur->exit_status->elem.next != NULL &&
+        cur->exit_status->elem.prev != NULL)
+      list_remove (&cur->exit_status->elem);
     if (cur->exit_status->list_lock != NULL)
       lock_release (cur->exit_status->list_lock);
     lock_release (&cur->exit_status->counter_lock);
