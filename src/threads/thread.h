@@ -114,17 +114,17 @@ struct thread
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
-    struct exit_status *exit_status;    /* Exit status of this thread */
-    struct list child_exit_status;      /* List of the exit status of child
-                                           processes */
-    struct lock list_lock;              /* Lock on list modification */
-    struct file **file_handlers;        /* File handler array */
-    int file_handlers_size;             /* Size of allocated file handlers */
-    int file_handlers_num;              /* Num of current file handlers */
-    struct file *process_file;          /* File of this current process */
+    uint32_t *pagedir;                 /* Page directory. */
+    struct exit_status *exit_status;   /* Exit status of this thread */
+    struct list child_exit_status;     /* List of child processes' exit status */
+    struct lock list_lock;             /* Lock on child exit status list  */
+
+    struct file **file_handlers;       /* File handler array */
+    int file_handlers_size;            /* Size of allocated file handlers */
+    int file_handlers_num;             /* Num of current file handlers */
+    struct file *process_file;         /* File of this current process */
 #endif
-    unsigned magic;                     /* Detects stack overflow. */
+    unsigned magic;                    /* Detects stack overflow. */
   };
 
 /* Exit status of a process */

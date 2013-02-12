@@ -34,7 +34,6 @@ void get_first_string(const char * src_str, char *dst_str)
   end=begin;
   while(*end!=' ' && *end!='\0')
     end++;
-  ASSERT(end-begin+1<=16);
   strlcpy(dst_str, begin, end-begin+1);
 }
 
@@ -54,7 +53,7 @@ process_execute (const char *cmd_line)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, cmd_line, PGSIZE);
-  char file_path[16];
+  char file_path[MAX_FILE_LENGTH];
   get_first_string(fn_copy, file_path);
 
   struct load_status ls;

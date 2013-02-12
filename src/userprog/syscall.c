@@ -152,7 +152,8 @@ valid_vaddr_range(const void * vaddr, unsigned size)
   if (vaddr == NULL)
     return false;
   /* false type2: points to KERNEL virtual address space */
-  if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + size))
+  if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + size) 
+      || vaddr< 0x08048000)
     return false;
   /* false type3: pointer to unmapped virtual memory */
   if (!pagedir_get_page (thread_current()->pagedir, vaddr) || \
@@ -177,7 +178,7 @@ _exec (const char *cmd_line)
 
   if (!valid_vaddr_range(cmd_line, strlen(cmd_line)))
     _exit (-1);
-  char file_path[16];
+  char file_path[MAX_FILE_LENGTH];
   get_first_string(cmd_line, file_path);
   /* Lock on process_execute since it needs to open the executable file */
   lock_acquire (&global_lock_filesys);

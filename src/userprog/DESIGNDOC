@@ -38,7 +38,8 @@ FirstName LastName: contribution
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-There's no change of data structures for argument passing
+--in <process.h>
+  #define MAX_FILE_LENGTH 15   /* max length of file name */
 
 ---- ALGORITHMS ----
 
@@ -46,42 +47,40 @@ There's no change of data structures for argument passing
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
-The call stack of the program is as following:
-main() -> run_actions(argv)
-run_actions() -> run_task(argv)
-run_task() -> process_wait(process execute(task))
-
-Curently process_execute() will creat a thread that runs start_process().
+The algorithm is as follows:
+process_execute() will creat a thread that runs start_process().
 Frist, the thread's name should be the first word of the command line,
 thus we implement a function get_first_word() to extract the first word form 
-the command line as the user program's name.
+the command line as the user program's name. It's limited to 15 characters.
 
 Inside start_process() it calls load(*filename, **esp,...), we implement a 
-procedure argument_passing(const char *filename, void **esp)  to extract 
+procedure: argument_passing(const char *filename, void **esp)  to extract 
 all the arguments from filename and set up the stack inside this fuction. 
 The procedure is as follows:
 
---save a copy of the filename as cmd_line
---each char is exactly 1 byte, find total number of bytes for the argument, 
-  and find the total argument count (argc). That's done by find the number
-  of tokens seperated by the delimiter " " in the cmd_line. 
-         for (token = strtok_r (s, " ", &save_ptr); token != NULL;
-               token = strtok_r (NULL, " ", &save_ptr))
-			   cnt++; 
-			   length+=strlen(token)+1;			   
-			   //note: s must be modifiable
+--save a copy of the filename as cmd_line.
+--*To ensure the elements of argv[] to be in the right order*, we iterates the 
+   arguments twice: in the first run we get the argc, in the second run we 
+   actually write them to stack. There's a trade-off of time and space.
+   
+--Each char is exactly 1 byte, find total number of bytes for the argument, 
+   and find the total argument count (argc). That's done by find the number of
+   tokens seperated by the delimiter " " in the cmd_line with strtok_r function.
 
---if the total stack space exceed's a page, return false			   
+--*To avoid overflowing the stack page*, we check if the total stack space 
+   exceeds a page, must return false if so:
+   if (mem_size + (argc + 1) * sizeof(char*) + sizeof(char**) + sizeof(int)
+      > PGSIZE)   return false;		   
 
 --ROUNRD_UP the cmd_line's length to multiples of 4 Byte as new length
 
---decrease esp by length, set this as the start address of arg_data
+--Decrease esp by length, set this as the start address of arg_data
 
---decrease esp by the (number of arguments+1)*sizeof(char *). 
-   (The reason for +1 is due to putting a zero at the end of the pointers).
-  -Set this adress as arg_pointer
+--Decrease esp by the (number of arguments+1)*sizeof(char *). 
+   -The reason for +1 is due to putting a zero at the end of the pointers.
+   -Set this adress as arg_pointer
 
---iterate the cmd_line again by strtok(), for each token
+--Iterate the cmd_line again by strtok(), for each token
   -fill the argument's address into arg_pointer
   -fill the argument string into arg_data
   -update the arg_data by increasing the string length+1
@@ -95,7 +94,6 @@ The procedure is as follows:
   
 --decrease esp by sizeof(void *)
   -fill in esp's value as the fake return address 0
-   
 
    
 --
@@ -103,9 +101,27 @@ The procedure is as follows:
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
 
+The difference between strtok_r() and strtok() is the way they save the 
+pointer: strtok() saves the previous location implicitely, which is unsafe 
+if preempted. Different process may use the same saved pointer.
+However, strtok_r() saves the pointer explicitely by the argument 
+char **save_ptr, which is per-thread, and it is safe to use it when multiple
+threads are using it. 
+
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
+
+The Unix approach is safer. When processing the argument in the shell, we
+are doing this in user mode. However, when processing the arguments in the
+pintos OS, we are doing this in kernel mode. The code executed in the kernel
+mode has more *privilleges* than in the user mode, such as changing the state 
+of the current machine, therefore could lead to chances of being hacked by 
+malicious command. 
+
+The Unix approach also relieves the kernel the overhead of processing arguments,
+therefore making the operating system more efficient. 
+
 
 			     SYSTEM CALLS
 			     ============
@@ -115,6 +131,31 @@ The procedure is as follows:
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+
+TODO: wholistic check
+--<thread.h>:
+   - added to struct thread:
+    bool is_kernel;                     /* True if this is a kernel process */
+    bool in_syscall;                    /* True if thread is in system call */
+
+#ifdef USERPROG
+    struct exit_status *exit_status;  /* Exit status of this thread */
+    struct list child_exit_status;       /* List of child processes' exit status */
+    struct lock list_lock;                  /* Lock on child exit status list  */
+	
+    struct file **file_handlers;          /* File handler array */
+    int file_handlers_size;                /* Size of allocated file handlers */
+    int file_handlers_num;              /* Num of current file handlers */
+    struct file *process_file;            /* File of this current process */
+#endif
+
+
+    
+
+
+
+
+
 
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
