@@ -32,7 +32,7 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 #define NICE_MAX 20                     /* Highest nice */
 #define NICE_MIn -20                    /* Lowest nice */
-#define FILE_HDL_SIZE 128               /* Default size of file handlers */
+#define FILE_HDL_SIZE 16                /* Default size of file handlers */
 
 /* A kernel thread or user process.
 

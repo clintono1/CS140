@@ -861,7 +861,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 bool
 valid_file_handler (struct thread* thread, int fd)
 {
-  if (fd == 0 || fd == 1)
+  if (fd == STDIN_FILENO || fd == STDOUT_FILENO)
     return true;
   if (fd < 0)
     return false;
@@ -915,11 +915,13 @@ thread_add_file_handler (struct thread* thread, struct file* file)
       memcpy (new_file_handlers, thread->file_handlers,
               thread->file_handlers_num * sizeof(struct file*));
       memset (&new_file_handlers[thread->file_handlers_num], 0,
-              thread->file_handlers_num);
+              thread->file_handlers_num * sizeof(struct file*));
+      free (thread->file_handlers);
     }
     thread->file_handlers = new_file_handlers;
     int index = thread->file_handlers_num;
     thread->file_handlers[index] = file;
+    thread->file_handlers_num ++;
     return index;
   }
 }

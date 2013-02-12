@@ -266,7 +266,7 @@ int
 _filesize (int fd)
 {
   struct thread* t = thread_current();
-  if (fd == 0 || fd == 1 || !valid_file_handler(t, fd))
+  if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !valid_file_handler(t, fd))
     _exit (-1);
 
   lock_acquire (&global_lock_filesys);
@@ -345,7 +345,7 @@ _seek (int fd, unsigned position)
   struct thread *t = thread_current ();
   struct file *file = t->file_handlers[fd];
 
-  if ( !valid_file_handler (t, fd) || fd <2 )
+  if ( !valid_file_handler (t, fd) || fd < 2)
     _exit(-1);
 
    lock_acquire (&global_lock_filesys);
@@ -360,7 +360,7 @@ _tell (int fd)
   struct thread *t  = thread_current();
   struct file *file = t->file_handlers[fd];
 
-  if ( !valid_file_handler (t, fd) || fd <2)
+  if ( !valid_file_handler (t, fd) || fd < 2)
     _exit(-1);
 
   lock_acquire (&global_lock_filesys);
@@ -373,7 +373,7 @@ void
 _close (int fd)
 {
   struct thread* t = thread_current();
-  if (fd == 0 || fd == 1 || !valid_file_handler(t, fd))
+  if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !valid_file_handler(t, fd))
     return;
 
   lock_acquire (&global_lock_filesys);
