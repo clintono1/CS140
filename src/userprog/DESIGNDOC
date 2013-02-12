@@ -38,8 +38,8 @@ FirstName LastName: contribution
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
---in <process.h>
-  #define MAX_FILE_LENGTH 15   /* max length of file name */
+In <process.h>
+  #define MAX_FILE_LENGTH 15   /* Max length of file name */
 
 ---- ALGORITHMS ----
 
@@ -47,14 +47,20 @@ FirstName LastName: contribution
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+// TODO: the statement of following algorithm doesn't sound very clear to me
+          can you itemize it?
+// TODO: how can you make sure that the first word of the command line has fewer
+         than 15 characters?
+         for example: /path/to/the/bin/can/be/extremely/long/like/this/program
+
 The algorithm is as follows:
-process_execute() will create a thread that runs start_process().
+process_execute() creates a thread that runs start_process().
 First, the thread's name should be the first word of the command line,
 thus we implement a function get_first_word() to extract the first word form 
 the command line as the user program's name. It's limited to 15 characters.
 
 Inside start_process() it calls load(*filename, **esp,...), we implement a 
-procedure: argument_passing(const char *filename, void **esp)  to extract 
+procedure argument_passing(const char *filename, void **esp) to extract 
 all the arguments from filename and set up the stack inside this function. 
 The procedure is as follows:
 
@@ -95,18 +101,16 @@ The procedure is as follows:
 --decrease esp by sizeof(void *)
   -fill in esp's value as the fake return address 0
 
-   
---
+
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
 
 The difference between strtok_r() and strtok() is the way they save the 
-pointer: strtok() saves the previous location implicitly, which is unsafe 
-if preempted. Different process may use the same saved pointer.
-However, strtok_r() saves the pointer explicitly by the argument 
-char **save_ptr, which is per-thread, and it is safe to use it when multiple
-threads are using it. 
+pointer: strtok() saves the previous location in an internal static variable,
+which is unsafe if preempted. Another process may race this variable at the
+same time. In comparison, strtok_r() saves the pointer to an externally 
+specified location, i.e. char **save_ptr. This solves the race condition.
 
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
@@ -119,8 +123,9 @@ mode has more *privileges* than in the user mode, such as changing the state
 of the current machine, therefore could lead to chances of being hacked by 
 malicious command. 
 
-The Unix approach also relieves the kernel the overhead of processing arguments
-, therefore making the operating system more efficient. 
+The Unix approach also allows for resolution of relative paths, since the shell
+has more information about the executing environment. 
+For example, ~/abc or ../../abc
 
 
 
@@ -134,9 +139,9 @@ The Unix approach also relieves the kernel the overhead of processing arguments
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
 TODO: wholistic check
---<thread.h>--
-	
-	#define FILE_HDL_SIZE 128           /* Default size of file handlers */
+In <thread.h>
+
+	#define FILE_HDL_SIZE 16              /* Default size of file handlers */
 
    /*added to struct thread*/
     bool is_kernel;                     /* True if this is a kernel process */
@@ -178,7 +183,7 @@ TODO: wholistic check
      struct thread *parent_thread;     /* Pointer to the parent thread */
    };
 
---<syscall.c>--
+In <syscall.c>
     struct lock global_lock_filesys;   /* global lock for file system*/
     
 //TODO: pls check if this is holistic
@@ -191,17 +196,17 @@ TODO: wholistic check
 
 For each thread, we maintain an array of pointers which point to the file
 struct that they have opened. This array is dynamically expanded when
-we open to many files and the space is not enough. The initial length
-is made to be 128. 
+the array is full. The initial size is set as 16.
 
 Each file descriptor act as an index to the file pointer array. When we open 
-a file, we first check if there's enough space in the pointer array, if not, we 
-double the size. Otherwise we search from beginning (which is index 2 
+a file, we first check if there is enough space in the pointer array, if not, we 
+double the size. Otherwise we search from the beginning (which is index 2 
 since index 0 and 1 are reserved for STDIN and STDOUT) for an empty 
-place to put this file pointer, and return this index as the file descriptor.
+position to put this file pointer, and return this index as the file descriptor.
 
 The file descriptors are unique within a single process. Since file descriptor
-is just an index number, different process may have the same file descriptor.
+is just an index number, different process may use the same file descriptor 
+pointing to different files.
 
 
 ---- ALGORITHMS ----
@@ -209,8 +214,8 @@ is just an index number, different process may have the same file descriptor.
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
 
-During sys-calls, the user program pass it's data to kernel by pointers. Before
-dereference the pointer, we pass the pointer to a function valid_vaddr_range
+During sys-calls, the user program pass its data to kernel by pointers. Before
+dereferencing the pointer, we pass the pointer to a function valid_vaddr_range
 to check the validity of this pointer. It has three steps:
 
 1. check if the pointer is NULL. If NULL, return false
@@ -440,18 +445,18 @@ checking simple and as an integral, we just check it before every dereference.
 >> for file descriptors?
 
 The current implementation is let each process maintains an array of file
-pointers, which has a fixed length of 128. During open, we search from index
+pointers, which is allocated on demand. During open, we search from index
 2 to find an empty space and allocate a new file descriptor. During read or 
 write etc, which is done by basically searching the array with the file 
 descriptor as index.
 
 The advantage of this approach is that the searching performance of the file 
 pointer array is good. Opening a new file and allocating a new file descriptor 
-takes time of O(N). While reading/writing/closing a file and searching through
-the processes open files takes time of O(1). 
+takes time of O(N). While reading, writing or closing a file and searching
+through the processes open files takes time of O(1). 
 
 The disadvantage of this scheme is that the spatial efficiency is not good. 
-There might be a waste to set up an length 128 array if the process only opens
+There might be a waste to set up an length 16 array if the process only opens
 a few files, one the other side, if the process shall open a great many files,
 we have to pay to overhead of lengthening the array when the file descriptors
 run out.
