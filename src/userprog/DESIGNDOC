@@ -278,9 +278,9 @@ If C has not exited, P has to wait until C exits before it can retrieve
 this info.
 
 An important step in our implementation is that once P has waited C, we 
-will remove C from P's child_exit_status list. This is because the same
-child can be waited only once. Hence next time P waits on C, it will not
-be able to find C in its child_exit_status and will return -1.  
+will remove C from P's child_exit_status list after waiting. This is because
+the same child can be waited only once. Hence next time P waits on C, it 
+will not be able to find C in its child_exit_status and will return -1.  
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
@@ -429,7 +429,7 @@ file system lock when it exits.
 When P terminates without waiting, before C exits, it will decrease the 
 ref_counter of each of its child processes. We avoid race conditions by 
 adding a lock "counter_lock" in the struct exit_status. P will
-try to its own exit_status when it exits and it will succeed if its 
+try to free its own exit_status when it exits and it will succeed if its 
 parent has already exited. P will release resources it holds and destroy 
 its page directory when it exits. C's exit_status, in this case, will be 
 freed when C exits because its ref_counter is still 1 now. C will also 
