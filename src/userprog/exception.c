@@ -164,10 +164,6 @@ page_fault (struct intr_frame *f)
     kill (f);
   }
 
-  /* Release the locks possibly held by the thread */
-  if (lock_held_by_current_thread (&global_lock_filesys))
-    lock_release (&global_lock_filesys);
-
   /* Release the rest resources (memory, file handlers) in process_exit */
   _exit (-1);
 }

@@ -296,6 +296,10 @@ process_exit (void)
     free (cur->file_handlers);
   }
 
+  /* Release the locks possibly held by the thread */
+  if (lock_held_by_current_thread (&global_lock_filesys))
+    lock_release (&global_lock_filesys);
+
   /* Reenable write to this file */
   if (cur->process_file)
   {
