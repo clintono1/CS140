@@ -264,13 +264,8 @@ cases, which is rare.
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
 
-The "wait" system call is the same as process_wait(tid_t child_tid). We
-implement most stuff in process_wait(tid_t) and implement "wait" simply
-by calling process_wait(tid_t).
-
-We create a struct called exit_status for each process and in the struct
-thread of each process, we have a pointer to its own exit_status. The 
-exit_status struct is defined as follows:
+Each process has an exit_status struct pointed by a member in the thread struct.
+As a recap, the exit_status struct is copied again below.
 
 /* Exit status of a process */
 struct exit_status
@@ -285,26 +280,31 @@ struct exit_status
   };
 
 This struct might exist even if the corresponding process has exited.
-If this process exits after its parent process, then its exit_status 
-struct is released when this process exits. If the process exits
-before its parent process, then its exit_status struct is released 
-when the parent thread exits. ref_counter denotes the reference counter
-for this struct. It is initialized as 2 because both the parent thread 
-and the child thread itself refer to it. Therefore, when ref_counter > 0,
-this struct cannot be released.
+If a process exists after the termination of its parent process, its
+exit_status struct is released when this process exits.
+If a process exits when its parent process is still alive, it writes the 
+exit_value to this exit_status struct. This struct is only released 
+when the parent thread exits.
+
+The ref_counter denotes the number of processes related to this struct.
+It is initialized as 2 because both the parent thread and the child thread 
+itself refer to it. This struct will not be released as long as ref_counter 
+is not 0. Once a parent process or a child process exits, ref_counter is
+decremented by 1.
 
 Each process has a child_exist_status list which records the exit states
-of its child processes. 
+of all its child processes. 
 
-Whenever a process P waits on another process C, we will check whether 
-the exit_status of process C is in the child_exit_status list of P. If 
-it is not, which means C is not a child of P or P has waited C before, 
-return -1. 
+Whenever a process P1 waits on another process P2, P1 will check whether 
+the exit_status of process P2 is in the child_exit_status list of P1. If 
+not, it means P2 is not a child process of P1 or P1 has waited P2 before.
+Thus -1 is returned.
 
-If C is in the child_exit_status of P, sema_down on sema_wait in the 
-exit_status of C. C calls sema_up on sema_wait when C exits. Therefore,
-If C has already exited, P can retrieve the exit_value of C immediately.
-If C hasn't exited, P has to wait until C exits before it can retrieve
+If process C is in the child_exit_status of process P, P calls sema_down on
+the semaphore sema_wait in the exit_status of C. C calls sema_up on sema_wait
+once it exits. Therefore, if C has already exited, sema_up is called already.
+P can return from sema_down immediately and retrieve the exit_value of C.
+If C has not exited, P has to wait until C exits before it can retrieve
 this info.
 
 An important step in our implementation is that once P has waited C, we 
