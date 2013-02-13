@@ -186,27 +186,27 @@ pointing to different files.
 
 During syscalls, the user program pass its data to kernel by pointers. Before
 dereferencing the pointer, we pass the pointer to a function valid_vaddr_range
-to check the validity of this pointer. There are three steps:
+to check the validity of this pointer. page_fault() handles situations like
+unmapped virtual memory and invalid virtual user address. Specifically, the
+process is as follows.
 
-[Pointer check]
-1. If the pointer is NULL, return false
+1. If the pointer is NULL, valid_vaddr_range fails.
 2. If the pointer or pointer + size points kernel virtual memory space
-   is above PHYS_BASE, return false.
-3. Since code starts from 0x0804800, if the pointer is lower than this value,
-   return false.
-4. If the pointer points to unmapped or unallocated virtual memory, a page 
+   is above PHYS_BASE, valid_vaddr_range fails.
+3. If the pointer points to unmapped or unallocated virtual memory, a page 
    fault is triggered. We handle this scenario in the page_fault() exception
-   handler. First, each thread structure is added with a flag in_syscall
-   indicating whether it's currently inside a syscall. The exception handler
-   is modified such that if the page fault happened in kernel mode and not 
-   inside syscall, the OS must die. However, if the page fault happened in 
-   user mode or in syscalls, the process dies by calling exit(-1) but the 
-   OS won't die. 
-   One alternative of checking pagefault is by calling pagedir_get_page 
-   function before derefencing a pointer. If it returns false, then it means 
-   that this page is unmapped. However, this approach is slow because a software
-   virtuall adress translation is conducted in this function, which is slower
-   than hardware translation.
+   handler. Each thread structure has a flag in_syscall indicating whether 
+   it is currently inside a syscall.
+   The page_fault handler only kills the kernel when a page fault occurs 
+   in the kernel code other than syscalls.
+   If the page fault happened in user mode or in syscalls, the process is 
+   killed by calling exit(-1) in page_fault(). But the kernel is intact.
+
+One alternative of checking pointers is by calling pagedir_get_page function
+before dereferencing a pointer. If it returns false, then it means that this 
+page is unmapped. However, this approach is slow because a software virtual 
+address translation is conducted in this function, which is slower than 
+hardware translation.
 
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
