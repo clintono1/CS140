@@ -326,52 +326,55 @@ be able to find C in its child_exit_status and will return -1.
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
 
-We provided three functions that shields a false user-specified address:
+We provided three layers to shield a false user-specified address:
 
--The first layer of shield is when reading the stack, we prevent reading from 
- the stack pointer which points to the kernel virtual address. So we 
- implemented  sanity  check when we try to read arguments from the stack 
- pointer *esp with offset. This is done by the function:
- bool valid_file_handler (struct thread* thread, int fd)
+  The first layer of shield is when reading the stack. Firstly, **esp is 
+  checked at entering the syscall_handler(). Then each time we read a parameter
+  from the stack, we check the virtual memory address pointed by *esp + offset.
+  This is done by function valid_vaddr_range and get_argument.
 
--The second layer of shield is when trying to dereference a user-specified 
- pointer, we make sure that this pointer is 1) not NULL. 2) not in kernel 
- address space 3) already mapped. This is done by the function:
- valid_vaddr_range(const void * vaddr, unsigned size)
+  The second layer of shield is when trying to dereference a user-specified 
+  pointer. We make sure that this pointer is 1) not NULL. 2) not in kernel 
+  address space 3) already mapped. This is done by the function:
+  valid_vaddr_range(const void * vaddr, unsigned size)
 
--The third layer of shield is when trying to use a file descriptor to index
- a file structure possessed by a thread, we check if the descriptor truly 
- belongs to the  thread. This is done by the function:
- valid_file_handler (struct thread* thread, int fd)
- 
+  The third layer of shield is when trying to use a file descriptor to index
+  a file structure possessed by a thread. We check if the descriptor truly 
+  belongs to the thread. This is done by the function:
+  valid_file_handler (struct thread* thread, int fd)
+
 Since all these functions are modularized and their interfaces could be 
 utilized by all syscalls, we avoided the awkward situation that obscures 
 the primary function of code in a morass of error-handling.
 
 We enforced freeing all the temporarily allocated resources when a process
-exits to prevent memory leakage. The exit() syscall finally calls
-process_exit(), and we did all the free operations inside process_exit()
-	  
--First current process's page directory is destroyed.
--Then we free the dynamically allocated exit_status structure. A process can 
- have two identities: one is as parent, the other is as child. Our freeing 
- policy is to  maintain a reference counter, whose value is initialized to 
- two when a process is created. In both cases when the parent dies and the 
- child dies, the counter decreased by one. Only when the reference counter 
- decreases to zero shall we free this exit_status structure. 
--Next step is to release the current process' file array, which is done by 
- traversing the current thread's file_handlers array and free all the NULL 
- pointers it contains.
--The final step is to re-enable write to this executable file.
+exits to prevent memory leakage. The exit() syscall finally calls to
+process_exit(), and we did most the free operations inside process_exit()
 
-For an example, when the *write* syscall is called, we first check if the 
-stack pointer is valid and then read from the stack the arguments. Then we 
-check if the *buffer pointer points to a valid address. Then we check if the
-file descriptor is possessed by the current thread. If any of these check 
-fails, the current process calls the _exit() system call which leads to freeing
-all the recourses: the page directory, the open files, the exit_status 
-structure and all its locks. Finally we make
-the executable file able to be written.
+  First current process's page directory is destroyed.
+
+  Secondly we free the dynamically allocated exit_status structure. A process 
+  has two identities: one is as parent, the other is as child. Our freeing 
+  policy is to maintain a reference counter, whose value is initialized to 
+  2 at creation. In both cases when a parent exits or a child exits, the 
+  counter decreases by 1. Only when the reference counter becomes 0 shall 
+  we free this exit_status structure.
+
+  Thirdly, close all the opened files of the process and release file struct 
+  array in thread struct. This is done by traversing the current thread's 
+  file_handlers array.
+
+  Fourthly, release the global file system lock if it is held by this process.
+
+  The final step is to re-enable write to this executable file.
+
+For an example, when write() is called, we first check if the stack pointer is
+valid and then read from the stack the arguments. Then we check if the *buffer
+pointer points to a valid address. Then we check if the file descriptor is 
+possessed by the current thread. If any of these check fails, the current 
+process calls _exit(-1) which frees all the recourses: page directory, open 
+files,  exit_status, global file system lock. Finally we make the executable
+file writable again.
 
 
 
