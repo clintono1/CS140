@@ -412,43 +412,44 @@ sema_wait variable only when it exits. In this way , we achieve
 synchronization. Since each child has its own exit_status struct and 
 each child has only one parent, we avoid race conditions. We do modify 
 the child_exist_status list in this process and P has a lock for it.
-Therefore, we do avoid race conditions.
+Therefore, we avoid race conditions.
 
 When P calls wait(C) after C exits, since C already increased the
 sema_wait variable when it exited, P will not wait on this when P calls
 sema_down on sema_wait. In this way, we achieve synchronization. There
-are no race conditions because of the same reason as before.
+are no race conditions because only there is only one live process accessing
+that struct.
 
 In the above two cases, P always exits after C. Therefore, when C exits,
 it will not free its own exit_status because P might query it later (the 
-ref_counter in C's exit_status is ont 0). When P exits, it will decrease
+ref_counter in C's exit_status is 1). When P exits, it will decrease
 the ref_counter of its child processes and free exit_status of its child
 processes whose ref_counter equals 0. Therefore, C's exit_status will be
 freed when P exits. P will free its own exit_status if its parent has
-exited. Each process will also release file resouces held by itself when
-it exits. P will also destroy its page directory when it exits.
+exited. Each process will also release file resources held by itself when
+it exits. P will also destroy its page directory and release the global 
+file system lock when it exits.
 
 When P terminates without waiting, before C exits, it will decrease the 
 ref_counter of each of its child processes. We avoid race conditions by 
-adding a lock "counter_lock" in each child process' exit_status. P will
+adding a lock "counter_lock" in the struct exit_status. P will
 try to its own exit_status when it exits and it will succeed if its 
-parent has already exited. P will release file resources held by itself
-and destroy its page directory when it exits. C's exit_status, in this
-case, will be freed when C exits because its ref_counter will decrease
-to 0 at that time. C will also release its file resources and destroy
-its page directory when it exits.
+parent has already exited. P will release resources it holds and destroy 
+its page directory when it exits. C's exit_status, in this case, will be 
+freed when C exits because its ref_counter is still 1 now. C will also 
+release its resources and destroy its page directory when it exits.
 
 When P terminates without waiting, after C exits, it exits after C exits.
 Therefore, C will not free its exit_status and P will free C's 
-exit_status when P exits. Each process will still release its file 
-resources and destroy its page directory when it exits.
+exit_status when P exits. Each process will still release its resources 
+and destroy its page directory when it exits.
 
 The worst case we can think of is when P and C try to exit at the same 
 time. This scenario might pose serious race problems when P and C both 
-try to modify their ref_counters. We solve this by create a lock 
-"counter_lock" in each process' exit_status struct. When a process wants
-to modify the ref_counter of some process, it has to wait for the lock 
-even if it tries to modify its own ref_counter. In this way, we solve the
+try to modify their ref_counters. We solve this by the counter_lock in
+each process' exit_status struct. When a process wants to modify the 
+ref_counter of some process, it has to wait for the counter_lock even 
+if it tries to modify its own ref_counter. In this way, we solve the
 "exiting at same time" problem.
 
 
