@@ -142,56 +142,48 @@ For example, ~/abc or ../../abc
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-TODO: wholistic check
 In <thread.h>
 
-	#define FILE_HDL_SIZE 16              /* Default size of file handlers */
+  #define FILE_HDL_SIZE 16              /* Default size of file handlers */
 
-   /*added to struct thread*/
-    bool is_kernel;                     /* True if this is a kernel process */
-    bool in_syscall;                    /* True if thread is in system call */
+  struct thread
+    {
+      /* Omit original members */
+      ...
+      bool is_kernel;                   /* True if this is a kernel process */
+      bool in_syscall;                  /* True if thread is in system call */
+      struct exit_status *exit_status;  /* Exit status of this thread */
+      struct list child_exit_status;    /* List of child process' exit status */
+      struct lock list_lock;            /* Lock on child exit status list  */
+      struct file **file_handlers;      /* File handler array */
+      int file_handlers_size;           /* Size of allocated file handlers */
+      int file_handlers_num;            /* Num of current file handlers */
+      struct file *process_file;        /* File of this current process */
+    };
 
-#ifdef USERPROG
-    struct exit_status *exit_status;    /* Exit status of this thread */
-    struct list child_exit_status;      /* List of child processes' exit status */
-    struct lock list_lock;              /* Lock on child exit status list  */
-	
-    struct file **file_handlers;        /* File handler array */
-    int file_handlers_size;             /* Size of allocated file handlers */
-    int file_handlers_num;              /* Num of current file handlers */
-    struct file *process_file;          /* File of this current process */
-#endif
-
-
-   /* exit status of a process */
-   /* this is to make sure even if child died, it's exit_status together with 
-       other few associated items could be retained */
-
-    struct exit_status
-   {
-     int pid;                          /* Process Id. Same as tid in Pintos */
-     int exit_value;                   /* Exit value */
-     struct semaphore sema_wait;       /* Semaphore to sync on wait() */
-     int ref_counter;                  /* Reference counter for release */
-     struct lock counter_lock;         /* Lock on accessing ref_counter */
-     struct list_elem elem;            /* List element for exit_status list */
-     struct lock *list_lock;           /* Lock on list modification */
-   };
-   
-   /* Load status of a process */
-    struct load_status
-   {
-     struct semaphore sema_load;       /* Semaphore to sync on load() */
-     bool load_success;                /* True if load successfully */
-     char *file_path;                  /* Path of the executable file */
-     struct thread *parent_thread;     /* Pointer to the parent thread */
-   };
+  /* Exit status of a process, including exit_value and other status */
+  struct exit_status
+    {
+      int pid;                          /* Process Id. Same as tid in Pintos */
+      int exit_value;                   /* Exit value */
+      struct semaphore sema_wait;       /* Semaphore to sync on wait() */
+      int ref_counter;                  /* Reference counter for release */
+      struct lock counter_lock;         /* Lock on accessing ref_counter */
+      struct list_elem elem;            /* List element for exit_status list */
+      struct lock *list_lock;           /* Lock on list modification */
+    };
+ 
+  /* Load status of a process */
+  struct load_status
+    {
+      struct semaphore sema_load;       /* Semaphore to sync on load() */
+      bool load_success;                /* True if load successfully */
+      char *file_path;                  /* Path of the executable file */
+      struct thread *parent_thread;     /* Pointer to the parent thread */
+    };
 
 In <syscall.c>
-    struct lock global_lock_filesys;   /* global lock for file system*/
-    
-//TODO: pls check if this is holistic
-
+  struct lock global_lock_filesys;      /* Global lock for file system*/
 
 
 >> B2: Describe how file descriptors are associated with open files.
@@ -218,20 +210,28 @@ pointing to different files.
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
 
-During sys-calls, the user program pass its data to kernel by pointers. Before
+During syscalls, the user program pass its data to kernel by pointers. Before
 dereferencing the pointer, we pass the pointer to a function valid_vaddr_range
-to check the validity of this pointer. It has three steps:
+to check the validity of this pointer. There are three steps:
 
-1. check if the pointer is NULL. If NULL, return false
-2. check if the pointer or pointer + size points kernel virtual memory space
-    set by PHYS_BASE. Since code starts from 0x0804800, the pointer shouldn't
-	be lower than this value as well.
-3. check if the pointer points to unmapped virtual memory. This is done by 
+[Pointer check]
+1. If the pointer is NULL, return false
+2. If the pointer or pointer + size points kernel virtual memory space
+   is above PHYS_BASE, return false.
+3. Since code starts from 0x0804800, if the pointer is lower than this value,
+   return false.
+// TODO: where does the following line come from?
+4. If the pointer points to unmapped virtual memory. This is done by 
    calling pagedir_get_page function in pagedir.c. If it returns false, then 
    it means that this page is unmapped.
 
-Another responsibility of the kernel is to check the validity of file 
-descriptors. We implemented the function valid_file_handler to do this. This
+If the pointer points to unmapped or unallocated virtual memory, a page fault is
+triggered. We handle this scenario in the page_fault() system call.
+
+// TODO: do we need this?
+[File descriptor check]
+Another thing to verify is the file descriptors.
+We implemented the function valid_file_handler to do this. This
 function takes a thread and a file descriptor. It first check the file 
 descriptor is within the range of current thread's file_handlers_size, then 
 we check if the thread's file_handlers[fd] is NULL. For both cases we return 
