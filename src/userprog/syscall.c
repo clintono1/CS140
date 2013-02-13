@@ -153,10 +153,6 @@ valid_vaddr_range(const void * vaddr, unsigned size)
   /* false type2: points to KERNEL virtual address space */
   if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + size))
     return false;
-  /* false type3: points to unmapped virtual memory */
-  if (!pagedir_get_page (thread_current()->pagedir, vaddr) || \
-      !pagedir_get_page (thread_current()->pagedir, (vaddr + size) ))
-    return false;
   return true;
 }
 

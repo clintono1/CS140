@@ -280,6 +280,10 @@ process_exit (void)
     sema_up (&cur->exit_status->sema_wait);
   }
 
+  /* Release the locks possibly held by the thread */
+  if (lock_held_by_current_thread (&global_lock_filesys))
+    lock_release (&global_lock_filesys);
+
   /* Release file resources hold by current thread */
   if (cur->file_handlers != NULL)
   {
@@ -295,10 +299,6 @@ process_exit (void)
     }
     free (cur->file_handlers);
   }
-
-  /* Release the locks possibly held by the thread */
-  if (lock_held_by_current_thread (&global_lock_filesys))
-    lock_release (&global_lock_filesys);
 
   /* Reenable write to this file */
   if (cur->process_file)
