@@ -478,17 +478,19 @@ pointers, which is allocated on demand. During open, we search from index
 write etc, which is done by basically searching the array with the file 
 descriptor as index.
 
-The advantage of this approach is that the searching performance of the file 
-pointer array is good. Opening a new file and allocating a new file descriptor 
-takes time of O(N). While reading, writing or closing a file and searching
-through the processes open files takes time of O(1). 
+The advantage of this approach is that the look up performance of the file 
+pointer array is constant. Opening a file allocates a new file descriptor,
+whose complexity is O(N). While reading, writing or closing a file, looking up
+the specific file descriptor takes time of O(1). In most cases, the look up
+frequency is much higher than that of file opening, thus this is a good 
+trade-off.
 
 The disadvantage of this scheme is that the spatial efficiency is not good. 
 There might be a waste to set up an length 16 array if the process only opens
-a few files, one the other side, if the process shall open a great many files,
-we have to pay to overhead of lengthening the array when the file descriptors
-run out.
- 
+one file. We solved this issue via dynamic expansion. However, on the other 
+side, if the process shall open a great many files, we have to pay to overhead
+of lengthening the array when the space runs out.
+
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
  
