@@ -359,44 +359,45 @@ file writable again.
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
 
-The "exec" system call calls process_execute() and we handle this issue
-primarily in process_excute(). 
+A load_status struct is used to pass the information and handle communication
+between parent process and child process.
+As a recap, the struct is copied again as below.
 
-We create a struct called "load_status", defined as follows:
 struct load_status
   {
     struct semaphore sema_load;         /* Semaphore to sync on load() */
     bool load_success;                  /* True if load successfully */
-    char *file_path;                    /* Path of the executable file */
+    char *cmd_line;                     /* Command line to launch the process */
     struct thread *parent_thread;       /* Pointer to the parent thread */
   };
 
-Every time a thread calls "exec", it will create a load_status struct,
-whose sema_load member is initialized as 0. The load_success member is
+Every time a thread calls exec(), a load_status struct is created with
+whose sema_load member initialized as 0. The load_success member is
 initialized as false, parent_thread member is initialized as current
-thread and file_path is initialized the path of the executable file. In
-process_execute, after calling "thread_create", current thread will wait
-until the child process finishes loading, no matter succeeds or fails.
-This is implemented by using sema_down(&ls.sema_load), here "ls" is an
+thread and cmd_line is initialized with the launch command line.
+
+In process_execute, after calling thread_create(), the current process will
+wait until the child process finishes loading, no matter succeeds or fails.
+The wait is triggered with sema_down on ls.sema_load, here "ls" is an
 instance of load_status. The load_status is passed to thread_create and
 start_process via "void *aux".
 
-Once the child process finishes loading, it will sema_up ls->sema_load.
+Once the child process finishes loading, it will sema_up on ls.sema_load.
 So the parent process has to wait until the child process sema_up
 ls->sema_load before it can continue to run. Since both the child
 process and the parent process can access the load_status struct, the
-parent thread can know the success/failure status from the load_sucess
-variable in the load_status struct. If load_success is true, "exec" will
-return pid of the child process. Otherwise, it will return -1.
+parent thread can know the success / failure status from the load_success
+variable in load_status struct. If load_success is true, exec() returns
+pid of the child process. Otherwise, it returns -1.
 
 If the child process loads successfully, it will generate its 
 exit_status and insert it into the child_exit_status list of its parent
 process. 
 
-Otherwise when exit_status is created for the child process,
-the ref_counter is initialized as 1. It will not be inserted into the 
-child_exit_status list of the parent process. Hence, this exit_status
-will be freed once the child process exits.
+Otherwise, if child process fails, the ref_counter in the child's exit_status
+is initialized as 1 and will not be inserted into the child_exit_status list
+of the parent process. Hence, this exit_status will be freed once the child 
+process exits.
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
