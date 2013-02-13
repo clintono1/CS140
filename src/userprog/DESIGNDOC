@@ -262,8 +262,8 @@ itself refer to it. This struct will not be released as long as ref_counter
 is not 0. Once a parent process or a child process exits, ref_counter is
 decremented by 1.
 
-Each process has a child_exist_status list which records the exit states
-of all its child processes. 
+Each process has a child_exist_status list which keeps track of the exit 
+states of all its child processes. 
 
 Whenever a process P1 waits on another process P2, P1 will check whether 
 the exit_status of process P2 is in the child_exit_status list of P1. If 
@@ -442,11 +442,11 @@ and destroy its page directory when it exits.
 
 The worst case we can think of is when P and C try to exit at the same 
 time. This scenario might pose serious race problems when P and C both 
-try to modify their ref_counters. We solve this by the counter_lock in
-each process' exit_status struct. When a process wants to modify the 
-ref_counter of some process, it has to wait for the counter_lock even 
-if it tries to modify its own ref_counter. In this way, we solve the
-"exiting at same time" problem.
+try to modify their ref_counters and the child_exit_status list. We 
+solve this issue with a counter_lock in each exit_status and a list_lock
+on the whole child_exit_status list. Though two locks here, we proved
+that there will not be race conditions with careful ordering and handling
+of the locks. Detailed discussion can be found in process.c line 217 - 281.
 
 
 ---- RATIONALE ----
