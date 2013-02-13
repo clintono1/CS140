@@ -56,7 +56,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   int * esp = (int *)f->esp;
   uint32_t arg1, arg2, arg3;
 
-  //TODO: this is for sc-bad-sp test. It passed. but is this check correct?
   if ( !valid_vaddr_range(esp, 0) )
     _exit(-1);
 
@@ -152,8 +151,7 @@ valid_vaddr_range(const void * vaddr, unsigned size)
   if (vaddr == NULL)
     return false;
   /* false type2: points to KERNEL virtual address space */
-  if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + size) 
-      || vaddr< 0x08048000)
+  if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + size))
     return false;
   /* false type3: points to unmapped virtual memory */
   if (!pagedir_get_page (thread_current()->pagedir, vaddr) || \
