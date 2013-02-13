@@ -454,18 +454,20 @@ if it tries to modify its own ref_counter. In this way, we solve the
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
 
-We chose to verify the validity of a user provided pointer inside the syscall 
-instead of in the page_fault exception handler. The steps was mentioned 
-above: 1) the pointer is not NULL. 2) the address is not in kernel address 
+There are three steps of verifying the validity of the user provided pointer:
+1) the pointer is not NULL 2) the address is not in kernel address 
 space 3) the virtual address is already mapped.
 
-This method is easy to implement but inferior in performance. Since it calls
-pagedir_get_page, a software address translation mechanism, which is slower
-than hardware translation in MMU.  If there are performance bottle necks, we 
-would handles page fault in page_fault exception handler. But to make address
-checking simple and as an integral, we just check it before every dereference.
+We chose to carry out the first two checks inside the syscall and the page map
+check inside page_fault exception handler. This is because the first two checks
+are just compares, which is simple and fast, so we did the checks at the 
+very begining of every syscall by calling valid_vaddr_range function. However,
+this is not the case when checking if a virtuall address is mapped. If this 
+were realized by calling pagedir_get_page, then it is a software address
+translation mechanism, which is slower than hardware translation in MMU. To
+make it faster, we did this inside the page_fault exception handler which is
+invoked by hardware address translation. The process is mentioned in B3. 
 
-//TODO: do you guys have some defense for our approach?
 
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
