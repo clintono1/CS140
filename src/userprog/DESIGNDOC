@@ -413,7 +413,7 @@ Therefore, we avoid race conditions.
 When P calls wait(C) after C exits, since C already increased the
 sema_wait variable when it exited, P will not wait on this when P calls
 sema_down on sema_wait. In this way, we achieve synchronization. There
-are no race conditions because only there is only one live process accessing
+are no race conditions because there is only one live process accessing
 that struct.
 
 In the above two cases, P always exits after C. Therefore, when C exits,
