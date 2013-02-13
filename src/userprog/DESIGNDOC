@@ -51,59 +51,33 @@ In <process.h>
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
-// TODO: the statement of following algorithm doesn't sound very clear to me
-          can you itemize it?
-// TODO: how can you make sure that the first word of the command line has fewer
-         than 15 characters?
-         for example: /path/to/the/bin/can/be/extremely/long/like/this/program
+The path to the executable file is the first string of the command line. 
+We implemented the function get_first_word() to extract the first word from 
+the command line. Since there are no subdirectories in this project and file 
+names are limited to 14 characters, defining MAX_FILE_LENGTH 16 is enough.
 
-The algorithm is as follows:
-process_execute() creates a thread that runs start_process().
-First, the thread's name should be the first word of the command line,
-thus we implement a function get_first_word() to extract the first word form 
-the command line as the user program's name. It's limited to 15 characters.
+At the end of the load() procedure we called the argument_passing procedure 
+to set up the stack for argument passing. The order of the elements of argv[]
+is ensured in this way:
 
-Inside start_process() it calls load(*filename, **esp,...), we implement a 
-procedure argument_passing(const char *filename, void **esp) to extract 
-all the arguments from filename and set up the stack inside this function. 
-The procedure is as follows:
+First, the number of arguments and the bytes of the chars (including '\0')
+are counted. The stack pointer is moved down by this number of bytes and this
+address is saved as arg_data. The stack pointer is further moved down by 
+(argc + 1) * sizeof (char*), and the address is saved as arg_pointer. 
 
---save a copy of the filename as cmd_line.
---*To ensure the elements of argv[] to be in the right order*, we iterates the 
-   arguments twice: in the first run we get the argc, in the second run we 
-   actually write them to stack. There's a trade-off of time and space.
-   
---Each char is exactly 1 byte, find total number of bytes for the argument, 
-   and find the total argument count (argc). That's done by find the number of
-   tokens separated by the delimiter " " in the cmd_line with strtok_r function.
+Then we writes the arguments and their pointers to arg_data and arg_pointer 
+respectively. Since both the argument and the pointer are put on the stack 
+from lower address to higher address, we ensured the sequence of the elements.
 
---*To avoid overflowing the stack page*, we check if the total stack space 
-   exceeds a page, must return false if so:
-   if (mem_size + (argc + 1) * sizeof(char*) + sizeof(char**) + sizeof(int)
-      > PGSIZE)   return false;		   
+Then we further decrease the stack pointer, writing the pointer to the first
+argument, argc and return address.
 
---ROUNRD_UP the cmd_line's length to multiples of 4 Byte as new length
-
---Decrease esp by length, set this as the start address of arg_data
-
---Decrease esp by the (number of arguments+1)*sizeof(char *). 
-   -The reason for +1 is due to putting a zero at the end of the pointers.
-   -Set this address as arg_pointer
-
---Iterate the cmd_line again by strtok(), for each token
-  -fill the argument's address into arg_pointer
-  -fill the argument string into arg_data
-  -update the arg_data by increasing the string length+1
-  -update the arg_pointer by increasing it sizeof(char *)
-  
---save the previous esp as argv, decrease esp by sizeof(char **)
-  -fill in esp's value as the address of argv[0]
-   
---decrease esp by sizeof(int)
-  -fill in esp's value as argc
-  
---decrease esp by sizeof(void *)
-  -fill in esp's value as the fake return address 0
+To avoid overflowing the stack page, whether the total stack space exceeds a 
+page was checked. This is done by summing the space of argument strings, the 
+string pointers, the pointer to the pointer, the integer value, and the 
+pointer of return address. If the total space exceeds a page, return false. 
+Note that the space occupied by the arguments is ROUNRD_UP to multiples
+of 4 Byte for alignment. 
 
 
 ---- RATIONALE ----
