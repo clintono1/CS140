@@ -194,22 +194,19 @@ to check the validity of this pointer. There are three steps:
    is above PHYS_BASE, return false.
 3. Since code starts from 0x0804800, if the pointer is lower than this value,
    return false.
-// TODO: where does the following line come from?
-4. If the pointer points to unmapped virtual memory. This is done by 
-   calling pagedir_get_page function in pagedir.c. If it returns false, then 
-   it means that this page is unmapped.
-
-If the pointer points to unmapped or unallocated virtual memory, a page fault is
-triggered. We handle this scenario in the page_fault() system call.
-
-// TODO: do we need this?
-[File descriptor check]
-Another thing to verify is the file descriptors.
-We implemented the function valid_file_handler to do this. This
-function takes a thread and a file descriptor. It first check the file 
-descriptor is within the range of current thread's file_handlers_size, then 
-we check if the thread's file_handlers[fd] is NULL. For both cases we return 
-false meaning the file descriptor passed by the user is invalid.
+4. If the pointer points to unmapped or unallocated virtual memory, a page 
+   fault is triggered. We handle this scenario in the page_fault() exception
+   handler. First, each thread structure is added with a flag in_syscall
+   indicating whether it's currently inside a syscall. The exception handler
+   is modified such that if the page fault happened in kernel mode and not 
+   inside syscall, the OS must die. However, if the page fault happened in 
+   user mode or in syscalls, the process dies by calling exit(-1) but the 
+   OS won't die. 
+   One alternative of checking pagefault is by calling pagedir_get_page 
+   function before derefencing a pointer. If it returns false, then it means 
+   that this page is unmapped. However, this approach is slow because a software
+   virtuall adress translation is conducted in this function, which is slower
+   than hardware translation.
 
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
@@ -227,12 +224,11 @@ So it is the case when we copy only 2 bytes of data: they could also span two
 pages. If so, both the beginning and the end have to be checked. So in both 
 cases, we have to check twice to be robust. 
 
-One possible solution is to implement the check inside page_fault() function.
+One solution is to implement the check inside page_fault() exception hander. 
 If every reference is mapped, then life is easy and we needn't pay the overhead
 of checking. If page fault did happen, then we only have to handle these edge
-cases, which is rare.
-
-//TODO: should say more.
+cases, which is rare. This is also faster because this exception is detected
+by the MMU hardware, not through software translation.
 
 
 >> B5: Briefly describe your implementation of the "wait" system call
