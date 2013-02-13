@@ -430,7 +430,10 @@ argument_pasing(char *cmd_line, char **esp)
   if (cmd_line == NULL)
     return 0;
 
-  /* Calculate the number of arguments and argument size */
+  /* First, the number of arguments and the bytes of the chars (including '\0')
+     are counted. The stack pointer is moved down by this bytes, this adress is
+     recorded as arg_data. The stack pointer is further moved down by
+     (argc + 1) * sizeof (char*), and the address is recorded as arg_pointer. */
   argc_counter (cmd_line, &argc, &char_cnt );
   mem_size = char_cnt + argc;
 
@@ -438,8 +441,8 @@ argument_pasing(char *cmd_line, char **esp)
   mem_size = ROUND_UP (mem_size, sizeof(int));
 
   /* Check if the argument size is greater than a page */
-  if (mem_size + (argc + 1) * sizeof(char*) + sizeof(char**) + sizeof(int)
-      > PGSIZE)
+  if ( mem_size + (argc + 1) * sizeof(char*) + sizeof(char**) + sizeof(int)
+       + sizeof(void *) > PGSIZE )
     return false;
 
   *esp -= mem_size;
@@ -448,6 +451,10 @@ argument_pasing(char *cmd_line, char **esp)
   *esp -= (argc + 1) * sizeof(char*);
   arg_pointer = (char**)(*esp);
 
+  /* Then we writes the argument string and their address to arg_data and
+     arg_pointer respectively. Since both the arguement and the pointer are put
+     on the stack from lower address to higher address, we ensured the sequence
+     of the elements. */
   for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
     token = strtok_r (NULL, " ", &save_ptr))
   {
@@ -459,12 +466,13 @@ argument_pasing(char *cmd_line, char **esp)
   }
   *arg_pointer = 0;
 
-  /* Save and decrease the stack pointer */
   arg_pointer = (char **)(*esp);
+
+  /* Decrease the stack pointer, write the pointer to the first argument */
   *esp -= sizeof(char **);
   WRITE_BYTE_4(esp, *esp+4);
 
-  /* Decrease the stack pointer */
+  /* Decrease the stack pointer, write argc and return address */
   *esp -= sizeof(int);
   WRITE_BYTE_4(esp, argc);
   *esp -= sizeof(void*);
