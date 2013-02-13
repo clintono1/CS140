@@ -59,7 +59,7 @@ process_execute (const char *cmd_line)
   struct load_status ls;
   sema_init (&ls.sema_load, 0);
   ls.load_success = false;
-  ls.file_path = fn_copy;
+  ls.cmd_line = fn_copy;
   ls.parent_thread = thread_current();
 
   /* Create a new thread to execute FILE_PATH. */
@@ -88,7 +88,7 @@ start_process (void *aux)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (ls->file_path, &if_.eip, &if_.esp);
+  success = load (ls->cmd_line, &if_.eip, &if_.esp);
 
   /* Set load result */
   ls->load_success = success;
@@ -97,7 +97,9 @@ start_process (void *aux)
   {
     struct thread *t = thread_current();
     /* Deny writes to the executable file */
-    t->process_file = filesys_open(ls->file_path);
+    char file_path[MAX_FILE_LENGTH];
+    get_first_string (ls->cmd_line, file_path);
+    t->process_file = filesys_open (file_path);
     file_deny_write (t->process_file);
 
     /* Set is_kernel to false since it is used by a user process */
@@ -115,7 +117,7 @@ start_process (void *aux)
   sema_up (&ls->sema_load);
 
   /* If load failed, quit. */
-  palloc_free_page (ls->file_path);
+  palloc_free_page (ls->cmd_line);
   if (!success)
   {
     /* Set ref_counter to 1 so that it can be collected */
@@ -489,8 +491,8 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Extract the path to the executable file */
-  char file_path[16];
-  get_first_string(cmd_line, file_path);
+  char file_path[MAX_FILE_LENGTH];
+  get_first_string (cmd_line, file_path);
   /* Open executable file. */
   file = filesys_open (file_path);
   if (file == NULL) 

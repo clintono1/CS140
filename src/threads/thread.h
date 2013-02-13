@@ -144,7 +144,7 @@ struct load_status
   {
     struct semaphore sema_load;         /* Semaphore to sync on load() */
     bool load_success;                  /* True if load successfully */
-    char *file_path;                    /* Path of the executable file */
+    char *cmd_line;                     /* Command line to launch the process */
     struct thread *parent_thread;       /* Pointer to the parent thread */
   };
 

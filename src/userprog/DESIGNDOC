@@ -43,7 +43,7 @@ None.
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
 In <process.h>
-  #define MAX_FILE_LENGTH 15   /* Max length of file name */
+  #define MAX_FILE_LENGTH 16   /* Max length of file name */
 
 ---- ALGORITHMS ----
 
@@ -178,7 +178,7 @@ In <thread.h>
     {
       struct semaphore sema_load;       /* Semaphore to sync on load() */
       bool load_success;                /* True if load successfully */
-      char *file_path;                  /* Path of the executable file */
+      char *cmd_line;                   /* Command line to launch the process */
       struct thread *parent_thread;     /* Pointer to the parent thread */
     };
 
