@@ -280,10 +280,10 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   if(thread_mlfqs ){
-    list_push_back (&ready_list[63- (t->priority)], &t->elem);
+    list_push_back (&ready_list[PRI_MAX- (t->priority)], &t->elem);
   }
   else{
-    list_push_back (&ready_list[63- (t->eff_priority)], &t->elem);
+    list_push_back (&ready_list[PRI_MAX- (t->eff_priority)], &t->elem);
   }
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -359,11 +359,11 @@ thread_yield (void)
   {
     if (thread_mlfqs)
     {
-      list_push_back (&ready_list[ 63-(cur->priority) ], &cur->elem);
+      list_push_back (&ready_list[ PRI_MAX-(cur->priority) ], &cur->elem);
     } 
     else
     {
-      list_push_back (&ready_list[ 63-(cur->eff_priority) ], &cur->elem);
+      list_push_back (&ready_list[ PRI_MAX-(cur->eff_priority) ], &cur->elem);
     }
   }
    
@@ -519,7 +519,7 @@ calculate_priority_advanced(struct thread * th)
     if ( th!=thread_current() && th->status == THREAD_READY)
     {
       list_remove(&th->elem);      
-      list_push_back (&ready_list[63- (th->priority)], &th->elem);
+      list_push_back (&ready_list[PRI_MAX- (th->priority)], &th->elem);
     }
   }
 }
