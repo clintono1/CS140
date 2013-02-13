@@ -414,9 +414,12 @@ return pid of the child process. Otherwise, it will return -1.
 
 If the child process loads successfully, it will generate its 
 exit_status and insert it into the child_exit_status list of its parent
-process. Otherwise no exit_status will be created for the child process
-and nothing will be inserted into the child_exit_status list of the
-parent process.
+process. 
+
+Otherwise when exit_status is created for the child process,
+the ref_counter is initialized as 1. It will not be inserted into the 
+child_exit_status list of the parent process. Hence, this exit_status
+will be freed once the child process exits.
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
