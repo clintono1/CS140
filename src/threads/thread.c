@@ -444,7 +444,10 @@ thread_set_eff_priority (struct thread *t, int eff_priority)
   if (l != NULL)
   {
     struct thread *holder = l->holder;
-    list_sort (&l->semaphore.waiters, priority_greater_or_equal, NULL);
+    list_remove (&t->elem);
+    list_insert_ordered (&l->semaphore.waiters, &t->elem,
+        priority_greater_or_equal, NULL);
+
     if (eff_priority > holder->eff_priority)
     {
       thread_set_eff_priority (holder, eff_priority);
