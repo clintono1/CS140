@@ -68,9 +68,8 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      /* Insert the thread to the waiting list in order */
-      list_insert_ordered (&(sema->waiters), &thread_current()->elem,
-                           priority_greater_or_equal, NULL);
+      /* Insert the thread to the waiting list */
+      list_push_back (&(sema->waiters), &thread_current()->elem);
       thread_block ();
     }
   sema->value--;
@@ -118,11 +117,13 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) 
   {
-    list_sort(&sema->waiters, priority_greater_or_equal, NULL);
+    struct list_elem *max_prio_elem;
+    max_prio_elem = list_min (&sema->waiters, priority_greater_or_equal, NULL);
+    list_remove (max_prio_elem);
 
     /* Since sema->waiters are ordered by priorities, the first one is the one
        with the largest priority */
-    struct thread *next_thread = list_entry (list_pop_front (&sema->waiters),
+    struct thread *next_thread = list_entry (max_prio_elem,
                                              struct thread, elem);
 
     if(!thread_mlfqs){
@@ -452,8 +453,8 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   if (!list_empty (&cond->waiters))
   {
     struct list_elem *max_prio_elem;
-    max_prio_elem = list_max(&cond->waiters, sema_priority_less, NULL);
-    list_remove(max_prio_elem);
+    max_prio_elem = list_max (&cond->waiters, sema_priority_less, NULL);
+    list_remove (max_prio_elem);
     sema_up (&list_entry (max_prio_elem,
                           struct semaphore_elem, elem)->semaphore);
   }
