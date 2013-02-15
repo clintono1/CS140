@@ -95,7 +95,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
   int i;
   lock_init (&tid_lock);
-  for (i=0; i<64; i++)
+  for (i = 0; i < 64; i++)
     list_init (&ready_list[i]);
 
   list_init (&all_list);
@@ -279,15 +279,20 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  if(thread_mlfqs ){
+  if( thread_mlfqs )
+  {
+    /* An element to be pushed into ready list should not be in any list */
+    ASSERT (t->elem.prev == NULL && t->elem.next == NULL);
     list_push_back (&ready_list[PRI_MAX- (t->priority)], &t->elem);
   }
-  else{
+  else
+  {
+    /* An element to be pushed into ready list should not be in any list */
+    ASSERT (t->elem.prev == NULL && t->elem.next == NULL);
     list_push_back (&ready_list[PRI_MAX- (t->eff_priority)], &t->elem);
   }
   t->status = THREAD_READY;
   intr_set_level (old_level);
-
 }
 
 /* Returns the name of the running thread. */
@@ -359,10 +364,14 @@ thread_yield (void)
   {
     if (thread_mlfqs)
     {
+      /* An element to be pushed into ready list should not be in any list */
+      ASSERT (cur->elem.prev == NULL && cur->elem.next == NULL);
       list_push_back (&ready_list[ PRI_MAX-(cur->priority) ], &cur->elem);
     } 
     else
     {
+      /* An element to be pushed into ready list should not be in any list */
+      ASSERT (cur->elem.prev == NULL && cur->elem.next == NULL);
       list_push_back (&ready_list[ PRI_MAX-(cur->eff_priority) ], &cur->elem);
     }
   }
@@ -397,30 +406,28 @@ thread_set_priority (int new_priority)
   old_level = intr_disable ();
   
   bool yield_on_return = false;
-  struct thread *t = thread_current ();
-  int old_priority = t->priority;
-  if (new_priority == t->priority)
+  struct thread *cur = thread_current ();
+  int old_priority = cur->priority;
+  if (new_priority == cur->priority)
     return;
-  t->priority = new_priority;
+  cur->priority = new_priority;
   if (!thread_mlfqs)
   {
-
       if (new_priority > thread_current()->eff_priority)
       {
-        thread_set_eff_priority (t, new_priority);
+        thread_set_eff_priority (cur, new_priority);
       }
       else
       {
-        int new_eff_priority = thread_find_max_priority (t);
-        thread_set_eff_priority (t, new_eff_priority);
+        int new_eff_priority = thread_find_max_priority (cur);
+        thread_set_eff_priority (cur, new_eff_priority);
         yield_on_return = true;
       }
   }
   else
   {
-      if (new_priority < old_priority)
-		yield_on_return = true;
-
+    if (new_priority < old_priority)
+		  yield_on_return = true;
   }
   intr_set_level (old_level);
 
@@ -459,6 +466,16 @@ thread_set_eff_priority (struct thread *t, int eff_priority)
       {
         thread_set_eff_priority (holder, p);
       }
+    }
+  }
+  else
+  {
+    /* If the thread being updated is in the ready list, move it to the right
+       priority level */
+    if (t->elem.prev != NULL && t->elem.next != NULL)
+    {
+      list_remove (&t->elem);
+      list_push_back (&ready_list[PRI_MAX- (t->eff_priority)], &t->elem);
     }
   }
 }
@@ -521,7 +538,7 @@ calculate_priority_advanced(struct thread * th)
       th->priority = PRI_MIN;
     if ( th!=thread_current() && th->status == THREAD_READY)
     {
-      list_remove(&th->elem);      
+      list_remove(&th->elem);
       list_push_back (&ready_list[PRI_MAX- (th->priority)], &th->elem);
     }
   }
@@ -738,6 +755,9 @@ init_thread (struct thread *t, const char *name, int priority)
 
   t->is_kernel = true;
   t->in_syscall = false;
+
+  t->elem.prev = NULL;
+  t->elem.next = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

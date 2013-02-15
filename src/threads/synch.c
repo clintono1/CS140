@@ -68,6 +68,9 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
+      /* An element already in a list should not be added to another one */
+      ASSERT (thread_current()->elem.prev == NULL &&
+              thread_current()->elem.next == NULL);
       /* Insert the thread to the waiting list */
       list_push_back (&(sema->waiters), &thread_current()->elem);
       thread_block ();
@@ -222,7 +225,7 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   struct semaphore *sema = &lock->semaphore;
-  struct thread *t = thread_current();
+  struct thread *cur = thread_current();
   enum intr_level old_level;
   ASSERT (sema != NULL);
   ASSERT (!intr_context ());
@@ -231,31 +234,34 @@ lock_acquire (struct lock *lock)
   while (sema->value == 0)
   {
     struct thread *holder = lock->holder;
-    t->lock_to_acquire = lock;
+    cur->lock_to_acquire = lock;
 
     /* If this lock has not been added to the holder's waited_locks_by_others
        list, do it. */
     if (!list_elem_exist (&holder->locks_waited_by_others, &lock->thread_elem))
       list_push_back (&holder->locks_waited_by_others,  &lock->thread_elem);
 
+    /* Current thread is running, thus it should not be in any list */
+    ASSERT (cur->elem.prev == NULL && cur->elem.next == NULL);
+
     /* Insert the thread to the waiting list in order */  
-    list_insert_ordered (&(sema->waiters), &t->elem,
+    list_insert_ordered (&(sema->waiters), &cur->elem,
                          priority_greater_or_equal, NULL);
 
     if(!thread_mlfqs)
     {
       /* If this requesting thread's eff_priority is higher than that of the
        holder thread, do priority donation */
-      if (t->eff_priority > holder->eff_priority)
-        thread_set_eff_priority (holder, t->eff_priority);
+      if (cur->eff_priority > holder->eff_priority)
+        thread_set_eff_priority (holder, cur->eff_priority);
     }
     thread_block ();
   }
   sema->value--;
 
   /* Lock acquired. Thus reset lock_to_acquire and set holder */
-  t->lock_to_acquire = NULL;
-  lock->holder = t;
+  cur->lock_to_acquire = NULL;
+  lock->holder = cur;
 
   intr_set_level (old_level);
 }
@@ -304,7 +310,9 @@ lock_release (struct lock *lock)
        with the largest priority */
     struct thread *next_thread = list_entry (list_pop_front (&sema->waiters),
                                              struct thread, elem);
+
     struct thread *holder = lock->holder;
+    ASSERT (holder == thread_current());
 
     /* The effective priority of the waiting thread should never be larger
        than that of the lock holder thread */
@@ -313,7 +321,8 @@ lock_release (struct lock *lock)
     }
 
     /* Remove the lock from the thread's locks_waited_by_others */
-    list_remove(&lock->thread_elem);
+    if (lock->thread_elem.prev != NULL && lock->thread_elem.next != NULL)
+      list_remove (&lock->thread_elem);
 
     if(!thread_mlfqs)
     {
@@ -329,12 +338,12 @@ lock_release (struct lock *lock)
 
       /* If new effective priority is smaller than that of the next to run,
          the holder thread should yield after releasing the lock */
-      if (thread_current()->eff_priority < next_thread->eff_priority)
+      if (holder->eff_priority < next_thread->eff_priority)
         yield_on_return = true;
     }
     else
     {
-      if (thread_current()->priority < next_thread->priority)
+      if (holder->priority < next_thread->priority)
         yield_on_return = true;
     }
 
