@@ -1,8 +1,7 @@
 #include "vm/frame.h"
-#include "threads/palloc.h"
 
 void *
-vm_allocate_frame(enum palloc_flags){
+vm_allocate_frame(enum palloc_flags flags){
 	void *frame = NULL;
 	if(flags & PAL_USER){
 		if(flags & PAL_ZERO){
@@ -12,9 +11,11 @@ vm_allocate_frame(enum palloc_flags){
 			frame = palloc_get_page(PAL_USER);
 		}
 	}
-	if(frame)
+	if(frame){
 		/* add to frame list */
-	else
+	}
+	else{
 		/* eviction */
+	}
 	return frame;
 }
