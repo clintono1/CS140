@@ -8,14 +8,13 @@
 #include "threads/thread.h"
 #include "userprog/pagedir.h"
 
-struct frame_table
+/* Frame table entry */
+struct fte
 {
   uint8_t *kpage;
   uint8_t *upage;//these two have the same usage: to read the reference/dirty bit. choose one later
   uint32_t *pte;//these two have the same usage: to read the reference/dirty bit. choose one later
   struct thread *t;
-  int recent;
-
   struct list_elem elem;
 };
 

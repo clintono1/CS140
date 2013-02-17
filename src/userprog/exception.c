@@ -8,8 +8,6 @@
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
-extern struct lock global_lock_filesys;
-
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 
