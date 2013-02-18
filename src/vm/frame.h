@@ -8,16 +8,25 @@
 #include "threads/thread.h"
 #include "userprog/pagedir.h"
 
-/* Frame table entry */
-struct fte
+#define FRAME_TABLE_ERROR SIZE_MAX
+#define KERNEL_PAGE_TABLE_BASE 0x00010000
+
+/* Frame table */
+struct frame_table
 {
-  uint8_t *kpage;
-  uint8_t *upage;//these two have the same usage: to read the reference/dirty bit. choose one later
-  uint32_t *pte;//these two have the same usage: to read the reference/dirty bit. choose one later
-  struct thread *t;
-  struct list_elem elem;
+  size_t page_cnt;
+  uint32_t **frames;
 };
 
-void *vm_allocate_frame(enum palloc_flags flags, uint8_t *upage);
+size_t frame_table_size (size_t page_cnt);
+void frame_table_create (struct frame_table *ft, size_t page_cnt,
+                         void *block, size_t block_size UNUSED);
+size_t frame_table_scan_and_set (struct frame_table *ft, size_t start,
+                                 size_t cnt, uint8_t *vaddr);
+bool frame_table_all (const struct frame_table *ft, size_t start, size_t cnt);
+void frame_table_set_multiple (struct frame_table *ft, size_t start,
+                               size_t cnt, uint32_t *start_pte_addr);
+
+
 
 #endif /* vm/frame.h */

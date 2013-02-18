@@ -10,6 +10,7 @@
 #include "threads/loader.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "vm/frame.h"
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -29,7 +30,7 @@
 struct pool
   {
     struct lock lock;                   /* Mutual exclusion. */
-    struct bitmap *used_map;            /* Bitmap of free pages. */
+    struct frame_table frame_table;     /* Frame table of the pool */
     uint8_t *base;                      /* Base of pool. */
   };
 
@@ -68,7 +69,7 @@ palloc_init (size_t user_page_limit)
    available, returns a null pointer, unless PAL_ASSERT is set in
    FLAGS, in which case the kernel panics. */
 void *
-palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
+palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
 {
   struct pool *pool = flags & PAL_USER ? &user_pool : &kernel_pool;
   void *pages;
@@ -78,10 +79,10 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
     return NULL;
 
   lock_acquire (&pool->lock);
-  page_idx = bitmap_scan_and_flip (pool->used_map, 0, page_cnt, false);
+  page_idx = frame_table_scan_and_set(&pool->frame_table, 0, page_cnt, vaddr);
   lock_release (&pool->lock);
 
-  if (page_idx != BITMAP_ERROR)
+  if (page_idx != FRAME_TABLE_ERROR)
     pages = pool->base + PGSIZE * page_idx;
   else
     pages = NULL;
@@ -108,9 +109,9 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
    available, returns a null pointer, unless PAL_ASSERT is set in
    FLAGS, in which case the kernel panics. */
 void *
-palloc_get_page (enum palloc_flags flags) 
+palloc_get_page (enum palloc_flags flags, uint8_t *vaddr)
 {
-  return palloc_get_multiple (flags, 1);
+  return palloc_get_multiple (flags, 1, vaddr);
 }
 
 /* Frees the PAGE_CNT pages starting at PAGES. */
@@ -137,8 +138,8 @@ palloc_free_multiple (void *pages, size_t page_cnt)
   memset (pages, 0xcc, PGSIZE * page_cnt);
 #endif
 
-  ASSERT (bitmap_all (pool->used_map, page_idx, page_cnt));
-  bitmap_set_multiple (pool->used_map, page_idx, page_cnt, false);
+  ASSERT (frame_table_all (&pool->frame_table, page_idx, page_cnt));
+  frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt, NULL);
 }
 
 /* Frees the page at PAGE. */
@@ -153,30 +154,26 @@ palloc_free_page (void *page)
 static void
 init_pool (struct pool *p, void *base, size_t page_cnt, const char *name) 
 {
-  /* We'll put the pool's used_map at its base.
-     Calculate the space needed for the bitmap
-     and subtract it from the pool's size. */
-  size_t bm_pages = DIV_ROUND_UP (bitmap_buf_size (page_cnt), PGSIZE);
-  if (bm_pages > page_cnt)
-    PANIC ("Not enough memory in %s for bitmap.", name);
-  page_cnt -= bm_pages;
+  size_t ft_pages = DIV_ROUND_UP (frame_table_size (page_cnt), PGSIZE);
+  if (ft_pages > page_cnt)
+    PANIC ("Not enough memory in %s for frame table.", name);
+  page_cnt -= ft_pages;
 
   printf ("%zu pages available in %s.\n", page_cnt, name);
 
   /* Initialize the pool. */
-  lock_init (&p->lock);
-  p->used_map = bitmap_create_in_buf (page_cnt, base, bm_pages * PGSIZE);
-  p->base = base + bm_pages * PGSIZE;
+  frame_table_create (&p->frame_table, page_cnt, base, ft_pages * PGSIZE);
+  p->base = base + ft_pages * PGSIZE;
 }
 
 /* Returns true if PAGE was allocated from POOL,
    false otherwise. */
 static bool
-page_from_pool (const struct pool *pool, void *page) 
+page_from_pool (const struct pool *pool, void *page)
 {
   size_t page_no = pg_no (page);
   size_t start_page = pg_no (pool->base);
-  size_t end_page = start_page + bitmap_size (pool->used_map);
+  size_t end_page = start_page + pool->frame_table.page_cnt;
 
   return page_no >= start_page && page_no < end_page;
 }

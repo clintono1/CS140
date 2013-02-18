@@ -1,5 +1,5 @@
 #include "page.h"
-#include "hash.h"
+#include "threads/pte.h"
 
 unsigned
 suppl_pte_hash_func (const struct hash_elem *e, void *aux)

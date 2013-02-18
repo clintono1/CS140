@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/synch.h"
 #include "threads/malloc.h"
+#include "threads/pte.h"
 
 // TODO: Remove before submit
 #ifndef USERPROG

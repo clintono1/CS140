@@ -162,7 +162,7 @@ paging_init (void)
   size_t page;
   extern char _start, _end_kernel_text;
 
-  pd = init_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO);
+  pd = init_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO, NULL);
   pt = NULL;
   for (page = 0; page < init_ram_pages; page++)
     {
@@ -174,7 +174,7 @@ paging_init (void)
 
       if (pd[pde_idx] == 0)
         {
-          pt = palloc_get_page (PAL_ASSERT | PAL_ZERO);
+          pt = palloc_get_page (PAL_ASSERT | PAL_ZERO, NULL);
           pd[pde_idx] = pde_create (pt);
         }
 

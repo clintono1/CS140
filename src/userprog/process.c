@@ -51,7 +51,7 @@ process_execute (const char *cmd_line)
 
   /* Make a copy of CMD_LINE.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
+  fn_copy = palloc_get_page (0, NULL);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, cmd_line, PGSIZE);
@@ -686,7 +686,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = vm_allocate_frame (PAL_USER);
+      uint8_t *kpage = palloc_get_page (PAL_USER, upage);
       if (kpage == NULL)
         return false;
 
@@ -720,11 +720,12 @@ setup_stack (void **esp)
 {
   uint8_t *kpage;
   bool success = false;
+  uint8_t *va = ((uint8_t *) PHYS_BASE) - PGSIZE;
 
-  kpage = vm_allocate_frame (PAL_USER | PAL_ZERO);
+  kpage = palloc_get_page (PAL_USER | PAL_ZERO, va);
   if (kpage != NULL) 
     {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+      success = install_page (va, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else

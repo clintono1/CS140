@@ -41,7 +41,7 @@ fsutil_cat (char **argv)
   file = filesys_open (file_name);
   if (file == NULL)
     PANIC ("%s: open failed", file_name);
-  buffer = palloc_get_page (PAL_ASSERT);
+  buffer = palloc_get_page (PAL_ASSERT, NULL);
   for (;;) 
     {
       off_t pos = file_tell (file);

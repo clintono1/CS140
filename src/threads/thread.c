@@ -185,7 +185,7 @@ thread_create (const char *name, int priority,
   ASSERT (function != NULL);
 
   /* Allocate thread. */
-  t = palloc_get_page (PAL_ZERO);
+  t = palloc_get_page (PAL_ZERO, NULL);
   if (t == NULL)
     return TID_ERROR;
 

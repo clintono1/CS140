@@ -2,6 +2,9 @@
 #define THREADS_PTE_H
 
 #include "threads/vaddr.h"
+#include "filesys/off_t.h"
+#include "hash.h"
+#include "list.h"
 
 /* Functions and macros for working with x86 hardware page
    tables.

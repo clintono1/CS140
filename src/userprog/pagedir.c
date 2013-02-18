@@ -16,7 +16,7 @@ static void invalidate_pagedir (uint32_t *);
 uint32_t *
 pagedir_create (void) 
 {
-  uint32_t *pd = palloc_get_page (0);
+  uint32_t *pd = palloc_get_page (0, NULL);
   if (pd != NULL)
     memcpy (pd, init_page_dir, PGSIZE);
   return pd;
@@ -53,7 +53,7 @@ pagedir_destroy (uint32_t *pd)
    on CREATE.  If CREATE is true, then a new page table is
    created and a pointer into it is returned.  Otherwise, a null
    pointer is returned. */
-static uint32_t *
+uint32_t *
 lookup_page (uint32_t *pd, const void *vaddr, bool create)
 {
   uint32_t *pt, *pde;
@@ -70,7 +70,7 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
     {
       if (create)
         {
-          pt = palloc_get_page (PAL_ZERO);
+          pt = palloc_get_page (PAL_ZERO, NULL);
           if (pt == NULL) 
             return NULL; 
       
