@@ -1,6 +1,6 @@
 #include "vm/frame.h"
 #include "threads/vaddr.h"
-
+#include <string.h>
 
 /* Finds and returns the starting index of the first group of CNT
    consecutive empty frame table entries in FT at or after START.
@@ -71,7 +71,7 @@ frame_table_create (struct frame_table *ft, size_t page_cnt, void *block,
 
   ft->page_cnt = page_cnt;
   ft->frames = (uint32_t **) block;
-  memset (ft->frames, 0, page_cnt * sizeof(uint32_t*));
+  memset ((void *) ft->frames, 0, page_cnt * sizeof(uint32_t*));
 }
 
 /* Returns TRUE if all frame table entries from START to START + CNT are used*/

@@ -1,17 +1,17 @@
 #include "page.h"
 #include "threads/pte.h"
 
-unsigned
-suppl_pte_hash_func (const struct hash_elem *e, void *aux)
+static unsigned
+suppl_pte_hash_func (const struct hash_elem *e, void *aux UNUSED)
 {
   struct suppl_pte *spte = hash_entry (e, struct suppl_pte, elem_hash);
   return spte->va;
 }
 
-bool
+static bool
 suppl_pte_hash_less (const struct hash_elem *a,
                      const struct hash_elem *b,
-                     void *aux)
+                     void *aux UNUSED)
 {
   struct suppl_pte *spte_a = hash_entry (a, struct suppl_pte, elem_hash);
   struct suppl_pte *spte_b = hash_entry (b, struct suppl_pte, elem_hash);

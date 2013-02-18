@@ -21,7 +21,9 @@
 #include "vm/page.h"
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool load (const char *cmd_line, void (**eip) (void), void **esp);
+void argc_counter(const char*str, int *word_cnt, int *char_cnt);
+bool argument_pasing (const char *cmd_line, char **esp);
 
 extern struct lock global_lock_filesys;
 
@@ -29,8 +31,8 @@ extern struct lock global_lock_filesys;
 
 void get_first_string (const char * src_str, char *dst_str)
 {
-  char * begin = src_str;
-  char * end;
+  const char *begin = src_str;
+  const char *end;
   while (*begin == ' ')
     begin ++;
   end = begin;
@@ -405,7 +407,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 void
 argc_counter(const char*str, int *word_cnt, int *char_cnt)
 {
-  char *begin = str;
+  const char *begin = str;
   int in_word = 0;
   do
   {
@@ -425,7 +427,7 @@ argc_counter(const char*str, int *word_cnt, int *char_cnt)
 }
 
 bool
-argument_pasing (char *cmd_line, char **esp)
+argument_pasing (const char *cmd_line, char **esp)
 {
   int argc = 0;
   int char_cnt = 0;
@@ -461,7 +463,7 @@ argument_pasing (char *cmd_line, char **esp)
      arg_pointer respectively. Since both the arguement and the pointer are put
      on the stack from lower address to higher address, we ensured the sequence
      of the elements. */
-  for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
+  for (token = strtok_r ((char*) cmd_line, " ", &save_ptr); token != NULL;
     token = strtok_r (NULL, " ", &save_ptr))
   {
     strlcpy (arg_data, token, strlen(token) + 1);
@@ -482,7 +484,7 @@ argument_pasing (char *cmd_line, char **esp)
   *esp -= sizeof (int);
   WRITE_BYTE_4 (esp, argc);
   *esp -= sizeof (void*);
-  **esp = NULL;
+  **esp = 0;
 
   return true;
 }
@@ -492,7 +494,7 @@ argument_pasing (char *cmd_line, char **esp)
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
-bool
+static bool
 load (const char *cmd_line, void (**eip) (void), void **esp)
 {
   struct thread *t = thread_current ();
@@ -595,7 +597,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   if (!setup_stack (esp))
     goto done;
 
-  success = argument_pasing(cmd_line, esp);
+  success = argument_pasing (cmd_line, (char **) esp);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
