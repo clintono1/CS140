@@ -12,6 +12,8 @@
 #include "threads/vaddr.h"
 #include "vm/frame.h"
 
+extern uint32_t *init_page_dir;
+
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
    hands out smaller chunks.
@@ -74,7 +76,6 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
   struct pool *pool = flags & PAL_USER ? &user_pool : &kernel_pool;
   void *pages;
   size_t page_idx;
-  uint32_t *pte_addr;
 
   if (page_cnt == 0)
     return NULL;
@@ -85,20 +86,17 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
   {
     if (flags & PAL_USER)
     {
-      struct thread *cur = thread_current ();
-      int i;
-      for (i = 0; i < page_cnt; i++)
-      {
-        pte_addr = lookup_page (cur->pagedir, vaddr + i * PGSIZE, true);
-        frame_table_set_multiple (&pool->frame_table, idx, 1, pte_addr);
-      }
+      ASSERT (pg_ofs (vaddr) == 0);
+      frame_table_set_multiple (&pool->frame_table, idx, page_cnt,
+                                thread_current ()->pagedir, vaddr, true);
     }
     else
     {
       ASSERT (vaddr == NULL);
-      pte_addr = lookup_page ((uint32_t *) KERNEL_PAGE_DIR,
-                              pool->base + idx * PGSIZE, false);
-      frame_table_set_multiple (&pool->frame_table, idx, page_cnt, pte_addr);
+      uint32_t *pd = init_page_dir ? init_page_dir : KERNEL_PAGE_DIR;
+      uint8_t *kpage = pool->base + idx * PGSIZE;
+      frame_table_set_multiple (&pool->frame_table, idx, page_cnt,
+                                pd, kpage, false);
     }
   }
   lock_release (&pool->lock);
@@ -160,7 +158,11 @@ palloc_free_multiple (void *pages, size_t page_cnt)
 #endif
 
   ASSERT (frame_table_all (&pool->frame_table, page_idx, page_cnt));
-  frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt, NULL);
+  size_t i;
+  for (i = 0; i < page_cnt; i++)
+  {
+    pool->frame_table.frames[page_idx + i] = NULL;
+  }
 }
 
 /* Frees the page at PAGE. */

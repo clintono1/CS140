@@ -13,12 +13,12 @@ frame_table_scan (struct frame_table *ft, size_t start, size_t cnt)
 
   if (cnt > 0 && cnt <= ft->page_cnt)
   {
-    int i;
+    size_t i;
     for (i = start; i < ft->page_cnt - cnt + 1; i++)
     {
       if (ft->frames[i] == NULL)
       {
-        int j;
+        size_t j;
         for (j = 1; j < cnt; j++)
           if (ft->frames[i + j] != NULL)
             break;
@@ -32,19 +32,22 @@ frame_table_scan (struct frame_table *ft, size_t start, size_t cnt)
   return FRAME_TABLE_ERROR;
 }
 
-/* Sets the CNT frame table entries to addresses starting at START_PTE_ADDR
-   If START_PTE_ADDR is NULL, then set all CNT frame table entries to NULL */
+/* Set the CNT consecutive frame table entries in FT starting at index START
+   to the virtual addresses of PTEs pointing to consecutive pages starting
+   at VADDR according to page directory PD.
+   Create a new page table if not found and CREATE is true. */
 void
-frame_table_set_multiple (struct frame_table *ft, size_t start,
-                          size_t cnt, uint32_t *start_pte_addr)
+frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
+                          uint32_t *pd, uint8_t *vaddr, bool create)
 {
-  ASSERT (ft != NULL);
-  ASSERT (start <= ft->page_cnt);
-  ASSERT (start + cnt <= ft->page_cnt);
-
-  int i;
+  ASSERT(pg_ofs (vaddr) == 0);
+  uint32_t *pte_addr;
+  size_t i;
   for (i = 0; i < cnt; i++)
-    ft->frames[start + i] = start_pte_addr + (start_pte_addr ? i : 0);
+  {
+    pte_addr = lookup_page (pd, vaddr + i * PGSIZE, create);
+    ft->frames[start + i] = pte_addr;
+  }
 }
 
 size_t

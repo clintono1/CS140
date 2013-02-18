@@ -24,9 +24,7 @@ void frame_table_create (struct frame_table *ft, size_t page_cnt,
                          void *block, size_t block_size UNUSED);
 bool frame_table_all (const struct frame_table *ft, size_t start, size_t cnt);
 size_t frame_table_scan (struct frame_table *ft, size_t start, size_t cnt);
-void frame_table_set_multiple (struct frame_table *ft, size_t start,
-                               size_t cnt, uint32_t *start_pte_addr);
-
-
+void frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
+                               uint32_t *pd, uint8_t *vaddr, bool create);
 
 #endif /* vm/frame.h */
