@@ -27,16 +27,16 @@ extern struct lock global_lock_filesys;
 
 #define WRITE_BYTE_4(addr, value) **((int**) addr) = (int)value
 
-void get_first_string(const char * src_str, char *dst_str)
+void get_first_string (const char * src_str, char *dst_str)
 {
-  char * begin=src_str;
+  char * begin = src_str;
   char * end;
-  while (*begin==' ')
-    begin++;
-  end=begin;
-  while(*end!=' ' && *end!='\0')
-    end++;
-  strlcpy(dst_str, begin, end-begin+1);
+  while (*begin == ' ')
+    begin ++;
+  end = begin;
+  while(*end != ' ' && *end != '\0')
+    end ++;
+  strlcpy (dst_str, begin, end - begin + 1);
 }
 
 /* Starts a new thread running a user program loaded from
@@ -425,11 +425,11 @@ argc_counter(const char*str, int *word_cnt, int *char_cnt)
 }
 
 bool
-argument_pasing(char *cmd_line, char **esp)
+argument_pasing (char *cmd_line, char **esp)
 {
-  int argc=0;
-  int char_cnt=0;
-  int mem_size=0;
+  int argc = 0;
+  int char_cnt = 0;
+  int mem_size = 0;
   char * arg_data;
   char **arg_pointer;
   char *token, *save_ptr;
@@ -468,20 +468,20 @@ argument_pasing(char *cmd_line, char **esp)
     *arg_pointer = arg_data;
 
     arg_data += strlen(token) + 1;
-    arg_pointer++;
+    arg_pointer ++;
   }
   *arg_pointer = 0;
 
-  arg_pointer = (char **)(*esp);
+  arg_pointer = (char **) (*esp);
 
   /* Decrease the stack pointer, write the pointer to the first argument */
-  *esp -= sizeof(char **);
-  WRITE_BYTE_4(esp, *esp+4);
+  *esp -= sizeof (char **);
+  WRITE_BYTE_4 (esp, *esp+4);
 
   /* Decrease the stack pointer, write argc and return address */
-  *esp -= sizeof(int);
-  WRITE_BYTE_4(esp, argc);
-  *esp -= sizeof(void*);
+  *esp -= sizeof (int);
+  WRITE_BYTE_4 (esp, argc);
+  *esp -= sizeof (void*);
   **esp = NULL;
 
   return true;
