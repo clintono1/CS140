@@ -723,17 +723,39 @@ setup_stack (void **esp)
 {
   uint8_t *kpage;
   bool success = false;
-  uint8_t *va = ((uint8_t *) PHYS_BASE) - PGSIZE;
+  uint8_t *upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO, va);
+  kpage = palloc_get_page (PAL_USER | PAL_ZERO, upage);
   if (kpage != NULL) 
-    {
-      success = install_page (va, kpage, true);
-      if (success)
-        *esp = PHYS_BASE;
-      else
-        palloc_free_page (kpage);
-    }
+  {
+    success = install_page (upage, kpage, true);
+    if (success)
+      *esp = PHYS_BASE;
+    else
+      palloc_free_page (kpage);
+  }
+
+  /* Set up the rest 8MB stack page table entries but do not allocate memory */
+  size_t num_pages = ((1 << 23) >> 12);
+  size_t i;
+  uint32_t *pte;
+  uint32_t *pd = thread_current ()->pagedir;
+  for (i = 1; i < num_pages + 1; i++)
+  {
+    upage -= PGSIZE;
+    ASSERT (pagedir_get_page (pd, upage) == NULL);
+    pte = lookup_page (pd, upage, true);
+    ASSERT (pte != NULL);
+    ASSERT ((*pte & PTE_P) == 0);
+    /* Set PTE with PA = 0, U = 1, W = 1, P = 0 so that accessing to it will
+       trigger a page fault and then we can swap a zero page in */
+    *pte = PTE_U | PTE_W;
+  }
+
+  /* Set the first page below 3GB - 8MB as kernel page. Accessing this page
+     will cause a segment fault. */
+  ASSERT (upage == PHYS_BASE - (1 << 23) - PGSIZE);
+  *pte &= ~PTE_U;
   return success;
 }
 
