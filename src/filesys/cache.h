@@ -54,11 +54,10 @@ uint32_t hand;
 /* TODO: list for writing back during eviction */
 struct list evict_wb_list;
 
-void cache_init(void);
-void cache_read( block_sector_t sector, void * buffer);
-void cache_write ( block_sector_t sector, const void *buffer);
-void cache_read_partial(block_sector_t sector, void *buffer,
-		                off_t start, off_t length);
-void cache_write_partial(block_sector_t sector, const void *buffer,
-		                off_t start, off_t length);
-
+void cache_init (void);
+void cache_read (block_sector_t sector, void * buffer);
+void cache_write (block_sector_t sector, const void *buffer);
+void cache_read_partial (block_sector_t sector, void *buffer,
+                         off_t start, off_t length);
+void cache_write_partial (block_sector_t sector, const void *buffer,
+                          off_t start, off_t length);

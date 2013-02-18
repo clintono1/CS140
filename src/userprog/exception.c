@@ -12,6 +12,7 @@ extern struct lock global_lock_filesys;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+void _exit (int);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.

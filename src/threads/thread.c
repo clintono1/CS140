@@ -77,6 +77,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+void _exit(int);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -530,7 +531,7 @@ thread_get_priority (void)
 
 /* Calculate advanced priority for a thread */
 void
-calculate_priority_advanced(struct thread * th)
+calculate_priority_advanced (struct thread * th, void *aux UNUSED)
 {
   ASSERT(thread_mlfqs);
   if(th != idle_thread)
@@ -551,7 +552,7 @@ calculate_priority_advanced(struct thread * th)
 
 /* Calculate recent_cpu for a thread */
 void
-calculate_recent_cpu(struct thread * th)
+calculate_recent_cpu (struct thread * th, void *aux UNUSED)
 { 
   ASSERT(thread_mlfqs);
   ASSERT(is_thread(th));
@@ -568,14 +569,14 @@ calculate_recent_cpu(struct thread * th)
 void 
 calculate_recent_cpu_all(void)
 {
-  thread_foreach(calculate_recent_cpu, NULL);
+  thread_foreach (calculate_recent_cpu, NULL);
 }
 
 /* Advanced scheduling: calculate priority for all threads */
 void 
 calculate_priority_advanced_all(void)
 {
-  thread_foreach(calculate_priority_advanced, NULL);
+  thread_foreach (calculate_priority_advanced, NULL);
 }
 
 
@@ -619,7 +620,7 @@ thread_set_nice (int nice)
   int old_priority = cur_thread->priority;
 
   cur_thread->nice = nice;
-  calculate_priority_advanced(cur_thread);
+  calculate_priority_advanced (cur_thread, NULL);
 
   if (cur_thread->priority < old_priority)
     thread_yield();

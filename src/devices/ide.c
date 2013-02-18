@@ -132,7 +132,7 @@ ide_init (void)
         {
           struct ata_disk *d = &c->devices[dev_no];
           snprintf (d->name, sizeof d->name,
-                    "hd%c", 'a' + chan_no * 2 + dev_no); 
+                    "hd%c", 'a' + (char) (chan_no * 2 + dev_no));
           d->channel = c;
           d->dev_no = dev_no;
           d->is_ata = false;

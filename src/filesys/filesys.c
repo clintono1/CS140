@@ -13,8 +13,6 @@
 struct block *fs_device;
 
 static void do_format (void);
-bool filesys_parse(const char *name, struct dir **dir, char **file_name);
-
 
 /* Initializes the file system module.
    If FORMAT is true, reformats the file system. */

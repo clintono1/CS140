@@ -10,11 +10,13 @@
 
 /* Block device that contains the file system. */
 struct block *fs_device;
+struct dir;
 
 void filesys_init (bool format);
 void filesys_done (void);
 bool filesys_create (const char *name, off_t initial_size);
 struct file *filesys_open (const char *name);
 bool filesys_remove (const char *name);
+bool filesys_parse(const char *name, struct dir **dir, char **file_name);
 
 #endif /* filesys/filesys.h */

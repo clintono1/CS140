@@ -17,9 +17,9 @@
 #include "threads/pte.h"
 
 static void syscall_handler (struct intr_frame *);
-bool valid_vaddr_range(const void * vaddr, unsigned size);
 static bool
   check_user_memory (const void *vaddr, size_t size, bool to_be_written);
+static inline bool valid_vaddr_range(const void * vaddr, unsigned size);
 
 void  _halt (void);
 void  _exit (int status);
@@ -161,7 +161,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_READDIR:
       arg1 = get_argument(esp, 1);
       arg2 = get_argument(esp, 2);
-      f->eax = (uint32_t) _readdir ((int)arg1, (const char*)arg2);
+      f->eax = (uint32_t) _readdir ((int)arg1, (char*)arg2);
       break;
 
     case SYS_ISDIR:
@@ -181,8 +181,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 }
 
 /* Return true if virtual address range [vaddr, vadd+size] is valid */
-inline bool
-valid_vaddr_range(const void * vaddr, unsigned size)
+static inline bool
+valid_vaddr_range (const void * vaddr, unsigned size)
 {
   /* false type1: null pointer: */
   if (vaddr == NULL)
@@ -316,26 +316,23 @@ _read (int fd, void *buffer, unsigned size)
   if (!check_user_memory (buffer, size, true))
     _exit (-1);
 
-  if (size < 0)
-    return -1;
   if (fd == STDOUT_FILENO)
     return -1;
 
   int result = 0;
-  struct thread *t=thread_current();
+  struct thread *t = thread_current();
   if (fd == STDIN_FILENO)
   {
       unsigned i = 0;
       for (i = 0; i < size; i++)
       {
-        *(uint8_t *)buffer = input_getc();
-        result++;
-        buffer++;
+        *(uint8_t *) buffer = input_getc();
+        result ++;
+        buffer ++;
       }
       return result;
   }
-
-  else if(valid_file_handler(t, fd))
+  else if(valid_file_handler (t, fd))
   {
       struct file *file = t->file_handlers[fd];
       lock_acquire(&global_lock_filesys );

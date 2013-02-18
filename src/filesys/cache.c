@@ -301,8 +301,8 @@ cache_write_signal(uint32_t cache_id)
 
 /* If there is a hit, copy from buffer to cache */
 static void
-cache_write_hit(void *buffer, off_t start,
-		                        off_t length, uint32_t cache_id)
+cache_write_hit (const void *buffer, off_t start,
+		             off_t length, uint32_t cache_id)
 {
   lock_acquire(&buffer_cache[cache_id].lock);
   /*TODO: should this statement be in or outside the while loop */
@@ -321,7 +321,8 @@ cache_write_hit(void *buffer, off_t start,
 /* If it is a miss, load this sector from disk to cache, then copy buffer
  * to cache */
 static void
-cache_write_miss(block_sector_t sector, void *buffer, off_t start, off_t length)
+cache_write_miss (block_sector_t sector, const void *buffer,
+                  off_t start, off_t length)
 {
   /* if cache is not full */
   if(cache_used_num < BUFFER_CACHE_SIZE)
@@ -433,19 +434,19 @@ cache_write_miss(block_sector_t sector, void *buffer, off_t start, off_t length)
 /* Writes BUFFER to bytes [start, start + length) in the cache entry
  * corresponding to sector */
 void
-cache_write_partial(block_sector_t sector, const void *buffer,
+cache_write_partial (block_sector_t sector, const void *buffer,
 		                 off_t start, off_t length)
 {
-  lock_acquire(&global_cache_lock);
-  int cache_id_hit = is_in_cache(sector);
+  lock_acquire (&global_cache_lock);
+  int cache_id_hit = is_in_cache (sector);
   if(cache_id_hit != -1)
   {
-	cache_write_hit(buffer, start, length, cache_id_hit);
+    cache_write_hit (buffer, start, length, cache_id_hit);
   }
   else
   {
-	void *tmp_buffer = malloc(BLOCK_SECTOR_SIZE);
-	cache_write_miss(sector, tmp_buffer, start, length);
+    void *tmp_buffer = malloc (BLOCK_SECTOR_SIZE);
+    cache_write_miss (sector, tmp_buffer, start, length);
   }
 }
 

@@ -430,8 +430,8 @@ sema_priority_less (const struct list_elem *a,
                     const struct list_elem *b,
                     void *aux UNUSED)
 {
-  const struct semaphore_elem *sa, *sb;
-  const struct thread *ta, *tb;
+  struct semaphore_elem *sa, *sb;
+  struct thread *ta, *tb;
   sa = list_entry (a, struct semaphore_elem, elem);
   sb = list_entry (b, struct semaphore_elem, elem);
   ta = list_entry (list_front(&sa->semaphore.waiters), struct thread, elem);
