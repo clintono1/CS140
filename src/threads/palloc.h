@@ -17,5 +17,6 @@ void *palloc_get_page (enum palloc_flags, uint8_t *vaddr);
 void *palloc_get_multiple (enum palloc_flags, size_t page_cnt, uint8_t *vaddr);
 void palloc_free_page (void *);
 void palloc_free_multiple (void *, size_t page_cnt);
+void palloc_kernel_pool_change_pd (uint32_t *pd);
 
 #endif /* threads/palloc.h */

@@ -93,7 +93,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
     else
     {
       ASSERT (vaddr == NULL);
-      uint32_t *pd = init_page_dir ? init_page_dir : KERNEL_PAGE_DIR;
+      uint32_t *pd = init_page_dir ? init_page_dir : (uint32_t*)KERNEL_PAGE_DIR;
       uint8_t *kpage = pool->base + idx * PGSIZE;
       frame_table_set_multiple (&pool->frame_table, idx, page_cnt,
                                 pd, kpage, false);
@@ -201,3 +201,12 @@ page_from_pool (const struct pool *pool, void *page)
 
   return page_no >= start_page && page_no < end_page;
 }
+
+/* Update the frame table entries in the kernel pool according to the new
+   kernel page table. */
+void
+palloc_kernel_pool_change_pd (uint32_t *pd)
+{
+  frame_table_change_pagedir (&kernel_pool.frame_table, pd);
+}
+

@@ -26,5 +26,6 @@ bool frame_table_all (const struct frame_table *ft, size_t start, size_t cnt);
 size_t frame_table_scan (struct frame_table *ft, size_t start, size_t cnt);
 void frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
                                uint32_t *pd, uint8_t *vaddr, bool create);
+void frame_table_change_pagedir (struct frame_table *ft, uint32_t *pd);
 
 #endif /* vm/frame.h */

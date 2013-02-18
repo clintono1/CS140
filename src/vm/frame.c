@@ -40,22 +40,28 @@ void
 frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
                           uint32_t *pd, uint8_t *vaddr, bool create)
 {
-  ASSERT(pg_ofs (vaddr) == 0);
-  uint32_t *pte_addr;
+  ASSERT (ft != NULL);
+  ASSERT (start <= ft->page_cnt);
+  ASSERT (start + cnt <= ft->page_cnt);
+  ASSERT (pg_ofs (vaddr) == 0);
+
   size_t i;
   for (i = 0; i < cnt; i++)
   {
-    pte_addr = lookup_page (pd, vaddr + i * PGSIZE, create);
+    uint32_t *pte_addr = lookup_page (pd, vaddr + i * PGSIZE, create);
     ft->frames[start + i] = pte_addr;
   }
 }
 
+/* Return the number of bytes a frame table with PAGE_CNT pages takes */
 size_t
 frame_table_size (size_t page_cnt)
 {
   return page_cnt * sizeof (uint32_t *);
 }
 
+/* Create a frame table with PAGE_CNT pages, using BLOCK as the base for
+   frame table entries. */
 void
 frame_table_create (struct frame_table *ft, size_t page_cnt, void *block,
     size_t block_size UNUSED)
@@ -82,4 +88,26 @@ frame_table_all (const struct frame_table *ft, size_t start, size_t cnt)
     if (ft->frames[i] == NULL)
       return false;
   return true;
+}
+
+/* Update the frame table entries from the old PTE addresses to the new PTE
+   addresses according to the new PD */
+void
+frame_table_change_pagedir (struct frame_table *ft, uint32_t *pd)
+{
+  ASSERT (ft != NULL);
+  ASSERT (pd != NULL);
+
+  size_t i;
+  for (i = 0; i < ft->page_cnt; i++)
+  {
+    if (ft->frames[i] != NULL)
+    {
+      uint32_t *old_pte = ft->frames[i];
+      uint32_t paddr = *old_pte & ~PGMASK;
+      uint32_t *new_pte = lookup_page (pd, ptov(paddr), false);
+      ASSERT ((*old_pte & ~PGMASK) == (*new_pte & ~PGMASK));
+      ft->frames[i] = new_pte;
+    }
+  }
 }
