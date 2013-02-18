@@ -325,7 +325,8 @@ process_activate (void)
   pagedir_activate (t->pagedir);
 
   /* Initialize supplemental page table */
-  suppl_pt_init (&t->suppl_pt);
+  // TODO
+  // suppl_pt_init (&t->suppl_pt);
 
   /* Set thread's kernel stack for use in processing
      interrupts. */

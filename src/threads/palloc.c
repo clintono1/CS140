@@ -74,12 +74,33 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
   struct pool *pool = flags & PAL_USER ? &user_pool : &kernel_pool;
   void *pages;
   size_t page_idx;
+  uint32_t *pte_addr;
 
   if (page_cnt == 0)
     return NULL;
 
   lock_acquire (&pool->lock);
-  page_idx = frame_table_scan_and_set(&pool->frame_table, 0, page_cnt, vaddr);
+  size_t idx = frame_table_scan (&pool->frame_table, 0, page_cnt);
+  if (idx != FRAME_TABLE_ERROR)
+  {
+    if (flags & PAL_USER)
+    {
+      struct thread *cur = thread_current ();
+      int i;
+      for (i = 0; i < page_cnt; i++)
+      {
+        pte_addr = lookup_page (cur->pagedir, vaddr + i * PGSIZE, true);
+        frame_table_set_multiple (&pool->frame_table, idx, 1, pte_addr);
+      }
+    }
+    else
+    {
+      ASSERT (vaddr == NULL);
+      pte_addr = lookup_page ((uint32_t *) KERNEL_PAGE_DIR,
+                              pool->base + idx * PGSIZE, false);
+      frame_table_set_multiple (&pool->frame_table, idx, page_cnt, pte_addr);
+    }
+  }
   lock_release (&pool->lock);
 
   if (page_idx != FRAME_TABLE_ERROR)
@@ -162,6 +183,7 @@ init_pool (struct pool *p, void *base, size_t page_cnt, const char *name)
   printf ("%zu pages available in %s.\n", page_cnt, name);
 
   /* Initialize the pool. */
+  lock_init (&p->lock);
   frame_table_create (&p->frame_table, page_cnt, base, ft_pages * PGSIZE);
   p->base = base + ft_pages * PGSIZE;
 }
