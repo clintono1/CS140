@@ -81,21 +81,21 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
     return NULL;
 
   lock_acquire (&pool->lock);
-  size_t idx = frame_table_scan (&pool->frame_table, 0, page_cnt);
-  if (idx != FRAME_TABLE_ERROR)
+  page_idx = frame_table_scan (&pool->frame_table, 0, page_cnt);
+  if (page_idx != FRAME_TABLE_ERROR)
   {
     if (flags & PAL_USER)
     {
       ASSERT (pg_ofs (vaddr) == 0);
-      frame_table_set_multiple (&pool->frame_table, idx, page_cnt,
+      frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt,
                                 thread_current ()->pagedir, vaddr, true);
     }
     else
     {
       ASSERT (vaddr == NULL);
       uint32_t *pd = init_page_dir ? init_page_dir : (uint32_t*)KERNEL_PAGE_DIR;
-      uint8_t *kpage = pool->base + idx * PGSIZE;
-      frame_table_set_multiple (&pool->frame_table, idx, page_cnt,
+      uint8_t *kpage = pool->base + page_idx * PGSIZE;
+      frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt,
                                 pd, kpage, false);
     }
   }
