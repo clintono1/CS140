@@ -694,8 +694,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       set_MMF(pte);
       s_pte->upage = upage;          /* the page that will fault */
       s_pte->file = file;                   /*can be replaced with thread_current->executable file? */
-      //s_pte->file->deny_write = writable;
-      s_pte->writable = writable;  /* if current page is writtable */
+      if (writable) 
+        file_allow_write (s_pte->file); 
+      else
+        file_deny_write(s_pte->file);
+      //s_pte->writable = writable;  /* if current page is writtable */
       s_pte->offset_in_file = ofs;     /* offset in the file */
       ofs = ofs + (uint32_t)PGSIZE; /* next time, the offset will advance a page */
       s_pte->page_read_bytes = page_read_bytes;  /* how many bytes to read from file and write to page */

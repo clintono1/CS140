@@ -1,7 +1,5 @@
 #include "filesys/file.h"
-#include <debug.h>
-#include "filesys/inode.h"
-#include "threads/malloc.h"
+
 
 /* An open file. */
 struct file 
@@ -138,6 +136,13 @@ file_allow_write (struct file *file)
       file->deny_write = false;
       inode_allow_write (file->inode);
     }
+}
+
+bool 
+file_is_writable (struct file *file)
+{
+  ASSERT(file != NULL);
+  return (file->deny_write);
 }
 
 /* Returns the size of FILE in bytes. */

@@ -14,7 +14,6 @@ struct suppl_pte
   struct file * file;
   off_t offset_in_file;
   size_t page_read_bytes;
-  bool writable;
 
   struct hash_elem elem_hash;     /* Element for supplemental page table */
   struct list_elem elem_shared;   /* Element for SPTEs sharing the same page*/
