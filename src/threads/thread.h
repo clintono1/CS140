@@ -107,7 +107,7 @@ struct thread
     int64_t wake_up_time;               /* Time to wake up current thread */
     struct list_elem alarm_elem;        /* List element for alarm queue */
     int eff_priority;                   /* Effective priority */
-    struct lock * lock_to_acquire;      /* Lock this thread is waiting for */
+    struct lock *lock_to_acquire;       /* Lock this thread is waiting for */
     struct list locks_waited_by_others; /* Locks held by this thread but
                                            also waited by other threads*/
     int recent_cpu;                     /* CPU time received recently */
@@ -124,11 +124,15 @@ struct thread
     struct list child_exit_status;     /* List of child processes' exit status */
     struct lock list_lock;             /* Lock on child exit status list  */
 
-    struct file **file_handlers;      /* File handler array */
-    int file_handlers_size;            /* Size of allocated file handlers */
-    int file_handlers_num;           /* Num of current file handlers */
+    struct file **file_handlers;       /* File handler array */
+    int file_handlers_size;            /* Size of file_handlers array */
+    int file_handlers_num;             /* Num of current file handlers */
     struct file *process_file;         /* File of this current process */
 #endif
+
+    struct mmap_file *mmap_files;      /* Array of memory mapped files */
+    int mmap_files_size;               /* Size of mapped_files array */
+    int mmap_files_num;                /* Num of current mmap files */
     unsigned magic;                    /* Detects stack overflow. */
   };
 
@@ -151,6 +155,15 @@ struct load_status
     bool load_success;                  /* True if load successfully */
     char *cmd_line;                     /* Command line to launch the process */
     struct thread *parent_thread;       /* Pointer to the parent thread */
+  };
+
+/* Memory mapped file */
+struct mmap_file
+  {
+    struct file *file;                  /* File the memory is mapped to */
+    uint8_t *upage;                     /* User virtual address of the first
+                                           mapping page */
+    size_t num_pages;                   /* Number of pages mapped to the file */
   };
 
 /* If false (default), use round-robin scheduler.

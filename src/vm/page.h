@@ -4,19 +4,16 @@
 #include "filesys/off_t.h"
 #include "lib/debug.h"
 
-
 void suppl_pt_init (struct hash *suppl_pt);
 
 /* Supplemental page table entry */
 struct suppl_pte
 {
-  uint8_t *upage;                        /* Virtual address, used as hash key */
-  struct file * file;
-  off_t offset_in_file;
-  size_t page_read_bytes;
-
+  uint8_t *upage;                 /* Virtual address, used as hash key */
+  struct file *file;              /* File this page is mapped to */
+  off_t offset;                   /* Offset in the file this page is mapped to*/
+  size_t bytes_read;              /* Number of bytes read from the file */
   struct hash_elem elem_hash;     /* Element for supplemental page table */
-  struct list_elem elem_shared;   /* Element for SPTEs sharing the same page*/
 };
 
 

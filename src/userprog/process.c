@@ -604,7 +604,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
-  // TODO: add file to the mmap list
+  // TODO: add file to the mmap_files
   return success;
 
  fail:
@@ -704,9 +704,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       set_MMF (pte);
       s_pte->upage = upage;
       s_pte->file = file;
-      s_pte->offset_in_file = ofs;
+      s_pte->offset = ofs;
       ofs = ofs + (uint32_t) PGSIZE;
-      s_pte->page_read_bytes = page_read_bytes;
+      s_pte->bytes_read = page_read_bytes;
 
       lock_acquire (&thread_current()->spt_lock);
       hash_insert (&thread_current()->suppl_pt, &s_pte->elem_hash);

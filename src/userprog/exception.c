@@ -126,14 +126,14 @@ load_page_from_file (struct suppl_pte *s_pte)
 
   /* Load this page. */
   if (file_read_at ( s_pte->file, kpage,
-                     s_pte->page_read_bytes,
-                     s_pte->offset_in_file)
-      != (int) s_pte->page_read_bytes)
+                     s_pte->bytes_read,
+                     s_pte->offset)
+      != (int) s_pte->bytes_read)
   {
     palloc_free_page (kpage);
     _exit(-1);
   }
-  memset (kpage + s_pte->page_read_bytes, 0, PGSIZE - s_pte->page_read_bytes);
+  memset (kpage + s_pte->bytes_read, 0, PGSIZE - s_pte->bytes_read);
   /* Add the page to the process's address space. */
   if (!install_page (s_pte->upage, kpage, file_is_writable (s_pte->file)))
   {
