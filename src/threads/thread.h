@@ -124,9 +124,9 @@ struct thread
     struct list child_exit_status;     /* List of child processes' exit status */
     struct lock list_lock;             /* Lock on child exit status list  */
 
-    struct file **file_handlers;       /* File handler array */
+    struct file **file_handlers;      /* File handler array */
     int file_handlers_size;            /* Size of allocated file handlers */
-    int file_handlers_num;             /* Num of current file handlers */
+    int file_handlers_num;           /* Num of current file handlers */
     struct file *process_file;         /* File of this current process */
 #endif
     unsigned magic;                    /* Detects stack overflow. */
