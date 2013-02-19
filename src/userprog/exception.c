@@ -4,6 +4,13 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "lib/kernel/list.h"
+#include "lib/string.h"
+#include "filesys/file.h"
+#include "userprog/process.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
+#include "threads/palloc.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -109,6 +116,51 @@ kill (struct intr_frame *f)
     }
 }
 
+
+/* Adds a mapping from user virtual address UPAGE to kernel
+   virtual address KPAGE to the page table.
+   If WRITABLE is true, the user process may modify the page;
+   otherwise, it is read-only.
+   UPAGE must not already be mapped.
+   KPAGE should probably be a page obtained from the user pool
+   with palloc_get_page().
+   Returns true on success, false if UPAGE is already mapped or
+   if memory allocation fails. */
+static bool
+page_install (void *upage, void *kpage, bool writable)
+{
+   struct thread *t = thread_current ();
+ 
+  /* Verify that there's not already a page at that virtual
+     address, then map our page there. */
+    return (pagedir_get_page (t->pagedir, upage) == NULL
+         && pagedir_set_page (t->pagedir, upage, kpage, writable));
+ }
+
+
+void load_page(struct suppl_pte *s_pte)
+{
+   uint8_t *kpage = palloc_get_page(PAL_USER, s_pte->upage);
+ if (kpage == NULL)
+     _exit(-1);
+ 
+   /* Load this page. */
+   if (file_read_at ( s_pte->file, kpage,  
+                            s_pte->page_read_bytes, 
+                            s_pte->offset_in_file) != (int) s_pte->page_read_bytes)
+   {
+     palloc_free_page (kpage);
+     _exit(-1);
+   }
+ memset (kpage + s_pte->page_read_bytes, 0, s_pte->page_zero_bytes);
+ /* Add the page to the process's address space. */
+   if (!page_install(s_pte->upage, kpage, s_pte->writable))
+   {
+     palloc_free_page (kpage);
+     _exit(-1);
+   }
+  
+ }
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
@@ -162,8 +214,33 @@ page_fault (struct intr_frame *f)
             user ? "user" : "kernel");
     kill (f);
   }
+  else 
+  /* if page fault in the user program or syscall, should search current thread's
+      suppl_page table (a hash table), use the rounded down fault address as key,
+      to get the info about where to get the page */
+  {
+     struct hash_elem *e;
+     struct hash *h = &thread_current()->suppl_pt;
+     struct suppl_pte temp;
+     void *fault_page=pg_round_down(fault_addr);
+     temp.upage =  (uint8_t *) fault_page;
+     //printf("fault address = %x\n", fault_page);
+     e = hash_find(h, &temp.elem_hash);
+     if ( e == NULL )
+       _exit(-1);
+  
+     struct suppl_pte *s_pte = hash_entry(e, struct suppl_pte, elem_hash);
+  
+     ASSERT(s_pte->upage == fault_page);
+     /* find an empty page, fill it with the source indicated by s_ptr,
+         map the faulted page to the new allocated frame */
+     load_page(s_pte);
+     /* load finish, delete this supplementary page table entry from hash table */
+     lock_acquire(&thread_current()->spt_lock);
+     hash_delete(h,  &s_pte->elem_hash);
+     lock_release(&thread_current()->spt_lock); 
+  }
 
-  /* Release the rest resources (memory, file handlers) in process_exit */
-  _exit (-1);
+
 }
 

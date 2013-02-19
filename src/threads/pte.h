@@ -70,15 +70,7 @@ static inline uintptr_t pd_no (const void *va) {
 #define PTE_A 0x20              /* 1=accessed, 0=not acccessed. */
 #define PTE_D 0x40              /* 1=dirty, 0=not dirty (PTEs only). */
 
-/* Supplemental page table entry */
-struct suppl_pte
-  {
-    uint32_t va;                    /* Virtual address, used as hash key */
-    struct inode *inode;            /* Inode of the memory mapped file */
-    off_t offset;                   /* Offset in the memory mapped file */
-    struct hash_elem elem_hash;     /* Element for supplemental page table */
-    struct list_elem elem_shared;   /* Element for SPTEs sharing the same page*/
-  };
+
 
 /* Returns a PDE that points to page table PT. */
 static inline uint32_t pde_create (uint32_t *pt) {

@@ -1,11 +1,11 @@
 #include "page.h"
-#include "threads/pte.h"
+
 
 static unsigned
 suppl_pte_hash_func (const struct hash_elem *e, void *aux UNUSED)
 {
   struct suppl_pte *spte = hash_entry (e, struct suppl_pte, elem_hash);
-  return spte->va;
+  return (int) spte->upage;
 }
 
 static bool
@@ -15,7 +15,7 @@ suppl_pte_hash_less (const struct hash_elem *a,
 {
   struct suppl_pte *spte_a = hash_entry (a, struct suppl_pte, elem_hash);
   struct suppl_pte *spte_b = hash_entry (b, struct suppl_pte, elem_hash);
-  return spte_a->va < spte_b->va;
+  return spte_a->upage < spte_b->upage;
 }
 
 void

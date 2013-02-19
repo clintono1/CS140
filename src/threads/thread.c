@@ -749,6 +749,12 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->child_exit_status);
   lock_init (&t->list_lock);
 
+  if (t!= initial_thread)
+  {
+    lock_init(&t->spt_lock);
+    suppl_pt_init (&t->suppl_pt);
+  }
+
   /* Lazy allocation */
   t->file_handlers = NULL;
   t->file_handlers_size = 0;
