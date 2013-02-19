@@ -71,8 +71,8 @@ static inline uintptr_t pd_no (const void *va) {
 #define PTE_P 0x1               /* 1=present, 0=not present. */
 #define PTE_W 0x2               /* 1=read/write, 0=read-only. */
 #define PTE_U 0x4               /* 1=user/kernel, 0=kernel only. */
-#define PTE_MMF 0x8           /* 1=memory mapped file */
-#define PTE_SHARED 0x10   /*  1= shared memory */
+#define PTE_M 0x8               /* 1=memory mapped file, 0=normal memory */
+#define PTE_S 0x10              /* 1=shared memory, 0=not shared */
 #define PTE_A 0x20              /* 1=accessed, 0=not acccessed. */
 #define PTE_D 0x40              /* 1=dirty, 0=not dirty (PTEs only). */
 #define MAX_SWAP_PAGE_NO 0xfffff
@@ -115,23 +115,6 @@ static inline void *pte_get_page (uint32_t pte)
   return ptov (pte & PTE_ADDR);
 }
 
-static inline void set_MMF(uint32_t *pte)
-{
-  *pte = *pte | PTE_MMF;
-}
-static inline bool is_MMF(uint32_t *pte)
-{
-  return  *pte & PTE_MMF;
-}
-static inline void set_shared(uint32_t *pte)
-{
-  *pte = *pte | PTE_SHARED;
-}
-static inline bool is_shared(uint32_t *pte)
-{
-  return  *pte & PTE_SHARED;
-}
-
 static inline void set_swap_page_no (uint32_t *pte, int swap_page_no)
 {
    ASSERT(swap_page_no < MAX_SWAP_PAGE_NO);
@@ -143,8 +126,6 @@ static inline int get_swap_page_no (uint32_t *pte)
 {
     return (int)(*pte>>PGBITS);
 }
-
-
 
 #endif /* threads/pte.h */
 

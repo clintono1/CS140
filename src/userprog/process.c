@@ -701,7 +701,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       s_pte = (struct suppl_pte * ) malloc (sizeof (struct suppl_pte));
       pte =  lookup_page (thread_current()->pagedir, upage, true);
-      set_MMF (pte);
+      *pte |= PTE_M;
       s_pte->upage = upage;
       s_pte->file = file;
       s_pte->offset = ofs;

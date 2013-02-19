@@ -219,7 +219,7 @@ page_fault (struct intr_frame *f)
      pte = lookup_page (thread_current()->pagedir, s_pte->upage, false);
      if (pte == NULL)
          _exit(-1);
-     if (is_MMF(pte))
+     if (*pte & PTE_M)
           load_page_from_file (s_pte);
      /* load finish, delete this supplementary page table entry from hash table */
      lock_acquire(&thread_current()->spt_lock);
