@@ -116,32 +116,30 @@ kill (struct intr_frame *f)
     }
 }
 
-
-
-
-
-void load_page_from_exec(struct suppl_pte *s_pte)
+/* Load data from file into a page */
+static void
+load_page_from_file (struct suppl_pte *s_pte)
 {
   uint8_t *kpage = palloc_get_page(PAL_USER, s_pte->upage);
   if (kpage == NULL)
     _exit(-1);
 
   /* Load this page. */
-  if (file_read_at ( s_pte->file, kpage,  
-                           s_pte->page_read_bytes, 
-                           s_pte->offset_in_file) != (int) s_pte->page_read_bytes)
+  if (file_read_at ( s_pte->file, kpage,
+                     s_pte->page_read_bytes,
+                     s_pte->offset_in_file)
+      != (int) s_pte->page_read_bytes)
   {
     palloc_free_page (kpage);
     _exit(-1);
   }
   memset (kpage + s_pte->page_read_bytes, 0, PGSIZE - s_pte->page_read_bytes);
   /* Add the page to the process's address space. */
-  if (!install_page(s_pte->upage, kpage, file_is_writable(s_pte->file)))
+  if (!install_page (s_pte->upage, kpage, file_is_writable (s_pte->file)))
   {
     palloc_free_page (kpage);
     _exit(-1);
   }
- 
 }
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
@@ -202,25 +200,27 @@ page_fault (struct intr_frame *f)
       to get the info about where to get the page */
   {
      struct hash_elem *e;
-     struct hash *h = &thread_current()->suppl_pt;
+     struct hash *h = &thread_current ()->suppl_pt;
      struct suppl_pte temp;
-     void *fault_page=pg_round_down(fault_addr);
+     uint32_t *pte;
+     struct suppl_pte *s_pte;
+
+     void *fault_page = pg_round_down (fault_addr);
      temp.upage =  (uint8_t *) fault_page;
-     //printf("fault address = %x\n", fault_page);
-     e = hash_find(h, &temp.elem_hash);
+     e = hash_find (h, &temp.elem_hash);
      if ( e == NULL )
        _exit(-1);
   
-     struct suppl_pte *s_pte = hash_entry(e, struct suppl_pte, elem_hash);
+     s_pte = hash_entry (e, struct suppl_pte, elem_hash);
   
-     ASSERT(s_pte->upage == fault_page);
+     ASSERT (s_pte->upage == fault_page);
      /* find an empty page, fill it with the source indicated by s_ptr,
          map the faulted page to the new allocated frame */
-     uint32_t *pte =  lookup_page (thread_current()->pagedir, s_pte->upage, false);
+     pte = lookup_page (thread_current()->pagedir, s_pte->upage, false);
      if (pte == NULL)
          _exit(-1);
      if (is_MMF(pte))
-          load_page_from_exec(s_pte);
+          load_page_from_file (s_pte);
      /* load finish, delete this supplementary page table entry from hash table */
      lock_acquire(&thread_current()->spt_lock);
      hash_delete(h,  &s_pte->elem_hash);

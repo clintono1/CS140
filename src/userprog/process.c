@@ -508,7 +508,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
-    goto done;
+    goto fail;
   process_activate ();
 
   /* Extract the path to the executable file */
@@ -519,7 +519,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_path);
-      goto done ; 
+      goto fail ;
     }
 
   /* Read and verify executable header. */
@@ -532,7 +532,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
       || ehdr.e_phnum > 1024) 
     {
       printf ("load: %s: error loading executable\n", cmd_line);
-      goto done; 
+      goto fail;
     }
 
   /* Read program headers. */
@@ -542,11 +542,11 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
       struct Elf32_Phdr phdr;
 
       if (file_ofs < 0 || file_ofs > file_length (file))
-        goto done;
+        goto fail;
       file_seek (file, file_ofs);
 
       if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
-        goto done;
+        goto fail;
       file_ofs += sizeof phdr;
       switch (phdr.p_type) 
         {
@@ -560,7 +560,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
         case PT_DYNAMIC:
         case PT_INTERP:
         case PT_SHLIB:
-          goto done;
+          goto fail;
         case PT_LOAD:
           if (validate_segment (&phdr, file)) 
             {
@@ -586,25 +586,29 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
                 }
               if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
-                goto done;
+                goto fail;
             }
           else
-            goto done;
+            goto fail;
           break;
         }
     }
 
   /* Set up stack. */
   if (!setup_stack (esp))
-    goto done;
+    goto fail;
 
   success = argument_pasing (cmd_line, (char **) esp);
+  if (!success)
+    goto fail;
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
+  // TODO: add file to the mmap list
+  return success;
 
- done:
-  /* We arrive here whether the load is successful or not. */
+ fail:
+  /* We arrive here if the load is failed. */
   file_close (file);
   return success;
 }
@@ -679,33 +683,34 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (ofs % PGSIZE == 0);
 
   file_seek (file, ofs);
+
+  if (writable)
+    file_allow_write (file);
+  else
+    file_deny_write (file);
+
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
-         We will read PAGE_READ_BYTES bytes from FILE
+         Read PAGE_READ_BYTES bytes from FILE
          and zero the final PAGE_ZERO_BYTES bytes. */
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
+      uint32_t *pte;
+      struct suppl_pte *s_pte;
 
+      s_pte = (struct suppl_pte * ) malloc (sizeof (struct suppl_pte));
+      pte =  lookup_page (thread_current()->pagedir, upage, true);
+      set_MMF (pte);
+      s_pte->upage = upage;
+      s_pte->file = file;
+      s_pte->offset_in_file = ofs;
+      ofs = ofs + (uint32_t) PGSIZE;
+      s_pte->page_read_bytes = page_read_bytes;
 
-      struct suppl_pte *s_pte = (struct suppl_pte * ) malloc (sizeof (struct suppl_pte));
-      //TODO: lookup_page should have a 'true' for 3rd argument?
-      uint32_t *pte =  lookup_page (thread_current()->pagedir, upage, true);
-      set_MMF(pte);
-      s_pte->upage = upage;          /* the page that will fault */
-      s_pte->file = file;                   /*can be replaced with thread_current->executable file? */
-      if (writable) 
-        file_allow_write (s_pte->file); 
-      else
-        file_deny_write(s_pte->file);
-      //s_pte->writable = writable;  /* if current page is writtable */
-      s_pte->offset_in_file = ofs;     /* offset in the file */
-      ofs = ofs + (uint32_t)PGSIZE; /* next time, the offset will advance a page */
-      s_pte->page_read_bytes = page_read_bytes;  /* how many bytes to read from file and write to page */
-      //printf("[spte added:upage:%p,file%p,w:(%d),RB(%d),ZB(%d)]\n", upage, file, writable, page_read_bytes, page_zero_bytes);
-      lock_acquire(&thread_current()->spt_lock);
-      hash_insert(&thread_current()->suppl_pt, &s_pte->elem_hash);
-      lock_release(&thread_current()->spt_lock);
+      lock_acquire (&thread_current()->spt_lock);
+      hash_insert (&thread_current()->suppl_pt, &s_pte->elem_hash);
+      lock_release (&thread_current()->spt_lock);
 
       /* Advance. */
       read_bytes -= page_read_bytes;

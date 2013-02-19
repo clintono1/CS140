@@ -142,7 +142,7 @@ bool
 file_is_writable (struct file *file)
 {
   ASSERT(file != NULL);
-  return (file->deny_write);
+  return !file->deny_write;
 }
 
 /* Returns the size of FILE in bytes. */

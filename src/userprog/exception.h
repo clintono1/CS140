@@ -12,7 +12,6 @@
 #define PF_U 0x4    /* 0: kernel, 1: user process. */
 
 void exception_init (void);
-void load_page_from_exec(struct suppl_pte *);
 void exception_print_stats (void);
 
 #endif /* userprog/exception.h */
