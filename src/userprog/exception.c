@@ -138,10 +138,10 @@ page_install (void *upage, void *kpage, bool writable)
  }
 
 
-void load_page(struct suppl_pte *s_pte)
+void load_page_from_exec(struct suppl_pte *s_pte)
 {
    uint8_t *kpage = palloc_get_page(PAL_USER, s_pte->upage);
- if (kpage == NULL)
+   if (kpage == NULL)
      _exit(-1);
  
    /* Load this page. */
@@ -152,7 +152,7 @@ void load_page(struct suppl_pte *s_pte)
      palloc_free_page (kpage);
      _exit(-1);
    }
- memset (kpage + s_pte->page_read_bytes, 0, s_pte->page_zero_bytes);
+ memset (kpage + s_pte->page_read_bytes, 0, PGSIZE - s_pte->page_read_bytes);
  /* Add the page to the process's address space. */
    if (!page_install(s_pte->upage, kpage, s_pte->writable))
    {
@@ -234,7 +234,11 @@ page_fault (struct intr_frame *f)
      ASSERT(s_pte->upage == fault_page);
      /* find an empty page, fill it with the source indicated by s_ptr,
          map the faulted page to the new allocated frame */
-     load_page(s_pte);
+     uint32_t *pte =  lookup_page (thread_current()->pagedir, s_pte->upage, false);
+     if (pte == NULL)
+         _exit(-1);
+     if (is_MMF(pte))
+          load_page_from_exec(s_pte);
      /* load finish, delete this supplementary page table entry from hash table */
      lock_acquire(&thread_current()->spt_lock);
      hash_delete(h,  &s_pte->elem_hash);

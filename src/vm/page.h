@@ -13,7 +13,6 @@ struct suppl_pte
   struct file * file;
   off_t offset_in_file;
   size_t page_read_bytes;
-  size_t page_zero_bytes;
   bool writable; 
 
   struct inode *inode;            /* Inode of the memory mapped file */

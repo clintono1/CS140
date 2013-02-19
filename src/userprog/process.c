@@ -690,12 +690,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 #ifdef VM_PAGE_H_ 
       struct suppl_pte *s_pte = (struct suppl_pte *)malloc(sizeof(struct suppl_pte));
-      s_pte->upage = upage;        /* the page that will fault */
-      s_pte->file = file;          /*can be replaced with thread_current->executable file? */
-      s_pte->offset_in_file = ofs; /* offset in the file */
-      ofs = ofs + (uint32_t)PGSIZE;/* next time, the offset will advance a page */
+      //TODO: lookup_page should have a 'true' for 3rd argument?
+      uint32_t *pte =  lookup_page (thread_current()->pagedir, upage, true);
+      set_MMF(pte);
+      s_pte->upage = upage;          /* the page that will fault */
+      s_pte->file = file;                   /*can be replaced with thread_current->executable file? */
+      s_pte->offset_in_file = ofs;     /* offset in the file */
+      ofs = ofs + (uint32_t)PGSIZE; /* next time, the offset will advance a page */
       s_pte->page_read_bytes = page_read_bytes;  /* how many bytes to read from file and write to page */
-      s_pte->page_zero_bytes = page_zero_bytes;   /* how many zeros to write to the page */
       s_pte->writable = writable;                              /* if current page is writtable */
       //printf("[spte added:upage:%p,file%p,w:(%d),RB(%d),ZB(%d)]\n", upage, file, writable, page_read_bytes, page_zero_bytes);
       lock_acquire(&thread_current()->spt_lock);
