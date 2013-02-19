@@ -1,4 +1,6 @@
+#include "threads/pte.h"
 #include "vm/page.h"
+
 
 #ifndef USERPROG_EXCEPTION_H
 #define USERPROG_EXCEPTION_H

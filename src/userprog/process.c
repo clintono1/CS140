@@ -20,6 +20,7 @@
 #include "vm/frame.h"
 #include "vm/page.h"
 
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmd_line, void (**eip) (void), void **esp);
 void argc_counter(const char*str, int *word_cnt, int *char_cnt);
@@ -610,8 +611,6 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
-
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
 static bool
@@ -688,44 +687,22 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-#ifdef VM_PAGE_H_ 
-      struct suppl_pte *s_pte = (struct suppl_pte *)malloc(sizeof(struct suppl_pte));
+
+      struct suppl_pte *s_pte = (struct suppl_pte * ) malloc (sizeof (struct suppl_pte));
       //TODO: lookup_page should have a 'true' for 3rd argument?
       uint32_t *pte =  lookup_page (thread_current()->pagedir, upage, true);
       set_MMF(pte);
       s_pte->upage = upage;          /* the page that will fault */
       s_pte->file = file;                   /*can be replaced with thread_current->executable file? */
+      //s_pte->file->deny_write = writable;
+      s_pte->writable = writable;  /* if current page is writtable */
       s_pte->offset_in_file = ofs;     /* offset in the file */
       ofs = ofs + (uint32_t)PGSIZE; /* next time, the offset will advance a page */
       s_pte->page_read_bytes = page_read_bytes;  /* how many bytes to read from file and write to page */
-      s_pte->writable = writable;                              /* if current page is writtable */
       //printf("[spte added:upage:%p,file%p,w:(%d),RB(%d),ZB(%d)]\n", upage, file, writable, page_read_bytes, page_zero_bytes);
       lock_acquire(&thread_current()->spt_lock);
       hash_insert(&thread_current()->suppl_pt, &s_pte->elem_hash);
       lock_release(&thread_current()->spt_lock);
-#else
-      /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER, upage);
-      if (kpage == NULL)
-        return false;
-
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-      {
-
-        palloc_free_page (kpage);
-        return false; 
-      }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-      {
-
-        palloc_free_page (kpage);
-        return false; 
-      }
-#endif     
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -787,7 +764,7 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
