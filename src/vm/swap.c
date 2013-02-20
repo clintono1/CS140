@@ -1,5 +1,7 @@
 #include "vm/swap.h"
 
+ struct swap_table swap_table;
+
 /* Initialize the swap_table */
 void swap_table_init (struct swap_table *swap_table)
 {
@@ -45,7 +47,7 @@ swap_free (struct swap_table * swap_table, size_t swap_frame_no)
 /* Read one page from the swap_block to the memory, the source frame number is 
     SWAP_FRAME_NO and the destination memory address is BUF */
 void
-swap_read (struct swap_table *swap_table, size_t swap_frame_no, char *buf)
+swap_read (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
 {
   int i;
   /*TODO: should prevent reading from a frame that is un-allocated, add detection later*/
@@ -61,7 +63,7 @@ swap_read (struct swap_table *swap_table, size_t swap_frame_no, char *buf)
 /* write one page from memory to the swap_block, the destination frame number is 
     SWAP_FRAME_NO and the source memory address is BUF */
 void
-swap_write (struct swap_table *swap_table, size_t swap_frame_no, char *buf)
+swap_write (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
 {
   int i;
   /* each loop read in BLOCK_SECTOR_SIZE, that is 512 Bytes */

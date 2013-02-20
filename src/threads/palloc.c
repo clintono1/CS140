@@ -11,8 +11,10 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "vm/frame.h"
+#include "vm/swap.h"
 
 extern uint32_t *init_page_dir;
+extern struct swap_table swap_table;
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -38,10 +40,33 @@ struct pool
 
 /* Two pools: one for kernel data, one for user pages. */
 static struct pool kernel_pool, user_pool;
+/* One clock used for paging out */
+static struct clock_algo clock_user;
+
+
 
 static void init_pool (struct pool *, void *base, size_t page_cnt,
                        const char *name);
 static bool page_from_pool (const struct pool *, void *page);
+
+static void clock_init(struct clock_algo *clock, struct pool *pool);
+
+
+
+/* Initializes the struct used for clock algorithm.
+ * This function is called inside palloc_init 
+ * Currently only initialized for user pool
+ * May support separate clock for user pool and kernel pool*/
+void 
+clock_init(struct clock_algo *clock, struct pool *pool)
+{
+  lock_init(&clock->lock);
+  clock->clock_base = pool->frame_table.frames;
+  clock->clock_bound = pool->frame_table.page_cnt;
+  clock->clock_cur = 0;
+}
+
+
 
 /* Initializes the page allocator.  At most USER_PAGE_LIMIT
    pages are put into the user pool. */
@@ -62,6 +87,8 @@ palloc_init (size_t user_page_limit)
   init_pool (&kernel_pool, free_start, kernel_pages, "kernel pool");
   init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
              user_pages, "user pool");
+  clock_init(&clock_user, &user_pool);
+  swap_table_init(&swap_table);
 }
 
 /* Obtains and returns a group of PAGE_CNT contiguous free pages.

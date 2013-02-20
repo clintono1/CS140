@@ -22,5 +22,5 @@ struct swap_table
 void swap_table_init (struct swap_table *);
 size_t swap_allocate_page ( struct swap_table *);
 void swap_free (struct swap_table *, size_t);
-void swap_read (struct swap_table *, size_t, char *);
-void swap_write (struct swap_table *, size_t, char *) ;
+void swap_read (struct swap_table *, size_t, uint8_t *);
+void swap_write (struct swap_table *, size_t, uint8_t *) ;

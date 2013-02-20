@@ -11,9 +11,11 @@
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "threads/palloc.h"
+#include "vm/swap.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
+extern struct swap_table swap_table;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
@@ -101,9 +103,9 @@ kill (struct intr_frame *f)
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
-         Kernel code shouldn't throw exceptions.  (Page faults
-         may cause kernel exceptions--but they shouldn't arrive
-         here.)  Panic the kernel to make the point.  */
+       *Kernel code shouldn't throw exceptions.  (Page faults
+       * may cause kernel exceptions--but they shouldn't arrive
+       * here.)  Panic the kernel to make the point.  */
       intr_dump_frame (f);
       PANIC ("Kernel bug - unexpected interrupt in kernel"); 
 
@@ -133,6 +135,7 @@ load_page_from_file (struct suppl_pte *s_pte)
     palloc_free_page (kpage);
     _exit(-1);
   }
+
   memset (kpage + s_pte->bytes_read, 0, PGSIZE - s_pte->bytes_read);
   /* Add the page to the process's address space. */
   if (!install_page (s_pte->upage, kpage, file_is_writable (s_pte->file)))
@@ -141,6 +144,32 @@ load_page_from_file (struct suppl_pte *s_pte)
     _exit(-1);
   }
 }
+
+static void 
+load_page_from_swap( uint32_t *pte, void *fault_page)
+{
+    uint8_t *kpage = palloc_get_page(PAL_USER, fault_page);
+    if (kpage == NULL)
+      _exit(-1);
+
+   size_t swap_frame_no = *pte & PTE_ADDR;
+   /* TODO: disk read API has no return value indicating success or not. (Song) */
+   swap_read ( &swap_table, swap_frame_no, kpage);  
+   swap_free ( &swap_table, swap_frame_no);
+   
+   
+   /* Add the page to the process's address space. */
+   /* TODO: for higher efficiency, use this:  *pte | = vtop (kpage) | PTE_P | PTE_W | PTE_U;*/
+   /* TODO: make sure that data loaded from swap is indeed writable (Song) */
+   if (!install_page (fault_page, kpage, 1) )
+   {
+     palloc_free_page (kpage);
+     _exit(-1);
+   }
+   
+}
+
+
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
@@ -199,34 +228,42 @@ page_fault (struct intr_frame *f)
       suppl_page table (a hash table), use the rounded down fault address as key,
       to get the info about where to get the page */
   {
+     if ( ! is_user_vaddr(fault_addr))
+        _exit(-1); 
      struct hash_elem *e;
      struct hash *h = &thread_current ()->suppl_pt;
      struct suppl_pte temp;
      uint32_t *pte;
      struct suppl_pte *s_pte;
-
      void *fault_page = pg_round_down (fault_addr);
-     temp.upage =  (uint8_t *) fault_page;
-     e = hash_find (h, &temp.elem_hash);
-     if ( e == NULL )
-       _exit(-1);
-  
-     s_pte = hash_entry (e, struct suppl_pte, elem_hash);
-  
-     ASSERT (s_pte->upage == fault_page);
+     
      /* find an empty page, fill it with the source indicated by s_ptr,
          map the faulted page to the new allocated frame */
-     pte = lookup_page (thread_current()->pagedir, s_pte->upage, false);
+     pte = lookup_page (thread_current()->pagedir, fault_page, false);
      if (pte == NULL)
+       _exit(-1);     
+     /* TODO: currently we assume that when page fault happend, if it's not a memory mapped file 
+      * (either executable or MMF), then it must be in the swap block. How about zero page? Song*/
+     if (! (*pte & PTE_M) )   /* in the swap block*/
+       load_page_from_swap(pte, fault_page);
+     else                             /* in the memory mapped file */
+     {
+       temp.upage =  (uint8_t *) fault_page;
+       e = hash_find (h, &temp.elem_hash);
+       if ( e == NULL )
          _exit(-1);
-     if (*pte & PTE_M)
-          load_page_from_file (s_pte);
-     /* load finish, delete this supplementary page table entry from hash table */
-     lock_acquire(&thread_current()->spt_lock);
-     hash_delete(h,  &s_pte->elem_hash);
-     lock_release(&thread_current()->spt_lock); 
-  }
 
+       s_pte = hash_entry (e, struct suppl_pte, elem_hash);
+       ASSERT (s_pte->upage == fault_page);
+       load_page_from_file (s_pte);
+       /* load finish, delete this supplementary page table entry from hash table */
+       /* TODO: do we keep or delete this s_pte after loading it? Song*/
+       lock_acquire(&thread_current()->spt_lock);
+       hash_delete(h,  &s_pte->elem_hash);
+       lock_release(&thread_current()->spt_lock); 
+     }
+     
+  }
 
 }
 

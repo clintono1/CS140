@@ -19,6 +19,15 @@ struct frame_table
   uint32_t **frames;
 };
 
+/*Clock algorithm*/
+struct clock_algo
+{
+  struct lock lock;
+  size_t clock_cur;
+  uint32_t **clock_base;
+  size_t clock_bound;
+};
+
 size_t frame_table_size (size_t page_cnt);
 void frame_table_create (struct frame_table *ft, size_t page_cnt,
                          void *block, size_t block_size UNUSED);
