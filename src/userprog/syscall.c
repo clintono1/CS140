@@ -408,8 +408,8 @@ _mmap (int fd, void *addr)
 	int offset = 0;
 	for(offset = 0; offset < len; offset += PGSIZE)
 	{
-	  if(lookup_page(t->pagedir, addr + offset, false))
-		return MAP_FAILED;
+	  if(!lookup_page(t->pagedir, addr + offset, false))
+		  return MAP_FAILED;
 	}
 
 	lock_acquire (&global_lock_filesys);
@@ -466,13 +466,15 @@ _munmap(mapid_t mapping)
 	for(pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
 	{
 	  spte.upage = mf_ptr->upage + pg_cnt*PGSIZE;
+    /*TODO: the page fault handler currently deletes the suppl_pt after loading the page, then this delete might not find (by Song)*/
 	  h_elem_spte = hash_delete (&t->suppl_pt, &spte.elem_hash);
 	  spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
 	  if(pagedir_is_dirty(t->pagedir, spte_ptr->upage))
 	  {
-		lock_acquire (&global_lock_filesys);
-		file_write_at(spte_ptr->file, spte_ptr->upage, spte_ptr->bytes_read, spte_ptr->offset);
-		lock_release (&global_lock_filesys);
+		  lock_acquire (&global_lock_filesys);
+	  	file_write_at(spte_ptr->file, spte_ptr->upage, spte_ptr->bytes_read, spte_ptr->offset);
+      //TODO: should also write PGSIZE-bytes_read zeros for the last write?
+		  lock_release (&global_lock_filesys);
 	  }
 	  free(spte_ptr);
 	}

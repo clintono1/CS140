@@ -159,7 +159,7 @@ struct load_status
 /* Memory mapped file */
 struct mmap_file
   {
-	int mid;
+	  int mid;
     struct file *file;                  /* File the memory is mapped to */
     uint8_t *upage;                     /* User virtual address of the first
                                            mapping page */
