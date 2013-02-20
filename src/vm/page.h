@@ -3,8 +3,12 @@
 #include "lib/kernel/hash.h"
 #include "filesys/off_t.h"
 #include "lib/debug.h"
+#include "filesys/file.h"
+#include "threads/thread.h"
 
 void suppl_pt_init (struct hash *suppl_pt);
+bool suppl_pt_insert_mmf(struct thread *t, uint8_t *start_upage,
+		struct file *file, off_t offset, size_t read_bytes);
 
 /* Supplemental page table entry */
 struct suppl_pte

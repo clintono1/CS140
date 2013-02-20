@@ -23,3 +23,21 @@ suppl_pt_init (struct hash *suppl_pt)
 {
   hash_init (suppl_pt, suppl_pte_hash_func, suppl_pte_hash_less, NULL);
 }
+
+bool
+suppl_pt_insert_mmf(struct thread *t, uint8_t *start_upage,
+		struct file *file, off_t offset, size_t read_bytes)
+{
+	struct suppl_pte *spte;
+	spte = (struct suppl_pte *)malloc(sizeof(struct suppl_pte));
+	if(!spte)
+	  return false;
+	spte->bytes_read = read_bytes;
+	spte->file = file;
+	spte->offset = offset;
+	spte->upage = start_upage + offset;
+	if(!hash_insert(&t->suppl_pt, &spte->elem_hash))
+	  return false;
+
+	return true;
+}

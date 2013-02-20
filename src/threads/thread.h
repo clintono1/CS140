@@ -130,9 +130,8 @@ struct thread
     struct file *process_file;         /* File of this current process */
 #endif
 
-    struct mmap_file *mmap_files;      /* Array of memory mapped files */
-    int mmap_files_size;               /* Size of mapped_files array */
-    int mmap_files_num;                /* Num of current mmap files */
+    struct hash mmap_files;            /* Hashtable of memory mapped files */
+    int mmap_files_num_ever;           /* # of files ever mapped, used as key */
     unsigned magic;                    /* Detects stack overflow. */
   };
 
@@ -160,10 +159,12 @@ struct load_status
 /* Memory mapped file */
 struct mmap_file
   {
+	int mid;
     struct file *file;                  /* File the memory is mapped to */
     uint8_t *upage;                     /* User virtual address of the first
                                            mapping page */
     size_t num_pages;                   /* Number of pages mapped to the file */
+    struct hash_elem elem;
   };
 
 /* If false (default), use round-robin scheduler.

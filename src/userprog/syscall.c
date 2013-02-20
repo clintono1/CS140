@@ -11,6 +11,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "devices/input.h"
+#include "lib/user/syscall.h"
 
 static void syscall_handler (struct intr_frame *);
 static inline bool valid_vaddr_range(const void * vaddr, unsigned size);
@@ -28,6 +29,8 @@ int   _write (int fd, const void *buffer, unsigned size);
 void  _seek (int fd, unsigned position);
 unsigned _tell (int fd);
 void  _close (int fd);
+mapid_t  _mmap (int fd, void *addr);
+void  _munmap (mapid_t mapping);
 
 struct lock global_lock_filesys;  /* global lock for file system*/
 
@@ -135,6 +138,17 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_CLOSE:
       arg1 = get_argument (esp, 1);
       _close ((int)arg1);
+      break;
+
+    case SYS_MMAP:
+      arg1 = get_argument (esp, 1);
+      arg2 = get_argument (esp, 2);
+      f->eax = _mmap ((int)arg1, (void *)arg2);
+      break;
+
+    case SYS_MUNMAP:
+      arg1 = get_argument (esp, 1);
+      _munmap ((mapid_t)arg1);
       break;
 
     default:
@@ -374,3 +388,98 @@ _close (int fd)
   thread_remove_file_handler (t, fd);
 }
 
+mapid_t
+_mmap (int fd, void *addr)
+{
+	struct thread *t = thread_current();
+
+	/* check whether fd and addr are valid */
+	if (!valid_vaddr_range(addr, PGSIZE-1) || addr ==0x0 ||
+	  pg_ofs(addr) != 0 || !valid_file_handler(t, fd))
+	  return MAP_FAILED;
+
+	/* check if file length is larger than 0 */
+	int len = _filesize(fd);
+	if(len <= 0)
+	  return MAP_FAILED;
+
+	/* check if there is enough virtual memory to map this file
+	 * should I check supplementary page table too ?*/
+	int offset = 0;
+	for(offset = 0; offset < len; offset += PGSIZE)
+	{
+	  if(lookup_page(t->pagedir, addr + offset, false))
+		return MAP_FAILED;
+	}
+
+	lock_acquire (&global_lock_filesys);
+	struct file *file_to_map = file_reopen (t->file_handlers[fd]);
+	lock_release (&global_lock_filesys);
+	if(!file_to_map)
+	  return MAP_FAILED;
+
+	struct mmap_file *mf;
+	mf = (struct mmap_file *)malloc(sizeof(struct mmap_file));
+	if(mf == NULL)
+	  return MAP_FAILED;
+	mf->mid = t->mmap_files_num_ever;
+	t->mmap_files_num_ever++;
+	mf->file = file_to_map;
+	mf->upage = addr;
+
+	/* fill in entries in supplementary table */
+	offset = 0;
+	int pg_num = 0;
+	size_t read_bytes = PGSIZE;
+	for(offset = 0; offset < len; offset += PGSIZE)
+	{
+	  if(offset + PGSIZE >= len)
+		read_bytes = len - offset;
+	  suppl_pt_insert_mmf(t, addr, file_to_map, offset, read_bytes);
+	  pg_num++;
+	}
+	mf->num_pages = pg_num;
+	if(!hash_insert(&t->mmap_files, &mf->elem))
+	  return MAP_FAILED;
+
+	return mf->mid;
+}
+
+void
+_munmap(mapid_t mapping)
+{
+	/* delete the entry in mmap_files */
+	struct thread *t = thread_current();
+	struct mmap_file mf;
+	struct hash_elem *h_elem_mf;
+	struct mmap_file * mf_ptr;
+	mf.mid = mapping;
+	h_elem_mf = hash_delete (&t->mmap_files,&mf.elem);
+	mf_ptr = hash_entry (h_elem_mf, struct mmap_file, elem);
+
+	/* delete the entries in suppl_pt */
+	struct suppl_pte spte;
+	struct suppl_pte *spte_ptr;
+	struct hash_elem *h_elem_spte;
+	int pg_num = mf_ptr->num_pages;
+	int pg_cnt = 0;
+	for(pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
+	{
+	  spte.upage = mf_ptr->upage + pg_cnt*PGSIZE;
+	  h_elem_spte = hash_delete (&t->suppl_pt, &spte.elem_hash);
+	  spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
+	  if(pagedir_is_dirty(t->pagedir, spte_ptr->upage))
+	  {
+		lock_acquire (&global_lock_filesys);
+		file_write_at(spte_ptr->file, spte_ptr->upage, spte_ptr->bytes_read, spte_ptr->offset);
+		lock_release (&global_lock_filesys);
+	  }
+	  free(spte_ptr);
+	}
+
+	lock_acquire (&global_lock_filesys);
+	file_close (mf_ptr->file);
+	lock_release (&global_lock_filesys);
+
+	free(mf_ptr);
+}
