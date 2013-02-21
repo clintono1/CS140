@@ -151,14 +151,20 @@ load_page_from_file (struct suppl_pte *s_pte)
 static void 
 load_page_from_swap( uint32_t *pte, void *fault_page)
 {
-   
+    if (! (*pte & PTE_U ))
+      _exit(-1);
+
     uint8_t *kpage = palloc_get_page(PAL_USER, fault_page);
     if (kpage == NULL)
       _exit(-1);
 
+
    size_t swap_frame_no = *pte & PTE_ADDR;
+   /* TODO:load stack is treated separately, since only accessing esp-4 and esp -16 is legal. */
+   /* TODO: however, for David's method of growing stack, swap_frame_no is exactly the point 
+    * when we should trigger stack growth, but need to make sure only esp-4 and esp -16 is legal */
    if (swap_frame_no == 0 )
-     _exit(-1);
+      _exit(-1);
    /* TODO: disk read API has no return value indicating success or not. (Song) */
    swap_read ( &swap_table, swap_frame_no, kpage);  
    swap_free ( &swap_table, swap_frame_no);
@@ -264,20 +270,23 @@ page_fault (struct intr_frame *f)
      pte = lookup_page (thread_current()->pagedir, fault_page, false);
      if (pte == NULL)
        _exit(-1);     
-     /* Stack growth*/
+     /* Case 1. Stack growth*/
      if (( fault_addr == f->esp - 4 || fault_addr == f->esp - 32 ) && fault_addr > STACK_BOTTOM)
      {
        stack_growth(fault_page);
        return;
      }
-     /* TODO: currently we assume that when page fault happend, if it's not a memory mapped file 
-      * (either executable or MMF), then it must be in the swap block. How about zero page? Song*/
-     if (! (*pte & PTE_M) )   /* in the swap block*/
+     /* TODO: How to handle zero page?*/
+    
+     /* Case 2. In the swap block*/
+     if (! (*pte & PTE_M) )  
      {
        load_page_from_swap(pte, fault_page);
        return;
      }
-     if (*pte & PTE_M)                             /* in the memory mapped file */
+
+     /* Case 3. In the memory mapped file */
+     if (*pte & PTE_M)                            
      {
        temp.upage =  (uint8_t *) fault_page;
        e = hash_find (h, &temp.elem_hash);

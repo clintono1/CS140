@@ -39,6 +39,7 @@
 #endif
 #include "vm/page.h"
 
+extern struct swap_table swap_table;
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir = NULL;
 
@@ -126,6 +127,7 @@ main (void)
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
+  swap_table_init(&swap_table);
 #endif
 
   printf ("Boot complete.\n");

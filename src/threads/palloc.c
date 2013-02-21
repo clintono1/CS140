@@ -14,7 +14,7 @@
 #include "vm/swap.h"
 
 extern uint32_t *init_page_dir;
-extern struct swap_table swap_table;
+
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -98,7 +98,7 @@ palloc_init (size_t user_page_limit)
              user_pages, "user pool");
   
   clock_init(&clock_user, &user_pool);
-  swap_table_init(&swap_table);
+ 
 }
 
 /* Obtains and returns a group of PAGE_CNT contiguous free pages.
