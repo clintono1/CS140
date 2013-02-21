@@ -6,10 +6,6 @@
 #include "hash.h"
 #include "list.h"
 
-
-
-
-
 /* Functions and macros for working with x86 hardware page
    tables.
 
@@ -25,7 +21,7 @@
 */
 
 /* Page table index (bits 12:21). */
-#define	PTSHIFT PGBITS		           /* First page table bit. */
+#define PTSHIFT PGBITS                     /* First page table bit. */
 #define PTBITS  10                         /* Number of page table bits. */
 #define PTSPAN  (1 << PTBITS << PGBITS)    /* Bytes covered by a page table. */
 #define PTMASK  BITMASK(PTSHIFT, PTBITS)   /* Page table bits (12:21). */

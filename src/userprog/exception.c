@@ -22,7 +22,7 @@ static void page_fault (struct intr_frame *);
 void _exit (int);
 
 //TODO: write this in design doc:                                   
-#define STACK_BOTTOM  (PHYS_BASE - 8*1024*1024)
+#define STACK_BASE  (PHYS_BASE - 8*1024*1024)
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -196,18 +196,17 @@ load_page_from_swap( uint32_t *pte, void *fault_page)
 static void 
 stack_growth( void *fault_page)  
 {
-  uint8_t *kpage = palloc_get_page(PAL_USER | PAL_ZERO, fault_page);
+  uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);
   if (kpage == NULL)
-    _exit(-1);
+    _exit (-1);
 
   memset (kpage, 0, PGSIZE);
 
-  if (!install_page (fault_page, kpage, 1) )
+  if (!install_page (fault_page, kpage, 1))
   {
     palloc_free_page (kpage);
-    _exit(-1);
+    _exit (-1);
   }
-
 }
 
 
@@ -251,7 +250,7 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* If fault in kernel execpt in system calls, kill the kernel */
+  /* If fault in kernel except in system calls, kill the kernel */
   if (!user && !thread_current()->in_syscall)
   {
     /* To implement virtual memory, delete the rest of the function
@@ -265,36 +264,40 @@ page_fault (struct intr_frame *f)
     kill (f);
   }
   else 
-  /* if page fault in the user program or syscall, should search current thread's
-      suppl_page table (a hash table), use the rounded down fault address as key,
-      to get the info about where to get the page */
+  /* If fault in the user program or syscall, should search current thread's
+     suppl_page table (a hash table) with the rounded down fault address as key,
+     to get the info about where to get the page */
   {
      if ( ! is_user_vaddr(fault_addr))
-        _exit(-1); 
+        _exit(-1);
      struct hash_elem *e;
      struct hash *h = &thread_current ()->suppl_pt;
      struct suppl_pte temp;
      uint32_t *pte;
      struct suppl_pte *s_pte;
      void *fault_page = pg_round_down (fault_addr);
-     
-
-     //printf("page fault address = %lx\n", fault_addr);
-     /* find an empty page, fill it with the source indicated by s_ptr,
-         map the faulted page to the new allocated frame */
+     /* Find an empty page, fill it with the source indicated by s_ptr,
+        map the faulted page to the new allocated frame */
      pte = lookup_page (thread_current()->pagedir, fault_page, false);
      if (pte == NULL)
-       _exit(-1);     
-     /* Case 1. Stack growth*/
-     if (( fault_addr == f->esp - 4 || fault_addr == f->esp - 32 ) && fault_addr > STACK_BOTTOM)
+       _exit (-1);
+
+     /* Case 1. Stack growth
+        Note: there is a false negative here:
+          MOV ..., -4(%esp) will be treated as a stack growth.
+          To be really strict, need to check the opcode of the instruction
+          pointed by f->eip */
+     if (( fault_addr == f->esp - 4  ||    /* PUSH  */
+           fault_addr == f->esp - 32 ||    /* PUSHA */
+           fault_addr >= f->esp)           /* SUB $n, %esp; MOV ..., m(%esp) */
+         && fault_addr >= STACK_BASE)
      {
-       stack_growth(fault_page);
+       stack_growth (fault_page);
        return;
      }
-     /* TODO: How to handle zero page?*/
     
      /* Case 2. In the swap block*/
-     if (! (*pte & PTE_M) )  
+     if (not_present && !(*pte & PTE_M))
      {
        //printf("case2\n");
        load_page_from_swap(pte, fault_page);
@@ -302,12 +305,12 @@ page_fault (struct intr_frame *f)
      }
 
      /* Case 3. In the memory mapped file */
-     if (*pte & PTE_M)                            
+     if (not_present && (*pte & PTE_M))
      {
        temp.upage =  (uint8_t *) fault_page;
        e = hash_find (h, &temp.elem_hash);
        if ( e == NULL )
-         _exit(-1);
+         _exit (-1);
 
        s_pte = hash_entry (e, struct suppl_pte, elem_hash);
        ASSERT (s_pte->upage == fault_page);
@@ -318,8 +321,11 @@ page_fault (struct intr_frame *f)
        hash_delete(h,  &s_pte->elem_hash);
        lock_release(&thread_current()->spt_lock); 
        */
+       return;
      }
      
+     /* Case 4. Access to an invalid user address or a read-only page */
+     _exit (-1);
   }
 
 }
