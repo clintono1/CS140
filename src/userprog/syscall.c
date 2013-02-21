@@ -12,9 +12,11 @@
 #include "filesys/file.h"
 #include "devices/input.h"
 #include "lib/user/syscall.h"
+#include "threads/palloc.h"
 
 static void syscall_handler (struct intr_frame *);
 static inline bool valid_vaddr_range(const void * vaddr, unsigned size);
+static bool preload_user_memory (void *vaddr, bool allocate);
 
 void  _halt (void);
 void  _exit (int status);
@@ -293,6 +295,9 @@ _read (int fd, void *buffer, unsigned size)
   if (fd == STDOUT_FILENO)
     return -1;
 
+  if (!preload_user_memory (buffer, true))
+    _exit (-1);
+
   int result = 0;
   struct thread *t = thread_current();
   if (fd == STDIN_FILENO)
@@ -484,4 +489,42 @@ _munmap(mapid_t mapping)
 	lock_release (&global_lock_filesys);
 
 	free(mf_ptr);
+}
+
+/* Preload user memory page with VADDR.
+   If ALLOCATE is true, allocate a new memory page if not found. */
+static bool
+preload_user_memory (void *vaddr, bool allocate)
+{
+  if (!is_user_vaddr(vaddr))
+    return false;
+  void *upage = pg_round_down (vaddr);
+  uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
+  if (pte == NULL)
+  {
+    if (!allocate)
+      return false;
+    uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, upage);
+    if (kpage != NULL)
+    {
+      bool success = install_page (upage, kpage, true);
+      if (!success)
+        palloc_free_page (kpage);
+      return success;
+    }
+    else
+      return false;
+  }
+  else if ((*pte & PTE_P) == 0)
+  {
+    if ((*pte & PTE_M) == 0)
+    {
+      load_page_from_swap (pte, upage);
+    }
+    else
+    {
+      // TODO: shall we handle the case of mmap files?
+    }
+  }
+  return true;
 }

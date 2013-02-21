@@ -150,21 +150,20 @@ load_page_from_file (struct suppl_pte *s_pte)
   }
 }
 
-static void 
-load_page_from_swap( uint32_t *pte, void *fault_page)
+void
+load_page_from_swap (uint32_t *pte, void *fault_page)
 {
     
     if (! (*pte & PTE_U ))
     {
       //printf("load_page_from_swap: not user pte! exit. \n");
-      _exit(-1);
-
+      _exit (-1);
     }
     uint8_t *kpage = palloc_get_page(PAL_USER, fault_page);
     if (kpage == NULL)
     {
       //printf("load_page_from_swap: cannot palloc! exit. \n");
-      _exit(-1);
+      _exit (-1);
     }
 
    size_t swap_frame_no = *pte & PTE_ADDR;
@@ -174,7 +173,7 @@ load_page_from_swap( uint32_t *pte, void *fault_page)
    if (swap_frame_no == 0 )
    {
      //printf("load_page_from_swap: empty pte! exit. \n");
-      _exit(-1);
+      _exit (-1);
    }
    /* TODO: disk read API has no return value indicating success or not. (Song) */
    swap_read ( &swap_table, swap_frame_no, kpage);  
@@ -187,7 +186,7 @@ load_page_from_swap( uint32_t *pte, void *fault_page)
    {
      //printf("load_page_from_swap can't install page! \n");
      palloc_free_page (kpage);
-     _exit(-1);
+     _exit (-1);
    }
    //printf("load_page_from_swap success! \n");
    
@@ -268,8 +267,9 @@ page_fault (struct intr_frame *f)
      suppl_page table (a hash table) with the rounded down fault address as key,
      to get the info about where to get the page */
   {
-     if ( ! is_user_vaddr(fault_addr))
-        _exit(-1);
+     if (!is_user_vaddr(fault_addr))
+       _exit(-1);
+
      struct hash_elem *e;
      struct hash *h = &thread_current ()->suppl_pt;
      struct suppl_pte temp;
@@ -299,7 +299,6 @@ page_fault (struct intr_frame *f)
      /* Case 2. In the swap block*/
      if (not_present && !(*pte & PTE_M))
      {
-       //printf("case2\n");
        load_page_from_swap(pte, fault_page);
        return;
      }

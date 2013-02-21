@@ -13,5 +13,6 @@
 
 void exception_init (void);
 void exception_print_stats (void);
+void load_page_from_swap (uint32_t *pte, void *fault_page);
 
 #endif /* userprog/exception.h */
