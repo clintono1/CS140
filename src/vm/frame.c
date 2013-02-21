@@ -75,6 +75,7 @@ frame_table_create (struct frame_table *ft, size_t page_cnt, void *block,
   ft->page_cnt = page_cnt;
   ft->frames = (uint32_t **) block;
   memset ((void *) ft->frames, 0, page_cnt * sizeof(uint32_t*));
+  ft->clock_cur = 0;
 }
 
 /* Returns TRUE if all frame table entries from START to START + CNT are used*/
