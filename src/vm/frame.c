@@ -3,8 +3,6 @@
 #include <string.h>
 
 
-
-
 /* Finds and returns the starting index of the first group of CNT
    consecutive empty frame table entries in FT at or after START.
    If there is no such group, returns FRAME_TABLE_ERROR */
@@ -39,6 +37,9 @@ frame_table_scan (struct frame_table *ft, size_t start, size_t cnt)
    to the virtual addresses of PTEs pointing to consecutive pages starting
    at VADDR according to page directory PD.
    Create a new page table if not found and CREATE is true. */
+
+//TODO: this need to change: ft->frames[start + i] = pte_addr if swapped
+//ft->frames[start + i] = suppl_pte_addr if MMF
 void
 frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
                           uint32_t *pd, uint8_t *vaddr, bool create)
@@ -52,7 +53,10 @@ frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
   for (i = 0; i < cnt; i++)
   {
     uint32_t *pte_addr = lookup_page (pd, vaddr + i * PGSIZE, create);
+    //if (*pte_addr & PTE_M == 0)
     ft->frames[start + i] = pte_addr;
+    // TODO: else should find from current thread's hash table to get the suppl_pte
+      
   }
 }
 

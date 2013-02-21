@@ -125,6 +125,8 @@ kill (struct intr_frame *f)
 static void
 load_page_from_file (struct suppl_pte *s_pte)
 {
+  
+
   uint8_t *kpage = palloc_get_page(PAL_USER, s_pte->upage);
   if (kpage == NULL)
     _exit(-1);
@@ -151,20 +153,29 @@ load_page_from_file (struct suppl_pte *s_pte)
 static void 
 load_page_from_swap( uint32_t *pte, void *fault_page)
 {
+    
     if (! (*pte & PTE_U ))
+    {
+      //printf("load_page_from_swap: not user pte! exit. \n");
       _exit(-1);
 
+    }
     uint8_t *kpage = palloc_get_page(PAL_USER, fault_page);
     if (kpage == NULL)
+    {
+      //printf("load_page_from_swap: cannot palloc! exit. \n");
       _exit(-1);
-
+    }
 
    size_t swap_frame_no = *pte & PTE_ADDR;
    /* TODO:load stack is treated separately, since only accessing esp-4 and esp -16 is legal. */
    /* TODO: however, for David's method of growing stack, swap_frame_no is exactly the point 
     * when we should trigger stack growth, but need to make sure only esp-4 and esp -16 is legal */
    if (swap_frame_no == 0 )
+   {
+     //printf("load_page_from_swap: empty pte! exit. \n");
       _exit(-1);
+   }
    /* TODO: disk read API has no return value indicating success or not. (Song) */
    swap_read ( &swap_table, swap_frame_no, kpage);  
    swap_free ( &swap_table, swap_frame_no);
@@ -174,16 +185,18 @@ load_page_from_swap( uint32_t *pte, void *fault_page)
    /* TODO: make sure that data loaded from swap is indeed writable (Song) */
    if (!install_page (fault_page, kpage, 1) )
    {
+     //printf("load_page_from_swap can't install page! \n");
      palloc_free_page (kpage);
      _exit(-1);
    }
+   //printf("load_page_from_swap success! \n");
    
 }
 
 static void 
 stack_growth( void *fault_page)  
 {
-  uint8_t *kpage = palloc_get_page(PAL_USER, fault_page);
+  uint8_t *kpage = palloc_get_page(PAL_USER | PAL_ZERO, fault_page);
   if (kpage == NULL)
     _exit(-1);
 
@@ -265,6 +278,8 @@ page_fault (struct intr_frame *f)
      struct suppl_pte *s_pte;
      void *fault_page = pg_round_down (fault_addr);
      
+
+     //printf("page fault address = %lx\n", fault_addr);
      /* find an empty page, fill it with the source indicated by s_ptr,
          map the faulted page to the new allocated frame */
      pte = lookup_page (thread_current()->pagedir, fault_page, false);
@@ -281,6 +296,7 @@ page_fault (struct intr_frame *f)
      /* Case 2. In the swap block*/
      if (! (*pte & PTE_M) )  
      {
+       //printf("case2\n");
        load_page_from_swap(pte, fault_page);
        return;
      }

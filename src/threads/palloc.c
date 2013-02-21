@@ -14,6 +14,7 @@
 #include "vm/swap.h"
 
 extern uint32_t *init_page_dir;
+extern struct swap_table swap_table;
 
 
 /* Page allocator.  Hands out memory in page-size (or
@@ -90,13 +91,13 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
   page_idx = frame_table_scan (&pool->frame_table, 0, page_cnt);
   if (page_idx != FRAME_TABLE_ERROR)
   {
-    if (flags & PAL_USER)
+    if (flags & PAL_USER)  /* User Pool */
     {
       ASSERT (pg_ofs (vaddr) == 0);
       frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt,
                                 thread_current ()->pagedir, vaddr, true);
     }
-    else
+    else /* Kernel Pool */
     {
       ASSERT (vaddr == NULL);
       uint32_t *pd = init_page_dir ? init_page_dir : (uint32_t*)KERNEL_PAGE_DIR;
@@ -109,23 +110,77 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
 
   if (page_idx != FRAME_TABLE_ERROR)
     pages = pool->base + PGSIZE * page_idx;
-  else
+  else  /* There's not enough empty spaces */
     pages = NULL;
 
   if (pages != NULL) 
-    {
-      if (flags & PAL_ZERO)
-        memset (pages, 0, PGSIZE * page_cnt);
-    }
+  {
+    if (flags & PAL_ZERO)
+    memset (pages, 0, PGSIZE * page_cnt);
+  }
   else 
-    {
-      if (flags & PAL_ASSERT)
-        PANIC ("palloc_get: out of pages");
-    }
+  {
+    if (flags & PAL_ASSERT)
+      PANIC ("palloc_get: out of pages");
+  }
 
   return pages;
 }
 
+
+void * 
+page_out_then_get_page()
+{
+  //printf("\nframe full. paging out!\n");
+  //TODO: two things can modify the page table entry: by its owner thread, or kicked out by another process
+  //there could be race conditions. need to solve. currently just hold the user pool lock.
+  void * frame = NULL;
+  lock_acquire(&user_pool.lock);
+  while ( frame == NULL )
+  {
+    size_t i = user_pool.frame_table.clock_cur;
+    uint32_t *pte_addr = user_pool.frame_table.frames[i];
+    ASSERT( *pte_addr)
+    //ASSERT( pte_addr & 0xC0000000 )  
+    ASSERT(*pte_addr & PTE_P )
+    bool a = (*pte_addr & PTE_A);
+    bool d = (*pte_addr & PTE_D);
+    
+    /* If neither accessed nor dirty, throw away current page */
+    if ( ~a && ~d) 
+    {
+      *pte_addr &= ~PTE_P; //set none present
+      frame = user_pool.base + i * PGSIZE;
+      memset(frame, 0, PGSIZE); //clear the current page, for security TODO: check this is necessary
+      *pte_addr |= PTE_A;  // set accessed bit
+    }
+
+    /* If not accessed but dirty, write back to swap
+     * but don't replace current page, just advance */
+    else if ( ~a && d) 
+    {
+      uint8_t *kpage = user_pool.base + i * PGSIZE;
+      size_t swap_frame_no = swap_allocate_page(&swap_table);
+      swap_write (&swap_table, swap_frame_no, kpage);
+      /*Set top 20 bits to zero*/
+      *pte_addr &= PTE_FLAGS ;
+      /*Set top 20 bits to frame number in the swap block*/
+      *pte_addr |= (swap_frame_no << PGBITS);
+      /*Clear dirty bit */
+      *pte_addr &= ~PTE_D; 
+    } 
+    
+    else  /* If accessed */
+    {
+      *pte_addr &= ~PTE_A;
+    }
+    /* Advance the current clock by 1 */
+    user_pool.frame_table.clock_cur = (user_pool.frame_table.clock_cur + 1)
+                                      % user_pool.frame_table.page_cnt;
+  }
+  lock_release(&user_pool.lock);
+  return frame;
+}
 /* Obtains a single free page and returns its kernel virtual
    address.
    If PAL_USER is set, the page is obtained from the user pool,
@@ -136,7 +191,11 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
 void *
 palloc_get_page (enum palloc_flags flags, uint8_t *vaddr)
 {
-  return palloc_get_multiple (flags, 1, vaddr);
+  void * frame = palloc_get_multiple (flags, 1, vaddr);
+  if (frame == NULL && (flags & PAL_USER))  /* Not enough frames. Need page-out */
+    frame = page_out_then_get_page ();
+  return frame;
+
 }
 
 /* Frees the PAGE_CNT pages starting at PAGES. */

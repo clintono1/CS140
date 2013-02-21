@@ -38,6 +38,7 @@
 #include "filesys/fsutil.h"
 #endif
 #include "vm/page.h"
+#include "vm/swap.h"
 
 extern struct swap_table swap_table;
 /* Page directory with kernel mappings only. */

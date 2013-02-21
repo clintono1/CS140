@@ -1,6 +1,6 @@
 #include "vm/swap.h"
 
- struct swap_table swap_table;
+struct swap_table swap_table;
 
 /* Initialize the swap_table */
 void swap_table_init (struct swap_table *swap_table)
@@ -22,7 +22,8 @@ void swap_table_init (struct swap_table *swap_table)
   }
 }
 
-/* Allocate one page in the swap block */
+/* Allocate one frame in the swap block
+ * Returns the swap_frame_number */
 size_t
 swap_allocate_page ( struct swap_table * swap_table)
 {
