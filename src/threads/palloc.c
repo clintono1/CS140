@@ -64,6 +64,15 @@ clock_init(struct clock_algo *clock, struct pool *pool)
   clock->clock_base = pool->frame_table.frames;
   clock->clock_bound = pool->frame_table.page_cnt;
   clock->clock_cur = 0;
+  //TODO: delete
+  printf("\nClock Algorithm Initing...\n");
+  printf("clock_bound = %d\n", clock->clock_bound);
+  printf("start of user_pool    = %lx\n", user_pool.base);
+  printf("address of clock_base = %x \n", clock->clock_base);
+  printf("user pool frame table = %x \n", user_pool.frame_table.frames);
+  printf("start of kernel pool  = %lx \n",  kernel_pool.base);
+  printf("kernel pool frame table = %x \n", kernel_pool.frame_table.frames);
+  printf("\naddress of clock struct = %lx \naddress of user_pool = %lx \naddress of kernel pool = %lx \n\n", &clock_user, &user_pool, &kernel_pool);
 }
 
 
@@ -87,6 +96,7 @@ palloc_init (size_t user_page_limit)
   init_pool (&kernel_pool, free_start, kernel_pages, "kernel pool");
   init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
              user_pages, "user pool");
+  
   clock_init(&clock_user, &user_pool);
   swap_table_init(&swap_table);
 }

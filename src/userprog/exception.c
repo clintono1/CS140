@@ -21,6 +21,9 @@ static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 void _exit (int);
 
+//TODO: write this in design doc:                                   
+#define STACK_BOTTOM  (PHYS_BASE - 8*1024*1024)
+
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -148,15 +151,17 @@ load_page_from_file (struct suppl_pte *s_pte)
 static void 
 load_page_from_swap( uint32_t *pte, void *fault_page)
 {
+   
     uint8_t *kpage = palloc_get_page(PAL_USER, fault_page);
     if (kpage == NULL)
       _exit(-1);
 
    size_t swap_frame_no = *pte & PTE_ADDR;
+   if (swap_frame_no == 0 )
+     _exit(-1);
    /* TODO: disk read API has no return value indicating success or not. (Song) */
    swap_read ( &swap_table, swap_frame_no, kpage);  
    swap_free ( &swap_table, swap_frame_no);
-   
    
    /* Add the page to the process's address space. */
    /* TODO: for higher efficiency, use this:  *pte | = vtop (kpage) | PTE_P | PTE_W | PTE_U;*/
@@ -167,6 +172,23 @@ load_page_from_swap( uint32_t *pte, void *fault_page)
      _exit(-1);
    }
    
+}
+
+static void 
+stack_growth( void *fault_page)  
+{
+  uint8_t *kpage = palloc_get_page(PAL_USER, fault_page);
+  if (kpage == NULL)
+    _exit(-1);
+
+  memset (kpage, 0, PGSIZE);
+
+  if (!install_page (fault_page, kpage, 1) )
+  {
+    palloc_free_page (kpage);
+    _exit(-1);
+  }
+
 }
 
 
@@ -242,11 +264,20 @@ page_fault (struct intr_frame *f)
      pte = lookup_page (thread_current()->pagedir, fault_page, false);
      if (pte == NULL)
        _exit(-1);     
+     /* Stack growth*/
+     if (( fault_addr == f->esp - 4 || fault_addr == f->esp - 32 ) && fault_addr > STACK_BOTTOM)
+     {
+       stack_growth(fault_page);
+       return;
+     }
      /* TODO: currently we assume that when page fault happend, if it's not a memory mapped file 
       * (either executable or MMF), then it must be in the swap block. How about zero page? Song*/
      if (! (*pte & PTE_M) )   /* in the swap block*/
+     {
        load_page_from_swap(pte, fault_page);
-     else                             /* in the memory mapped file */
+       return;
+     }
+     if (*pte & PTE_M)                             /* in the memory mapped file */
      {
        temp.upage =  (uint8_t *) fault_page;
        e = hash_find (h, &temp.elem_hash);
@@ -258,9 +289,10 @@ page_fault (struct intr_frame *f)
        load_page_from_file (s_pte);
        /* load finish, delete this supplementary page table entry from hash table */
        /* TODO: do we keep or delete this s_pte after loading it? Song*/
-       lock_acquire(&thread_current()->spt_lock);
+       /*lock_acquire(&thread_current()->spt_lock);
        hash_delete(h,  &s_pte->elem_hash);
        lock_release(&thread_current()->spt_lock); 
+       */
      }
      
   }

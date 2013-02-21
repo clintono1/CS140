@@ -15,6 +15,8 @@ void swap_table_init (struct swap_table *swap_table)
     swap_table->bitmap = bitmap_create (pages_in_swap); 
     /* false means not occupied */
     bitmap_set_all (swap_table->bitmap, false);
+    /* The first frame is reserved for stack growth */
+    bitmap_set (swap_table->bitmap, 0, true); 
   }
 }
 
