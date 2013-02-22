@@ -414,13 +414,14 @@ _mmap (int fd, void *addr)
 	  return MAP_FAILED;
 
 	/* check if there is enough virtual memory to map this file
-	 * should I check supplementary page table too ?*/
+	 * should I check supplementary page table too ? not sure
+	 * how to check this yet */
 	int offset = 0;
-	for(offset = 0; offset < len; offset += PGSIZE)
-	{
-	  if(!lookup_page(t->pagedir, addr + offset, false))
-		  return MAP_FAILED;
-	}
+//	for(offset = 0; offset < len; offset += PGSIZE)
+//	{
+//	  if(lookup_page(t->pagedir, addr + offset, false))
+//		  return MAP_FAILED;
+//	}
 
 	lock_acquire (&global_lock_filesys);
 	struct file *file_to_map = file_reopen (t->file_handlers[fd]);
@@ -449,7 +450,7 @@ _mmap (int fd, void *addr)
 	  pg_num++;
 	}
 	mf->num_pages = pg_num;
-	if(!hash_insert(&t->mmap_files, &mf->elem))
+	if(hash_insert(&t->mmap_files, &mf->elem) != NULL)
 	  return MAP_FAILED;
 
 	return mf->mid;
