@@ -118,29 +118,29 @@ kill (struct intr_frame *f)
     }
 }
 
-/* Load data from file into a page */
+/* Load data from file into a page according to the supplemental page table
+   entry S_PTE and the virtual user address UPAGE */
 static void
-load_page_from_file (struct suppl_pte *s_pte)
+load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
 {
-  
-
-  uint8_t *kpage = palloc_get_page(PAL_USER, s_pte->upage);
+  uint8_t *kpage = palloc_get_page (PAL_USER, upage);
   if (kpage == NULL)
     _exit(-1);
 
   /* Load this page. */
-  if (file_read_at ( s_pte->file, kpage,
-                     s_pte->bytes_read,
-                     s_pte->offset)
+  if (file_read_at ( s_pte->file, kpage, s_pte->bytes_read, s_pte->offset)
       != (int) s_pte->bytes_read)
   {
     palloc_free_page (kpage);
     _exit(-1);
   }
 
-  memset (kpage + s_pte->bytes_read, 0, PGSIZE - s_pte->bytes_read);
+  /* Set the unmapped area to zeros */
+  if (PGSIZE - s_pte->bytes_read > 0)
+    memset (kpage + s_pte->bytes_read, 0, PGSIZE - s_pte->bytes_read);
+
   /* Add the page to the process's address space. */
-  if (!install_page (s_pte->upage, kpage, file_is_writable (s_pte->file)))
+  if (!install_page (upage, kpage, file_is_writable (s_pte->file)))
   {
     palloc_free_page (kpage);
     _exit(-1);
@@ -246,8 +246,10 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  struct thread *cur = thread_current();
+
   /* If fault in kernel except in system calls, kill the kernel */
-  if (!user && !thread_current()->in_syscall)
+  if (!user && !cur->in_syscall)
   {
     /* To implement virtual memory, delete the rest of the function
        body, and replace it with code that brings in the page to
@@ -264,18 +266,17 @@ page_fault (struct intr_frame *f)
      suppl_page table (a hash table) with the rounded down fault address as key,
      to get the info about where to get the page */
   {
-     if (!is_user_vaddr(fault_addr))
+     if (!is_user_vaddr (fault_addr))
        _exit(-1);
 
      struct hash_elem *e;
-     struct hash *h = &thread_current ()->suppl_pt;
      struct suppl_pte temp;
      uint32_t *pte;
      struct suppl_pte *s_pte;
      void *fault_page = pg_round_down (fault_addr);
      /* Find an empty page, fill it with the source indicated by s_ptr,
         map the faulted page to the new allocated frame */
-     pte = lookup_page (thread_current()->pagedir, fault_page, false);
+     pte = lookup_page (cur->pagedir, fault_page, false);
      if (pte == NULL)
        _exit (-1);
 
@@ -289,6 +290,8 @@ page_fault (struct intr_frame *f)
            fault_addr >= f->esp)           /* SUB $n, %esp; MOV ..., m(%esp) */
          && fault_addr >= STACK_BASE)
      {
+       // TODO
+       printf ("stack growth\n");
        stack_growth (fault_page);
        return;
      }
@@ -296,27 +299,24 @@ page_fault (struct intr_frame *f)
      /* Case 2. In the swap block*/
      if (not_present && !(*pte & PTE_M))
      {
-       load_page_from_swap(pte, fault_page);
+       // TODO
+       printf ("swap\n");
+       load_page_from_swap (pte, fault_page);
        return;
      }
 
      /* Case 3. In the memory mapped file */
      if (not_present && (*pte & PTE_M))
      {
-       temp.upage =  (uint8_t *) fault_page;
-       e = hash_find (h, &temp.elem_hash);
+       // TODO
+       printf ("mmap\n");
+       temp.pte =  lookup_page (cur->pagedir, fault_page, false);
+       e = hash_find (&cur->suppl_pt, &temp.elem_hash);
        if ( e == NULL )
          _exit (-1);
 
        s_pte = hash_entry (e, struct suppl_pte, elem_hash);
-       ASSERT (s_pte->upage == fault_page);
-       load_page_from_file (s_pte);
-       /* load finish, delete this supplementary page table entry from hash table */
-       /* TODO: do we keep or delete this s_pte after loading it? Song*/
-       /*lock_acquire(&thread_current()->spt_lock);
-       hash_delete(h,  &s_pte->elem_hash);
-       lock_release(&thread_current()->spt_lock); 
-       */
+       load_page_from_file (s_pte, fault_page);
        return;
      }
      

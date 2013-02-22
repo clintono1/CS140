@@ -13,14 +13,14 @@
 #include "devices/input.h"
 #include "lib/user/syscall.h"
 #include "threads/palloc.h"
+#include "userprog/exception.h"
 
 static void syscall_handler (struct intr_frame *);
 static inline bool valid_vaddr_range(const void * vaddr, unsigned size);
-static bool preload_user_memory (void *vaddr, size_t size,
-    bool allocate, uint8_t *esp);
+static bool preload_user_memory (const void *vaddr, size_t size,
+                                 bool allocate, uint8_t *esp);
 
 void  _exit (int status);
-
 static void  _halt (void);
 static pid_t _exec (const char *cmd_line);
 static int   _wait (pid_t pid);
@@ -438,28 +438,29 @@ _mmap (int fd, void *addr)
   mf->file = file_to_map;
   mf->upage = addr;
 
-  /* fill in entries in supplementary table
-   * and page table */
+  /* Fill in entries in supplementary table and page table */
   offset = 0;
   int pg_num = 0;
   size_t read_bytes = PGSIZE;
   uint32_t *pte;
   uint32_t *pd = t->pagedir;
-  for(offset = 0; offset < len; offset += PGSIZE)
+  for (offset = 0; offset < len; offset += PGSIZE)
   {
-    if(offset + PGSIZE >= len)
-    read_bytes = len - offset;
-    suppl_pt_insert_mmf(t, addr, file_to_map, offset, read_bytes);
-    pg_num++;
-    /* fill in page table entry in pagedir, but do not allocate memory */
+    /* Fill in page table entry in pagedir, but do not allocate memory */
     ASSERT (pagedir_get_page (pd, addr + offset) == NULL);
     pte = lookup_page (pd, addr + offset, true);
     ASSERT (pte != NULL);
     ASSERT ((*pte & PTE_P) == 0);
     *pte = PTE_U | PTE_W | PTE_M;
+    /* Create suppl_pte */
+    if(offset + PGSIZE >= len)
+      read_bytes = len - offset;
+    if (!suppl_pt_insert_mmf (t, pte, file_to_map, offset, read_bytes))
+      return MAP_FAILED;
+    pg_num ++;
   }
   mf->num_pages = pg_num;
-  if(hash_insert(&t->mmap_files, &mf->elem) != NULL)
+  if( hash_insert (&t->mmap_files, &mf->elem) != NULL)
     return MAP_FAILED;
 
   return mf->mid;
@@ -481,22 +482,25 @@ _munmap(mapid_t mapping)
   struct suppl_pte spte;
   struct suppl_pte *spte_ptr;
   struct hash_elem *h_elem_spte;
-  int pg_num = mf_ptr->num_pages;
-  int pg_cnt = 0;
-  for(pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
+  uint32_t *pd = t->pagedir;
+  size_t pg_num = mf_ptr->num_pages;
+  size_t pg_cnt = 0;
+  for (pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
   {
-    spte.upage = mf_ptr->upage + pg_cnt*PGSIZE;
+    spte.pte = lookup_page (pd, mf_ptr->upage + pg_cnt * PGSIZE, false);
     /*TODO: the page fault handler currently deletes the suppl_pt after loading the page, then this delete might not find (by Song)*/
     h_elem_spte = hash_delete (&t->suppl_pt, &spte.elem_hash);
     spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
-    if(pagedir_is_dirty(t->pagedir, spte_ptr->upage))
+    /* If the page is dirty, write it back to disk */
+    if (spte_ptr->pte != NULL && (*spte_ptr->pte & PTE_D) != 0)
     {
       lock_acquire (&global_lock_filesys);
-      file_write_at(spte_ptr->file, spte_ptr->upage, spte_ptr->bytes_read, spte_ptr->offset);
+      file_write_at (spte_ptr->file, pte_get_page (*spte_ptr->pte),
+                     spte_ptr->bytes_read, spte_ptr->offset);
       //TODO: should also write PGSIZE-bytes_read zeros for the last write?
       lock_release (&global_lock_filesys);
     }
-    free(spte_ptr);
+    free (spte_ptr);
   }
 
   lock_acquire (&global_lock_filesys);
@@ -509,7 +513,7 @@ _munmap(mapid_t mapping)
 /* Preload user memory page with VADDR.
    If ALLOCATE is true, allocate a new memory page if not found. */
 static bool
-preload_user_memory (void *vaddr, size_t size, bool allocate, uint8_t *esp)
+preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp)
 {
   if (!valid_vaddr_range(vaddr, size))
     return false;
@@ -526,7 +530,7 @@ preload_user_memory (void *vaddr, size_t size, bool allocate, uint8_t *esp)
       /* If the accessing page if not on stack, return false.
          Note: when to support malloc in user programs, it is also valid
          if [vaddr, vaddr+size) is in the allocated VA space. */
-      if (upage < esp)
+      if (upage < (void*) esp)
         return false;
       uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, upage);
       if (kpage != NULL)

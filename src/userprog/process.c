@@ -689,6 +689,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   else
     file_deny_write (file);
 
+  struct thread *cur = thread_current();
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -700,17 +701,17 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       struct suppl_pte *s_pte;
 
       s_pte = (struct suppl_pte * ) malloc (sizeof (struct suppl_pte));
-      pte =  lookup_page (thread_current()->pagedir, upage, true);
+      pte =  lookup_page (cur->pagedir, upage, true);
       *pte |= PTE_M;
-      s_pte->upage = upage;
+      s_pte->pte = pte;
       s_pte->file = file;
       s_pte->offset = ofs;
       ofs = ofs + (uint32_t) PGSIZE;
       s_pte->bytes_read = page_read_bytes;
 
-      lock_acquire (&thread_current()->spt_lock);
-      hash_insert (&thread_current()->suppl_pt, &s_pte->elem_hash);
-      lock_release (&thread_current()->spt_lock);
+      lock_acquire (&cur->spt_lock);
+      hash_insert (&cur->suppl_pt, &s_pte->elem_hash);
+      lock_release (&cur->spt_lock);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -764,8 +765,8 @@ install_page (void *upage, void *kpage, bool writable)
 static unsigned
 mmap_files_hash_func (const struct hash_elem *e, void *aux UNUSED)
 {
-	const struct mmap_file * mmf = hash_entry (e, struct mmap_file, elem);
-	return hash_bytes (&mmf->mid, sizeof(mmf->mid));
+  const struct mmap_file * mmf = hash_entry (e, struct mmap_file, elem);
+  return hash_bytes (&mmf->mid, sizeof(mmf->mid));
 }
 
 static bool
@@ -773,41 +774,43 @@ mmap_files_hash_less (const struct hash_elem *a,
         const struct hash_elem *b,
         void *aux UNUSED)
 {
-	const struct mmap_file * ma = hash_entry (a, struct mmap_file, elem);
-	const struct mmap_file * mb = hash_entry (b, struct mmap_file, elem);
-	return ma->mid < mb->mid;
+  const struct mmap_file * ma = hash_entry (a, struct mmap_file, elem);
+  const struct mmap_file * mb = hash_entry (b, struct mmap_file, elem);
+  return ma->mid < mb->mid;
 }
 
 void
-mmap_files_init(struct thread *t)
+mmap_files_init (struct thread *t)
 {
-	hash_init(&t->mmap_files, mmap_files_hash_func, mmap_files_hash_less, NULL);
-	t->mmap_files_num_ever = 0;
+  hash_init(&t->mmap_files, mmap_files_hash_func, mmap_files_hash_less, NULL);
+  t->mmap_files_num_ever = 0;
 }
 
 static void
-free_mmap_file(struct hash_elem *elem, void *aux UNUSED)
+free_mmap_file (struct hash_elem *elem, void *aux UNUSED)
 {
   struct mmap_file *mmf_ptr;
-  mmf_ptr = hash_entry(elem, struct mmap_file, elem);
+  mmf_ptr = hash_entry (elem, struct mmap_file, elem);
 
   struct thread *t = thread_current();
   /* delete the entries in suppl_pt */
-  struct suppl_pte spte;
   struct suppl_pte *spte_ptr;
   struct hash_elem *h_elem_spte;
   int pg_num = mmf_ptr->num_pages;
   int pg_cnt = 0;
-  for(pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
+  for (pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
   {
-    spte.upage = mmf_ptr->upage + pg_cnt*PGSIZE;
-    h_elem_spte = hash_delete (&t->suppl_pt, &spte.elem_hash);
+    struct suppl_pte temp_spte;
+    temp_spte.pte = lookup_page (t->pagedir, mmf_ptr->upage +
+                                 pg_cnt * PGSIZE, false);
+    h_elem_spte = hash_delete (&t->suppl_pt, &temp_spte.elem_hash);
     spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
-    if(pagedir_is_dirty(t->pagedir, spte_ptr->upage))
+    if (spte_ptr->pte != NULL && (*spte_ptr->pte & PTE_D) != 0)
     {
-	  lock_acquire (&global_lock_filesys);
-	  file_write_at(spte_ptr->file, spte_ptr->upage, spte_ptr->bytes_read, spte_ptr->offset);
-	  lock_release (&global_lock_filesys);
+      lock_acquire (&global_lock_filesys);
+      file_write_at (spte_ptr->file, pte_get_page (*spte_ptr->pte),
+                     spte_ptr->bytes_read, spte_ptr->offset);
+      lock_release (&global_lock_filesys);
     }
     free(spte_ptr);
   }
@@ -815,7 +818,7 @@ free_mmap_file(struct hash_elem *elem, void *aux UNUSED)
   lock_acquire (&global_lock_filesys);
   file_close (mmf_ptr->file);
   lock_release (&global_lock_filesys);
-  free(mmf_ptr);
+  free (mmf_ptr);
 }
 
 static void
