@@ -123,6 +123,8 @@ kill (struct intr_frame *f)
 static void
 load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
 {
+  // TODO
+  printf ("load_page_from_file: upage = %p\n", upage);
   uint8_t *kpage = palloc_get_page (PAL_USER, upage);
   if (kpage == NULL)
     _exit(-1);

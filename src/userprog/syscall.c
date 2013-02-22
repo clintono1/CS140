@@ -451,7 +451,8 @@ _mmap (int fd, void *addr)
     pte = lookup_page (pd, addr + offset, true);
     ASSERT (pte != NULL);
     ASSERT ((*pte & PTE_P) == 0);
-    *pte = PTE_U | PTE_W | PTE_M;
+    *pte = PTE_U | PTE_M;
+    *pte |= file_is_writable(t->file_handlers[fd]) ? PTE_W : ~PTE_W;
     /* Create suppl_pte */
     if(offset + PGSIZE >= len)
       read_bytes = len - offset;
@@ -478,8 +479,9 @@ _munmap(mapid_t mapping)
   h_elem_mf = hash_delete (&t->mmap_files,&mf.elem);
   mf_ptr = hash_entry (h_elem_mf, struct mmap_file, elem);
 
+  // TODO: call free_mmap_file() instead
+
   /* delete the entries in suppl_pt */
-  struct suppl_pte spte;
   struct suppl_pte *spte_ptr;
   struct hash_elem *h_elem_spte;
   uint32_t *pd = t->pagedir;
@@ -487,17 +489,17 @@ _munmap(mapid_t mapping)
   size_t pg_cnt = 0;
   for (pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
   {
-    spte.pte = lookup_page (pd, mf_ptr->upage + pg_cnt * PGSIZE, false);
-    /*TODO: the page fault handler currently deletes the suppl_pt after loading the page, then this delete might not find (by Song)*/
-    h_elem_spte = hash_delete (&t->suppl_pt, &spte.elem_hash);
+    struct suppl_pte temp_spte;
+    temp_spte.pte = lookup_page (pd, mf_ptr->upage + pg_cnt * PGSIZE, false);
+    h_elem_spte = hash_delete (&t->suppl_pt, &temp_spte.elem_hash);
     spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
+    // TODO: clean frame table
     /* If the page is dirty, write it back to disk */
     if (spte_ptr->pte != NULL && (*spte_ptr->pte & PTE_D) != 0)
     {
       lock_acquire (&global_lock_filesys);
       file_write_at (spte_ptr->file, pte_get_page (*spte_ptr->pte),
                      spte_ptr->bytes_read, spte_ptr->offset);
-      //TODO: should also write PGSIZE-bytes_read zeros for the last write?
       lock_release (&global_lock_filesys);
     }
     free (spte_ptr);

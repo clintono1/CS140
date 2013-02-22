@@ -34,7 +34,6 @@ suppl_pt_insert_mmf (struct thread *t, uint32_t *pte,
 	  return false;
 	spte->bytes_read = read_bytes;
 	spte->file = file;
-  /* TODO: is writable? */
 	spte->offset = offset;
 	spte->pte = pte;
 	if (!hash_insert (&t->suppl_pt, &spte->elem_hash))
