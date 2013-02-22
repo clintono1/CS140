@@ -401,109 +401,109 @@ _close (int fd)
 static mapid_t
 _mmap (int fd, void *addr)
 {
-	struct thread *t = thread_current();
+  struct thread *t = thread_current();
 
-	/* check whether fd and addr are valid */
-	if (!valid_vaddr_range(addr, PGSIZE-1) || addr ==0x0 ||
-	  pg_ofs(addr) != 0 || !valid_file_handler(t, fd))
-	  return MAP_FAILED;
+  /* check whether fd and addr are valid */
+  if (!valid_vaddr_range(addr, PGSIZE-1) || addr ==0x0 ||
+    pg_ofs(addr) != 0 || !valid_file_handler(t, fd))
+    return MAP_FAILED;
 
-	/* check if file length is larger than 0 */
-	int len = _filesize(fd);
-	if(len <= 0)
-	  return MAP_FAILED;
+  /* check if file length is larger than 0 */
+  int len = _filesize(fd);
+  if(len <= 0)
+    return MAP_FAILED;
 
-	/* check if there is enough virtual memory to map this file
-	 * should I check supplementary page table too ? not sure
-	 * whether this is fully correct or not */
-	int offset = 0;
-	for(offset = 0; offset < len; offset += PGSIZE)
-	{
-	  if(lookup_page(t->pagedir, addr + offset, false))
-		  return MAP_FAILED;
-	}
+  /* check if there is enough virtual memory to map this file
+   * should I check supplementary page table too ? not sure
+   * whether this is fully correct or not */
+  int offset = 0;
+  for(offset = 0; offset < len; offset += PGSIZE)
+  {
+    if(lookup_page(t->pagedir, addr + offset, false))
+      return MAP_FAILED;
+  }
 
-	lock_acquire (&global_lock_filesys);
-	struct file *file_to_map = file_reopen (t->file_handlers[fd]);
-	lock_release (&global_lock_filesys);
-	if(!file_to_map)
-	  return MAP_FAILED;
+  lock_acquire (&global_lock_filesys);
+  struct file *file_to_map = file_reopen (t->file_handlers[fd]);
+  lock_release (&global_lock_filesys);
+  if(!file_to_map)
+    return MAP_FAILED;
 
-	struct mmap_file *mf;
-	mf = (struct mmap_file *)malloc(sizeof(struct mmap_file));
-	if(mf == NULL)
-	  return MAP_FAILED;
-	mf->mid = t->mmap_files_num_ever;
-	t->mmap_files_num_ever++;
-	mf->file = file_to_map;
-	mf->upage = addr;
+  struct mmap_file *mf;
+  mf = (struct mmap_file *)malloc(sizeof(struct mmap_file));
+  if(mf == NULL)
+    return MAP_FAILED;
+  mf->mid = t->mmap_files_num_ever;
+  t->mmap_files_num_ever++;
+  mf->file = file_to_map;
+  mf->upage = addr;
 
-	/* fill in entries in supplementary table
-	 * and page table */
-	offset = 0;
-	int pg_num = 0;
-	size_t read_bytes = PGSIZE;
-	uint32_t *pte;
-	uint32_t *pd = t->pagedir;
-	for(offset = 0; offset < len; offset += PGSIZE)
-	{
-	  if(offset + PGSIZE >= len)
-		read_bytes = len - offset;
-	  suppl_pt_insert_mmf(t, addr, file_to_map, offset, read_bytes);
-	  pg_num++;
-	  /* fill in page table entry in pagedir, but do not allocate memory */
-	  ASSERT (pagedir_get_page (pd, addr + offset) == NULL);
-	  pte = lookup_page (pd, addr + offset, true);
-	  ASSERT (pte != NULL);
-	  ASSERT ((*pte & PTE_P) == 0);
-	  *pte = PTE_U | PTE_W | PTE_M;
-	}
-	mf->num_pages = pg_num;
-	if(hash_insert(&t->mmap_files, &mf->elem) != NULL)
-	  return MAP_FAILED;
+  /* fill in entries in supplementary table
+   * and page table */
+  offset = 0;
+  int pg_num = 0;
+  size_t read_bytes = PGSIZE;
+  uint32_t *pte;
+  uint32_t *pd = t->pagedir;
+  for(offset = 0; offset < len; offset += PGSIZE)
+  {
+    if(offset + PGSIZE >= len)
+    read_bytes = len - offset;
+    suppl_pt_insert_mmf(t, addr, file_to_map, offset, read_bytes);
+    pg_num++;
+    /* fill in page table entry in pagedir, but do not allocate memory */
+    ASSERT (pagedir_get_page (pd, addr + offset) == NULL);
+    pte = lookup_page (pd, addr + offset, true);
+    ASSERT (pte != NULL);
+    ASSERT ((*pte & PTE_P) == 0);
+    *pte = PTE_U | PTE_W | PTE_M;
+  }
+  mf->num_pages = pg_num;
+  if(hash_insert(&t->mmap_files, &mf->elem) != NULL)
+    return MAP_FAILED;
 
-	return mf->mid;
+  return mf->mid;
 }
 
 static void
 _munmap(mapid_t mapping)
 {
-	/* delete the entry in mmap_files */
-	struct thread *t = thread_current();
-	struct mmap_file mf;
-	struct hash_elem *h_elem_mf;
-	struct mmap_file * mf_ptr;
-	mf.mid = mapping;
-	h_elem_mf = hash_delete (&t->mmap_files,&mf.elem);
-	mf_ptr = hash_entry (h_elem_mf, struct mmap_file, elem);
+  /* delete the entry in mmap_files */
+  struct thread *t = thread_current();
+  struct mmap_file mf;
+  struct hash_elem *h_elem_mf;
+  struct mmap_file * mf_ptr;
+  mf.mid = mapping;
+  h_elem_mf = hash_delete (&t->mmap_files,&mf.elem);
+  mf_ptr = hash_entry (h_elem_mf, struct mmap_file, elem);
 
-	/* delete the entries in suppl_pt */
-	struct suppl_pte spte;
-	struct suppl_pte *spte_ptr;
-	struct hash_elem *h_elem_spte;
-	int pg_num = mf_ptr->num_pages;
-	int pg_cnt = 0;
-	for(pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
-	{
-	  spte.upage = mf_ptr->upage + pg_cnt*PGSIZE;
+  /* delete the entries in suppl_pt */
+  struct suppl_pte spte;
+  struct suppl_pte *spte_ptr;
+  struct hash_elem *h_elem_spte;
+  int pg_num = mf_ptr->num_pages;
+  int pg_cnt = 0;
+  for(pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
+  {
+    spte.upage = mf_ptr->upage + pg_cnt*PGSIZE;
     /*TODO: the page fault handler currently deletes the suppl_pt after loading the page, then this delete might not find (by Song)*/
-	  h_elem_spte = hash_delete (&t->suppl_pt, &spte.elem_hash);
-	  spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
-	  if(pagedir_is_dirty(t->pagedir, spte_ptr->upage))
-	  {
-		  lock_acquire (&global_lock_filesys);
-	  	file_write_at(spte_ptr->file, spte_ptr->upage, spte_ptr->bytes_read, spte_ptr->offset);
+    h_elem_spte = hash_delete (&t->suppl_pt, &spte.elem_hash);
+    spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
+    if(pagedir_is_dirty(t->pagedir, spte_ptr->upage))
+    {
+      lock_acquire (&global_lock_filesys);
+      file_write_at(spte_ptr->file, spte_ptr->upage, spte_ptr->bytes_read, spte_ptr->offset);
       //TODO: should also write PGSIZE-bytes_read zeros for the last write?
-		  lock_release (&global_lock_filesys);
-	  }
-	  free(spte_ptr);
-	}
+      lock_release (&global_lock_filesys);
+    }
+    free(spte_ptr);
+  }
 
-	lock_acquire (&global_lock_filesys);
-	file_close (mf_ptr->file);
-	lock_release (&global_lock_filesys);
+  lock_acquire (&global_lock_filesys);
+  file_close (mf_ptr->file);
+  lock_release (&global_lock_filesys);
 
-	free(mf_ptr);
+  free(mf_ptr);
 }
 
 /* Preload user memory page with VADDR.
