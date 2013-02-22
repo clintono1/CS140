@@ -16,23 +16,25 @@
 
 static void syscall_handler (struct intr_frame *);
 static inline bool valid_vaddr_range(const void * vaddr, unsigned size);
-static bool preload_user_memory (void *vaddr, bool allocate);
+static bool preload_user_memory (void *vaddr, size_t size,
+    bool allocate, uint8_t *esp);
 
-void  _halt (void);
 void  _exit (int status);
-pid_t _exec (const char *cmd_line);
-int   _wait (pid_t pid);
-bool  _create (const char *file, unsigned initial_size);
-bool  _remove (const char *file);
-int   _open (const char *file);
-int   _filesize (int fd);
-int   _read (int fd, void *buffer, unsigned size);
-int   _write (int fd, const void *buffer, unsigned size);
-void  _seek (int fd, unsigned position);
-unsigned _tell (int fd);
-void  _close (int fd);
-mapid_t  _mmap (int fd, void *addr);
-void  _munmap (mapid_t mapping);
+
+static void  _halt (void);
+static pid_t _exec (const char *cmd_line);
+static int   _wait (pid_t pid);
+static bool  _create (const char *file, unsigned initial_size);
+static bool  _remove (const char *file);
+static int   _open (const char *file);
+static int   _filesize (int fd);
+static int   _read (int fd, void *buffer, unsigned size, uint8_t *esp);
+static int   _write (int fd, const void *buffer, unsigned size, uint8_t *esp);
+static void  _seek (int fd, unsigned position);
+static unsigned _tell (int fd);
+static void  _close (int fd);
+static mapid_t  _mmap (int fd, void *addr);
+static void  _munmap (mapid_t mapping);
 
 struct lock global_lock_filesys;  /* global lock for file system*/
 
@@ -116,14 +118,14 @@ syscall_handler (struct intr_frame *f UNUSED)
       arg1 = get_argument (esp, 1);
       arg2 = get_argument (esp, 2);
       arg3 = get_argument (esp, 3);
-      f->eax = (uint32_t) _read ((int)arg1, (void*)arg2, (unsigned)arg3);
+      f->eax = (uint32_t) _read ((int)arg1, (void*)arg2, arg3, f->esp);
       break;
 
     case SYS_WRITE:
       arg1 = get_argument (esp, 1);
       arg2 = get_argument (esp, 2);
       arg3 = get_argument (esp, 3);
-      f->eax = (uint32_t) _write ((int)arg1, (const void*)arg2, (unsigned)arg3);
+      f->eax = (uint32_t) _write ((int)arg1, (const void*)arg2, arg3, f->esp);
       break;
 
     case SYS_SEEK:
@@ -173,13 +175,13 @@ valid_vaddr_range (const void * vaddr, unsigned size)
 }
 
 /* Part1: syscalls for process control */
-void
+static void
 _halt (void)
 {
   shutdown_power_off ();
 }
 
-pid_t
+static pid_t
 _exec (const char *cmd_line)
 {
   /* Check address */
@@ -214,7 +216,7 @@ _exit (int status)
   thread_exit ();
 }
 
-int
+static int
 _wait (pid_t pid)
 {
   return process_wait (pid);
@@ -222,7 +224,7 @@ _wait (pid_t pid)
 
 
 /* Part2: syscalls for file system */
-bool
+static bool
 _create (const char *file, unsigned initial_size)
 {
   
@@ -238,7 +240,7 @@ _create (const char *file, unsigned initial_size)
   return success;
 }
 
-bool
+static bool
 _remove (const char *file)
 {
   if (!valid_vaddr_range (file, 0))
@@ -253,7 +255,7 @@ _remove (const char *file)
   return success;
 }
 
-int
+static int
 _open (const char *file)
 {
   if (!valid_vaddr_range (file, 0))
@@ -272,7 +274,7 @@ _open (const char *file)
   return thread_add_file_handler (thread_current(), f);
 }
 
-int
+static int
 _filesize (int fd)
 {
   struct thread* t = thread_current ();
@@ -286,8 +288,8 @@ _filesize (int fd)
   return size;
 }
 
-int
-_read (int fd, void *buffer, unsigned size)
+static int
+_read (int fd, void *buffer, unsigned size, uint8_t *esp)
 {
   if (!valid_vaddr_range (buffer, size))
      _exit (-1);
@@ -295,7 +297,7 @@ _read (int fd, void *buffer, unsigned size)
   if (fd == STDOUT_FILENO)
     return -1;
 
-  if (!preload_user_memory (buffer, true))
+  if (!preload_user_memory (buffer, size, true, esp))
     _exit (-1);
 
   int result = 0;
@@ -322,8 +324,8 @@ _read (int fd, void *buffer, unsigned size)
   return -1;
 }
 
-int
-_write (int fd, const void *buffer, unsigned size)
+static int
+_write (int fd, const void *buffer, unsigned size, uint8_t *esp)
 {
   if (!valid_vaddr_range (buffer, size))
     _exit (-1);
@@ -331,6 +333,9 @@ _write (int fd, const void *buffer, unsigned size)
     return 0;
   if (fd == STDIN_FILENO)
     return -1;
+
+  if (!preload_user_memory (buffer, size, false, esp))
+    _exit (-1);
 
   int result = 0;
   struct thread *t = thread_current ();
@@ -349,7 +354,7 @@ _write (int fd, const void *buffer, unsigned size)
   return result;
 }
 
-void
+static void
 _seek (int fd, unsigned position)
 {
   struct thread *t = thread_current ();
@@ -364,7 +369,7 @@ _seek (int fd, unsigned position)
 
 }
 
-unsigned
+static unsigned
 _tell (int fd)
 {
   struct thread *t  = thread_current();
@@ -379,7 +384,7 @@ _tell (int fd)
   return n;
 }
 
-void
+static void
 _close (int fd)
 {
   struct thread* t = thread_current();
@@ -393,7 +398,7 @@ _close (int fd)
   thread_remove_file_handler (t, fd);
 }
 
-mapid_t
+static mapid_t
 _mmap (int fd, void *addr)
 {
 	struct thread *t = thread_current();
@@ -450,7 +455,7 @@ _mmap (int fd, void *addr)
 	return mf->mid;
 }
 
-void
+static void
 _munmap(mapid_t mapping)
 {
 	/* delete the entry in mmap_files */
@@ -494,37 +499,49 @@ _munmap(mapid_t mapping)
 /* Preload user memory page with VADDR.
    If ALLOCATE is true, allocate a new memory page if not found. */
 static bool
-preload_user_memory (void *vaddr, bool allocate)
+preload_user_memory (void *vaddr, size_t size, bool allocate, uint8_t *esp)
 {
-  if (!is_user_vaddr(vaddr))
+  if (!valid_vaddr_range(vaddr, size))
     return false;
+
   void *upage = pg_round_down (vaddr);
-  uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
-  if (pte == NULL)
+
+  while (upage < vaddr + size)
   {
-    if (!allocate)
-      return false;
-    uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, upage);
-    if (kpage != NULL)
+    uint32_t *pte = lookup_page (thread_current()->pagedir, upage, allocate);
+    if (*pte == 0)
     {
-      bool success = install_page (upage, kpage, true);
-      if (!success)
-        palloc_free_page (kpage);
-      return success;
+      if (!allocate)
+        return false;
+      /* If the accessing page if not on stack, return false.
+         Note: when to support malloc in user programs, it is also valid
+         if [vaddr, vaddr+size) is in the allocated VA space. */
+      if (upage < esp)
+        return false;
+      uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, upage);
+      if (kpage != NULL)
+      {
+        if (!install_page (upage, kpage, true))
+        {
+          palloc_free_page (kpage);
+          return false;
+        }
+      }
+      else
+        return false;
     }
-    else
-      return false;
-  }
-  else if ((*pte & PTE_P) == 0)
-  {
-    if ((*pte & PTE_M) == 0)
+    else if ((*pte & PTE_P) == 0)
     {
-      load_page_from_swap (pte, upage);
+      if ((*pte & PTE_M) == 0)
+      {
+        load_page_from_swap (pte, upage);
+      }
+      else
+      {
+        // TODO: shall we handle the case of mmap files?
+      }
     }
-    else
-    {
-      // TODO: shall we handle the case of mmap files?
-    }
+    upage += PGSIZE;
   }
   return true;
 }

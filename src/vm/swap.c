@@ -12,7 +12,6 @@ void swap_table_init (struct swap_table *swap_table)
   {
     int pages_in_swap = 
       block_size (swap_table->swap_block) / SECTORS_PER_PAGE;
-    printf("\npages in swap block = %d\n\n", pages_in_swap);
     //TODO: can this bitmap be swapped out?
     swap_table->bitmap = bitmap_create (pages_in_swap); 
     /* false means not occupied */

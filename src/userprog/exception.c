@@ -21,9 +21,6 @@ static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 void _exit (int);
 
-//TODO: write this in design doc:                                   
-#define STACK_BASE  (PHYS_BASE - 8*1024*1024)
-
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
