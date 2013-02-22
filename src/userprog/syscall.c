@@ -415,13 +415,13 @@ _mmap (int fd, void *addr)
 
 	/* check if there is enough virtual memory to map this file
 	 * should I check supplementary page table too ? not sure
-	 * how to check this yet */
+	 * whether this is fully correct or not */
 	int offset = 0;
-//	for(offset = 0; offset < len; offset += PGSIZE)
-//	{
-//	  if(lookup_page(t->pagedir, addr + offset, false))
-//		  return MAP_FAILED;
-//	}
+	for(offset = 0; offset < len; offset += PGSIZE)
+	{
+	  if(lookup_page(t->pagedir, addr + offset, false))
+		  return MAP_FAILED;
+	}
 
 	lock_acquire (&global_lock_filesys);
 	struct file *file_to_map = file_reopen (t->file_handlers[fd]);
@@ -438,16 +438,25 @@ _mmap (int fd, void *addr)
 	mf->file = file_to_map;
 	mf->upage = addr;
 
-	/* fill in entries in supplementary table */
+	/* fill in entries in supplementary table
+	 * and page table */
 	offset = 0;
 	int pg_num = 0;
 	size_t read_bytes = PGSIZE;
+	uint32_t *pte;
+	uint32_t *pd = t->pagedir;
 	for(offset = 0; offset < len; offset += PGSIZE)
 	{
 	  if(offset + PGSIZE >= len)
 		read_bytes = len - offset;
 	  suppl_pt_insert_mmf(t, addr, file_to_map, offset, read_bytes);
 	  pg_num++;
+	  /* fill in page table entry in pagedir, but do not allocate memory */
+	  ASSERT (pagedir_get_page (pd, addr + offset) == NULL);
+	  pte = lookup_page (pd, addr + offset, true);
+	  ASSERT (pte != NULL);
+	  ASSERT ((*pte & PTE_P) == 0);
+	  *pte = PTE_U | PTE_W | PTE_M;
 	}
 	mf->num_pages = pg_num;
 	if(hash_insert(&t->mmap_files, &mf->elem) != NULL)
