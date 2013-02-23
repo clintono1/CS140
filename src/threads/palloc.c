@@ -93,11 +93,20 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint32_t *fte)
   {
     if (flags & PAL_USER)
     {
-      /* Do NOT support allocating multiple pages at a time in user
-         programs since no malloc */
-      ASSERT (page_cnt == 1);
-      ASSERT (fte != NULL);
-      pool->frame_table.frames[page_idx] = fte;
+      if (flags & PAL_MMAP)
+      {
+        /* Do NOT support allocating multiple pages for memory mapped
+           files at a time */
+        ASSERT (page_cnt == 1);
+        ASSERT (fte != NULL);
+        pool->frame_table.frames[page_idx] = fte;
+      }
+      else
+      {
+        uint8_t *upage = ptov (*fte & PTE_ADDR);
+        frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt,
+                                  thread_current ()->pagedir, upage, false);
+      }
     }
     else /* Kernel Pool */
     {
@@ -214,15 +223,15 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags,
    available, returns a null pointer, unless PAL_ASSERT is set in
    FLAGS, in which case the kernel panics. */
 void *
-palloc_get_page (enum palloc_flags flags, uint8_t *upage)
+palloc_get_page (enum palloc_flags flags, uint8_t *page)
 {
-  ASSERT (pg_ofs (upage) == 0);
+  ASSERT (pg_ofs (page) == 0);
   uint32_t *fte = NULL;
 
   if (flags & PAL_USER)
   {
     struct thread *cur = thread_current ();
-    uint32_t *pte = lookup_page (cur->pagedir, upage, true);
+    uint32_t *pte = lookup_page (cur->pagedir, page, true);
     if (*pte & PTE_M)
     {
       ASSERT (flags & PAL_MMAP);
