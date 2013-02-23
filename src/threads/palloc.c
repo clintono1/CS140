@@ -78,7 +78,7 @@ palloc_init (size_t user_page_limit)
    available, returns a null pointer, unless PAL_ASSERT is set in
    FLAGS, in which case the kernel panics. */
 void *
-palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
+palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint32_t *fte)
 {
   struct pool *pool = flags & PAL_USER ? &user_pool : &kernel_pool;
   void *pages;
@@ -91,15 +91,16 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
   page_idx = frame_table_scan (&pool->frame_table, 0, page_cnt);
   if (page_idx != FRAME_TABLE_ERROR)
   {
-    if (flags & PAL_USER)  /* User Pool */
+    if (flags & PAL_USER)
     {
-      ASSERT (pg_ofs (vaddr) == 0);
-      frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt,
-                                thread_current ()->pagedir, vaddr, true);
+      /* Do NOT support allocating multiple pages at a time in user
+         programs since no malloc */
+      ASSERT (page_cnt == 1);
+      ASSERT (fte != NULL);
+      pool->frame_table.frames[page_idx] = fte;
     }
     else /* Kernel Pool */
     {
-      ASSERT (vaddr == NULL);
       uint32_t *pd = init_page_dir ? init_page_dir : (uint32_t*)KERNEL_PAGE_DIR;
       uint8_t *kpage = pool->base + page_idx * PGSIZE;
       frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt,
@@ -215,25 +216,31 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags,
 void *
 palloc_get_page (enum palloc_flags flags, uint8_t *upage)
 {
-  void * frame = palloc_get_multiple (flags, 1, upage);
+  ASSERT (pg_ofs (upage) == 0);
+  uint32_t *fte = NULL;
+
+  if (flags & PAL_USER)
+  {
+    struct thread *cur = thread_current ();
+    uint32_t *pte = lookup_page (cur->pagedir, upage, true);
+    if (*pte & PTE_M)
+    {
+      ASSERT (flags & PAL_MMAP);
+      struct suppl_pte temp;
+      temp.pte = pte;
+      struct hash_elem *e = hash_find (&cur->suppl_pt, &temp.elem_hash);
+      ASSERT (e != NULL);
+      fte = (uint32_t *) hash_entry (e, struct suppl_pte, elem_hash);
+    }
+    else
+      fte = pte;
+  }
+
+  void * frame = palloc_get_multiple (flags, 1, fte);
   if (frame == NULL)  /* Not enough frames. Need page-out */
   {
     if (flags & PAL_USER)
     {
-      uint32_t *fte;
-      struct thread *cur = thread_current ();
-      uint32_t *pte = lookup_page (cur->pagedir, upage, true);
-      if (*pte & PTE_M)
-      {
-        ASSERT (flags & PAL_MMAP);
-        struct suppl_pte temp;
-        temp.pte = pte;
-        struct hash_elem *e = hash_find (&cur->suppl_pt, &temp.elem_hash);
-        ASSERT (e != NULL);
-        fte = (uint32_t *) hash_entry (e, struct suppl_pte, elem_hash);
-      }
-      else
-        fte = pte;
       frame = page_out_then_get_page (&user_pool, flags, fte);
     }
     else

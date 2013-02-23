@@ -472,7 +472,6 @@ _mmap (int fd, void *addr)
 static void
 _munmap(mapid_t mapping)
 {
-  /* delete the entry in mmap_files */
   struct thread *t = thread_current();
   struct mmap_file mf;
   struct hash_elem *h_elem_mf;
@@ -481,7 +480,7 @@ _munmap(mapid_t mapping)
   free_mmap_file (h_elem_mf, NULL);
 }
 
-/* Preload user memory page with VADDR.
+/* Preload user memory pages between VADDR and VADDR + SIZE.
    If ALLOCATE is true, allocate a new memory page if not found. */
 static bool
 preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp)
