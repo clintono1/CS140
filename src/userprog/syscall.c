@@ -518,7 +518,7 @@ _munmap(mapid_t mapping)
 static bool
 preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp)
 {
-  if (!valid_vaddr_range(vaddr, size))
+  if (!valid_vaddr_range (vaddr, size))
     return false;
 
   void *upage = pg_round_down (vaddr);
@@ -555,7 +555,14 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
       }
       else
       {
-        // TODO: shall we handle the case of mmap files?
+        struct suppl_pte temp;
+        temp.pte = pte;
+        struct hash_elem *e;
+        e = hash_find (&thread_current()->suppl_pt, &temp.elem_hash);
+        if ( e == NULL )
+          _exit (-1);
+        struct suppl_pte *s_pte = hash_entry (e, struct suppl_pte, elem_hash);
+        load_page_from_file (s_pte, upage);
       }
     }
     upage += PGSIZE;

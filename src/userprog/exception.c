@@ -120,11 +120,11 @@ kill (struct intr_frame *f)
 
 /* Load data from file into a page according to the supplemental page table
    entry S_PTE and the virtual user address UPAGE */
-static void
+void
 load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
 {
-  uint8_t *kpage = palloc_get_page (PAL_USER, upage);
-  
+  uint8_t *kpage = palloc_get_page (PAL_USER | PAL_MMAP, upage);
+
   if (kpage == NULL)
     _exit(-1);
 
@@ -151,10 +151,10 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
 void
 load_page_from_swap (uint32_t *pte, void *fault_page)
 {
-    
+    // TODO Need to pin the page
     if (! (*pte & PTE_U ))
       _exit (-1);
-    uint8_t *kpage = palloc_get_page(PAL_USER, fault_page);
+    uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);
     if (kpage == NULL)
       _exit (-1);
 
@@ -172,7 +172,7 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
    /* Add the page to the process's address space. */
    /* TODO: for higher efficiency, use this:  *pte | = vtop (kpage) | PTE_P | PTE_W | PTE_U;*/
    /* TODO: make sure that data loaded from swap is indeed writable (Song) */
-   if (!install_page (fault_page, kpage, 1) )
+   if (!install_page (fault_page, kpage, true))
    {
      palloc_free_page (kpage);
      _exit (-1);
@@ -182,7 +182,7 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
 static void 
 stack_growth( void *fault_page)  
 {
-  uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);
+  uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, fault_page);
   if (kpage == NULL)
     _exit (-1);
 
@@ -260,7 +260,6 @@ page_fault (struct intr_frame *f)
        _exit(-1);
 
      struct hash_elem *e;
-     struct suppl_pte temp;
      uint32_t *pte;
      struct suppl_pte *s_pte;
      void *fault_page = pg_round_down (fault_addr);
@@ -294,11 +293,11 @@ page_fault (struct intr_frame *f)
      /* Case 3. In the memory mapped file */
      if (not_present && (*pte & PTE_M))
      {
-       temp.pte =  lookup_page (cur->pagedir, fault_page, false);
+       struct suppl_pte temp;
+       temp.pte = lookup_page (cur->pagedir, fault_page, false);
        e = hash_find (&cur->suppl_pt, &temp.elem_hash);
        if ( e == NULL )
          _exit (-1);
-
        s_pte = hash_entry (e, struct suppl_pte, elem_hash);
        load_page_from_file (s_pte, fault_page);
        return;

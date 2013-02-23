@@ -127,61 +127,83 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
   return pages;
 }
 
-
-static void *
-page_out_then_get_page()
+static inline void
+pool_increase_clock (struct pool *pool)
 {
-  //printf("\nframe full. paging out!\n");
+  /* Advance the current clock by 1 */
+  pool->frame_table.clock_cur = (pool->frame_table.clock_cur + 1)
+                                % pool->frame_table.page_cnt;
+}
+
+/* Page out a page from the frame table in POOL and then return the page's
+   virtual kernel address */
+static void *
+page_out_then_get_page (struct pool *pool, enum palloc_flags flags,
+                        uint32_t *fte)
+{
+  ASSERT ((void *) fte > PHYS_BASE);
+
   //TODO: two things can modify the page table entry: by its owner thread, or kicked out by another process
   //there could be race conditions. need to solve. currently just hold the user pool lock.
-  void * frame = NULL;
-  lock_acquire(&user_pool.lock);
-  while ( frame == NULL )
+  lock_acquire (&pool->lock);
+  while (1)
   {
-    size_t i = user_pool.frame_table.clock_cur;
-    uint32_t *pte_addr = user_pool.frame_table.frames[i];
-    ASSERT( *pte_addr)
-    //ASSERT( pte_addr & 0xC0000000 )  
-    ASSERT(*pte_addr & PTE_P )
-    bool a = (*pte_addr & PTE_A);
-    bool d = (*pte_addr & PTE_D);
-    
-    /* If neither accessed nor dirty, throw away current page */
-    if ( ~a && ~d) 
+    size_t clock_cur = pool->frame_table.clock_cur;
+    uint32_t *frame = pool->frame_table.frames[clock_cur];
+    ASSERT (*frame != 0);
+
+    uint32_t *pte;
+    struct suppl_pte *s_pte = NULL;
+    bool mmap = false;
+    if ((void *) frame > PHYS_BASE)
+      pte = frame;
+    else
     {
-      *pte_addr &= ~PTE_P; //set none present
-      frame = user_pool.base + i * PGSIZE;
-      memset(frame, 0, PGSIZE); //clear the current page, for security TODO: check this is necessary
-      *pte_addr |= PTE_A;  // set accessed bit
+      mmap = true;
+      s_pte = (struct suppl_pte *) ((uint8_t *)frame + (unsigned) PHYS_BASE);
+      pte = s_pte->pte;
     }
 
-    /* If not accessed but dirty, write back to swap
-     * but don't replace current page, just advance */
-    else if ( ~a && d) 
-    {
-      uint8_t *kpage = user_pool.base + i * PGSIZE;
-      size_t swap_frame_no = swap_allocate_page(&swap_table);
-      swap_write (&swap_table, swap_frame_no, kpage);
-      /*Set top 20 bits to zero*/
-      *pte_addr &= PTE_FLAGS ;
-      /*Set top 20 bits to frame number in the swap block*/
-      *pte_addr |= (swap_frame_no << PGBITS);
-      /*Clear dirty bit */
-      *pte_addr &= ~PTE_D; 
-      
-    } 
+    ASSERT (*pte & PTE_P);
+    bool accessed = (*pte & PTE_A);
+    bool dirty = (*pte & PTE_D);
     
+    /* If neither accessed nor dirty, throw away current page */
+    size_t swap_frame_no;
+    uint8_t *kpage = pool->base + clock_cur * PGSIZE;
+    ASSERT (!mmap || (kpage == ptov (*s_pte->pte & PTE_ADDR)));
+    if (!accessed)
+    {
+      if (mmap)
+      {
+        if (dirty)
+          file_write_at (s_pte->file, kpage,
+                         s_pte->bytes_read, s_pte->offset);
+      }
+      else
+      {
+        swap_frame_no = swap_allocate_page (&swap_table);
+        swap_write (&swap_table, swap_frame_no, kpage);
+      }
+      if (flags & PAL_MMAP)
+        fte = (uint32_t *) ((uint8_t *) fte - (unsigned) PHYS_BASE);
+      pool->frame_table.frames[clock_cur] = fte;
+      *pte = vtop (kpage);
+      memset ((void *) *pte, 0, PGSIZE);
+      // TODO
+      *pte |= PTE_A;
+      pool_increase_clock (pool);
+      lock_release (&pool->lock);
+      return ptov (*pte & PTE_ADDR);
+    }
     else  /* If accessed */
     {
-      *pte_addr &= ~PTE_A;
+      *pte &= ~PTE_A;
+      pool_increase_clock (pool);
     }
-    /* Advance the current clock by 1 */
-    user_pool.frame_table.clock_cur = (user_pool.frame_table.clock_cur + 1)
-                                      % user_pool.frame_table.page_cnt;
   }
-  lock_release(&user_pool.lock);
-  return frame;
 }
+
 /* Obtains a single free page and returns its kernel virtual
    address.
    If PAL_USER is set, the page is obtained from the user pool,
@@ -190,13 +212,33 @@ page_out_then_get_page()
    available, returns a null pointer, unless PAL_ASSERT is set in
    FLAGS, in which case the kernel panics. */
 void *
-palloc_get_page (enum palloc_flags flags, uint8_t *vaddr)
+palloc_get_page (enum palloc_flags flags, uint8_t *upage)
 {
-  void * frame = palloc_get_multiple (flags, 1, vaddr);
-  if (frame == NULL && (flags & PAL_USER))  /* Not enough frames. Need page-out */
-    frame = page_out_then_get_page ();
+  void * frame = palloc_get_multiple (flags, 1, upage);
+  if (frame == NULL)  /* Not enough frames. Need page-out */
+  {
+    if (flags & PAL_USER)
+    {
+      uint32_t *fte;
+      struct thread *cur = thread_current ();
+      uint32_t *pte = lookup_page (cur->pagedir, upage, true);
+      if (*pte & PTE_M)
+      {
+        ASSERT (flags & PAL_MMAP);
+        struct suppl_pte temp;
+        temp.pte = pte;
+        struct hash_elem *e = hash_find (&cur->suppl_pt, &temp.elem_hash);
+        ASSERT (e != NULL);
+        fte = (uint32_t *) hash_entry (e, struct suppl_pte, elem_hash);
+      }
+      else
+        fte = pte;
+      frame = page_out_then_get_page (&user_pool, flags, fte);
+    }
+    else
+      PANIC ("Running out of kernel memory pages... Kill the kernel :-(");
+  }
   return frame;
-
 }
 
 /* Frees the PAGE_CNT pages starting at PAGES. */
