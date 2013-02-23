@@ -24,7 +24,7 @@ suppl_pt_init (struct hash *suppl_pt)
 }
 
 bool
-suppl_pt_insert_mmf (struct thread *t, uint32_t *pte,
+suppl_pt_insert_mmf (struct thread *t, uint32_t *pte, bool is_writable,
     struct file *file, off_t offset, size_t read_bytes)
 {
   struct suppl_pte *spte;
@@ -35,6 +35,7 @@ suppl_pt_insert_mmf (struct thread *t, uint32_t *pte,
   spte->file = file;
   spte->offset = offset;
   spte->pte = pte;
+  spte->writable = is_writable;
   if (hash_insert (&t->suppl_pt, &spte->elem_hash))
   {
 	  return false;

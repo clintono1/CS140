@@ -452,11 +452,12 @@ _mmap (int fd, void *addr)
     ASSERT (pte != NULL);
     ASSERT ((*pte & PTE_P) == 0);
     *pte = PTE_U | PTE_M;
-    *pte |= file_is_writable(t->file_handlers[fd]) ? PTE_W : ~PTE_W;
+    bool is_writable = file_is_writable(t->file_handlers[fd]);
+    *pte |= is_writable ? PTE_W : ~PTE_W;
     /* Create suppl_pte */
     if(offset + PGSIZE >= len)
       read_bytes = len - offset;
-    if (!suppl_pt_insert_mmf (t, pte, file_to_map, offset, read_bytes))
+    if (!suppl_pt_insert_mmf (t, pte, is_writable, file_to_map, offset, read_bytes))
       return MAP_FAILED;
     pg_num ++;
   }
