@@ -128,7 +128,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
 }
 
 
-void * 
+static void *
 page_out_then_get_page()
 {
   //printf("\nframe full. paging out!\n");

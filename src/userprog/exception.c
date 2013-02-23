@@ -123,8 +123,6 @@ kill (struct intr_frame *f)
 static void
 load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
 {
-  // TODO
-  //printf ("load_page_from_file: upage = %p, writable? %d\n", upage, s_pte->writable);
   uint8_t *kpage = palloc_get_page (PAL_USER, upage);
   
   if (kpage == NULL)
@@ -155,26 +153,18 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
 {
     
     if (! (*pte & PTE_U ))
-    {
-      //printf("load_page_from_swap: not user pte! exit. \n");
       _exit (-1);
-    }
     uint8_t *kpage = palloc_get_page(PAL_USER, fault_page);
     if (kpage == NULL)
-    {
-      //printf("load_page_from_swap: cannot palloc! exit. \n");
       _exit (-1);
-    }
 
    size_t swap_frame_no = *pte & PTE_ADDR;
    /* TODO:load stack is treated separately, since only accessing esp-4 and esp -16 is legal. */
    /* TODO: however, for David's method of growing stack, swap_frame_no is exactly the point 
     * when we should trigger stack growth, but need to make sure only esp-4 and esp -16 is legal */
    if (swap_frame_no == 0 )
-   {
-     //printf("load_page_from_swap: empty pte! exit. \n");
       _exit (-1);
-   }
+
    /* TODO: disk read API has no return value indicating success or not. (Song) */
    swap_read ( &swap_table, swap_frame_no, kpage);  
    swap_free ( &swap_table, swap_frame_no);
@@ -184,12 +174,9 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
    /* TODO: make sure that data loaded from swap is indeed writable (Song) */
    if (!install_page (fault_page, kpage, 1) )
    {
-     //printf("load_page_from_swap can't install page! \n");
      palloc_free_page (kpage);
      _exit (-1);
    }
-   //printf("load_page_from_swap success! \n");
-   
 }
 
 static void 
@@ -293,8 +280,6 @@ page_fault (struct intr_frame *f)
            fault_addr >= f->esp)           /* SUB $n, %esp; MOV ..., m(%esp) */
          && fault_addr >= STACK_BASE)
      {
-       // TODO
-       //printf ("stack growth\n");
        stack_growth (fault_page);
        return;
      }
@@ -302,8 +287,6 @@ page_fault (struct intr_frame *f)
      /* Case 2. In the swap block*/
      if (not_present && !(*pte & PTE_M))
      {
-       // TODO
-       //printf ("swap\n");
        load_page_from_swap (pte, fault_page);
        return;
      }
@@ -311,8 +294,6 @@ page_fault (struct intr_frame *f)
      /* Case 3. In the memory mapped file */
      if (not_present && (*pte & PTE_M))
      {
-       // TODO
-       //printf ("mmap\n");
        temp.pte =  lookup_page (cur->pagedir, fault_page, false);
        e = hash_find (&cur->suppl_pt, &temp.elem_hash);
        if ( e == NULL )
