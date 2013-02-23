@@ -116,7 +116,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *vaddr)
   if (pages != NULL) 
   {
     if (flags & PAL_ZERO)
-    memset (pages, 0, PGSIZE * page_cnt);
+      memset (pages, 0, PGSIZE * page_cnt);
   }
   else 
   {
@@ -189,7 +189,8 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags,
         fte = (uint32_t *) ((uint8_t *) fte - (unsigned) PHYS_BASE);
       pool->frame_table.frames[clock_cur] = fte;
       *pte = vtop (kpage);
-      memset ((void *) *pte, 0, PGSIZE);
+      if (flags & PAL_ZERO)
+        memset ((void *) kpage, 0, PGSIZE);
       // TODO
       *pte |= PTE_A;
       pool_increase_clock (pool);
