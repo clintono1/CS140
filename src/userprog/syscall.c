@@ -476,42 +476,9 @@ _munmap(mapid_t mapping)
   struct thread *t = thread_current();
   struct mmap_file mf;
   struct hash_elem *h_elem_mf;
-  struct mmap_file * mf_ptr;
   mf.mid = mapping;
   h_elem_mf = hash_delete (&t->mmap_files,&mf.elem);
-  mf_ptr = hash_entry (h_elem_mf, struct mmap_file, elem);
-
-  // TODO: call free_mmap_file() instead
-
-  /* delete the entries in suppl_pt */
-  struct suppl_pte *spte_ptr;
-  struct hash_elem *h_elem_spte;
-  uint32_t *pd = t->pagedir;
-  size_t pg_num = mf_ptr->num_pages;
-  size_t pg_cnt = 0;
-  for (pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
-  {
-    struct suppl_pte temp_spte;
-    temp_spte.pte = lookup_page (pd, mf_ptr->upage + pg_cnt * PGSIZE, false);
-    h_elem_spte = hash_delete (&t->suppl_pt, &temp_spte.elem_hash);
-    spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
-    // TODO: clean frame table
-    /* If the page is dirty, write it back to disk */
-    if (spte_ptr->pte != NULL && (*spte_ptr->pte & PTE_D) != 0)
-    {
-      lock_acquire (&global_lock_filesys);
-      file_write_at (spte_ptr->file, pte_get_page (*spte_ptr->pte),
-                     spte_ptr->bytes_read, spte_ptr->offset);
-      lock_release (&global_lock_filesys);
-    }
-    free (spte_ptr);
-  }
-
-  lock_acquire (&global_lock_filesys);
-  file_close (mf_ptr->file);
-  lock_release (&global_lock_filesys);
-
-  free(mf_ptr);
+  free_mmap_file (h_elem_mf, NULL);
 }
 
 /* Preload user memory page with VADDR.

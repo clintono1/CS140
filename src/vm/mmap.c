@@ -50,6 +50,7 @@ free_mmap_file (struct hash_elem *elem, void *aux UNUSED)
                                  pg_cnt * PGSIZE, false);
     h_elem_spte = hash_delete (&t->suppl_pt, &temp_spte.elem_hash);
     spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
+    // TODO: clean frame table
     if (spte_ptr->pte != NULL && (*spte_ptr->pte & PTE_D) != 0)
     {
       lock_acquire (&global_lock_filesys);
@@ -71,5 +72,3 @@ free_mmap_files(struct hash *mmfs)
 {
   hash_destroy (mmfs, free_mmap_file);
 }
-
-
