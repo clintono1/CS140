@@ -4,6 +4,7 @@
 #include "threads/pte.h"
 #include "threads/synch.h"
 #include "userprog/pagedir.h"
+#include "threads/palloc.h"
 
 extern struct lock global_lock_filesys;
 
@@ -50,14 +51,19 @@ free_mmap_file (struct hash_elem *elem, void *aux UNUSED)
                                  pg_cnt * PGSIZE, false);
     h_elem_spte = hash_delete (&t->suppl_pt, &temp_spte.elem_hash);
     spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
-    // TODO: clean frame table
+    void * kpage = pte_get_page (*spte_ptr->pte);    
     if (spte_ptr->pte != NULL && (*spte_ptr->pte & PTE_D) != 0)
     {
       lock_acquire (&global_lock_filesys);
-      file_write_at (spte_ptr->file, pte_get_page (*spte_ptr->pte),
+      file_write_at (spte_ptr->file, kpage,
                      spte_ptr->bytes_read, spte_ptr->offset);
       lock_release (&global_lock_filesys);
+      /* Make this frame available in the frame_table */      
+      palloc_free_page(kpage);
+      /* Set the previously mapped virtual address to non-present*/
+      *spte_ptr->pte &= ~PTE_P;
     }
+    
     free(spte_ptr);
   }
 
