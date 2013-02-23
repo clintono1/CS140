@@ -1,6 +1,5 @@
 #include "page.h"
 
-
 static unsigned
 suppl_pte_hash_func (const struct hash_elem *e, void *aux UNUSED)
 {
@@ -26,18 +25,19 @@ suppl_pt_init (struct hash *suppl_pt)
 
 bool
 suppl_pt_insert_mmf (struct thread *t, uint32_t *pte,
-		struct file *file, off_t offset, size_t read_bytes)
+    struct file *file, off_t offset, size_t read_bytes)
 {
-	struct suppl_pte *spte;
-	spte = (struct suppl_pte *) malloc ( sizeof( struct suppl_pte));
-	if (!spte)
+  struct suppl_pte *spte;
+  spte = (struct suppl_pte *) malloc ( sizeof( struct suppl_pte));
+  if (!spte)
+    return false;
+  spte->bytes_read = read_bytes;
+  spte->file = file;
+  spte->offset = offset;
+  spte->pte = pte;
+  if (hash_insert (&t->suppl_pt, &spte->elem_hash))
+  {
 	  return false;
-	spte->bytes_read = read_bytes;
-	spte->file = file;
-	spte->offset = offset;
-	spte->pte = pte;
-	if (!hash_insert (&t->suppl_pt, &spte->elem_hash))
-	  return false;
-
-	return true;
+  }
+  return true;
 }
