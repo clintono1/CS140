@@ -681,13 +681,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-
+  //TODO: printf("load_segment called!!\n \n");
   file_seek (file, ofs);
-
-  if (writable)
-    file_allow_write (file);
-  else
-    file_deny_write (file);
 
   struct thread *cur = thread_current();
   while (read_bytes > 0 || zero_bytes > 0) 
@@ -706,8 +701,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       s_pte->pte = pte;
       s_pte->file = file;
       s_pte->offset = ofs;
+      s_pte->writable = writable;
       ofs = ofs + (uint32_t) PGSIZE;
       s_pte->bytes_read = page_read_bytes;
+     //TODO printf("[spte added:upage:%p, pte:%p, file:%p,w:(%d),RB(%d),ZB(%d)]\n",upage,pte,file,writable,page_read_bytes,page_zero_bytes);
 
       lock_acquire (&cur->spt_lock);
       hash_insert (&cur->suppl_pt, &s_pte->elem_hash);

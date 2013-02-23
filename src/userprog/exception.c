@@ -124,8 +124,10 @@ static void
 load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
 {
   // TODO
-  printf ("load_page_from_file: upage = %p\n", upage);
+  //printf ("load_page_from_file: upage = %p, writable? %d\n", upage, s_pte->writable);
+  
   uint8_t *kpage = palloc_get_page (PAL_USER, upage);
+  
   if (kpage == NULL)
     _exit(-1);
 
@@ -142,7 +144,7 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
     memset (kpage + s_pte->bytes_read, 0, PGSIZE - s_pte->bytes_read);
 
   /* Add the page to the process's address space. */
-  if (!install_page (upage, kpage, file_is_writable (s_pte->file)))
+  if (!install_page (upage, kpage, s_pte->writable))
   {
     palloc_free_page (kpage);
     _exit(-1);
@@ -293,7 +295,7 @@ page_fault (struct intr_frame *f)
          && fault_addr >= STACK_BASE)
      {
        // TODO
-       printf ("stack growth\n");
+       //printf ("stack growth\n");
        stack_growth (fault_page);
        return;
      }
@@ -302,7 +304,7 @@ page_fault (struct intr_frame *f)
      if (not_present && !(*pte & PTE_M))
      {
        // TODO
-       printf ("swap\n");
+       //printf ("swap\n");
        load_page_from_swap (pte, fault_page);
        return;
      }
@@ -311,7 +313,7 @@ page_fault (struct intr_frame *f)
      if (not_present && (*pte & PTE_M))
      {
        // TODO
-       printf ("mmap\n");
+       //printf ("mmap\n");
        temp.pte =  lookup_page (cur->pagedir, fault_page, false);
        e = hash_find (&cur->suppl_pt, &temp.elem_hash);
        if ( e == NULL )

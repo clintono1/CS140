@@ -168,6 +168,7 @@ page_out_then_get_page()
       *pte_addr |= (swap_frame_no << PGBITS);
       /*Clear dirty bit */
       *pte_addr &= ~PTE_D; 
+      
     } 
     
     else  /* If accessed */
