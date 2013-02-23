@@ -19,14 +19,12 @@
 #include "threads/vaddr.h"
 #include "vm/frame.h"
 #include "vm/page.h"
-
+#include "vm/mmap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmd_line, void (**eip) (void), void **esp);
 void argc_counter(const char*str, int *word_cnt, int *char_cnt);
 bool argument_pasing (const char *cmd_line, char **esp);
-static void free_mmap_files(struct hash *mmfs);
-static void free_mmap_file(struct hash_elem *elem, void *aux UNUSED);
 
 extern struct lock global_lock_filesys;
 
@@ -681,7 +679,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-  //TODO: printf("load_segment called!!\n \n");
   file_seek (file, ofs);
 
   struct thread *cur = thread_current();
@@ -757,69 +754,4 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
-}
-
-static unsigned
-mmap_files_hash_func (const struct hash_elem *e, void *aux UNUSED)
-{
-  const struct mmap_file * mmf = hash_entry (e, struct mmap_file, elem);
-  return hash_bytes (&mmf->mid, sizeof(mmf->mid));
-}
-
-static bool
-mmap_files_hash_less (const struct hash_elem *a,
-        const struct hash_elem *b,
-        void *aux UNUSED)
-{
-  const struct mmap_file * ma = hash_entry (a, struct mmap_file, elem);
-  const struct mmap_file * mb = hash_entry (b, struct mmap_file, elem);
-  return ma->mid < mb->mid;
-}
-
-void
-mmap_files_init (struct thread *t)
-{
-  hash_init(&t->mmap_files, mmap_files_hash_func, mmap_files_hash_less, NULL);
-  t->mmap_files_num_ever = 0;
-}
-
-static void
-free_mmap_file (struct hash_elem *elem, void *aux UNUSED)
-{
-  struct mmap_file *mmf_ptr;
-  mmf_ptr = hash_entry (elem, struct mmap_file, elem);
-
-  struct thread *t = thread_current();
-  /* delete the entries in suppl_pt */
-  struct suppl_pte *spte_ptr;
-  struct hash_elem *h_elem_spte;
-  int pg_num = mmf_ptr->num_pages;
-  int pg_cnt = 0;
-  for (pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
-  {
-    struct suppl_pte temp_spte;
-    temp_spte.pte = lookup_page (t->pagedir, mmf_ptr->upage +
-                                 pg_cnt * PGSIZE, false);
-    h_elem_spte = hash_delete (&t->suppl_pt, &temp_spte.elem_hash);
-    spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
-    if (spte_ptr->pte != NULL && (*spte_ptr->pte & PTE_D) != 0)
-    {
-      lock_acquire (&global_lock_filesys);
-      file_write_at (spte_ptr->file, pte_get_page (*spte_ptr->pte),
-                     spte_ptr->bytes_read, spte_ptr->offset);
-      lock_release (&global_lock_filesys);
-    }
-    free(spte_ptr);
-  }
-
-  lock_acquire (&global_lock_filesys);
-  file_close (mmf_ptr->file);
-  lock_release (&global_lock_filesys);
-  free (mmf_ptr);
-}
-
-static void
-free_mmap_files(struct hash *mmfs)
-{
-  hash_destroy (mmfs, free_mmap_file);
 }

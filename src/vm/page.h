@@ -1,5 +1,5 @@
-#ifndef VM_PAGE_H_
-#define VM_PAGE_H_
+#ifndef VM_PAGE_H
+#define VM_PAGE_H
 #include "lib/kernel/hash.h"
 #include "filesys/off_t.h"
 #include "lib/debug.h"

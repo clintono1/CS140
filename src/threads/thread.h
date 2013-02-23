@@ -156,17 +156,6 @@ struct load_status
     struct thread *parent_thread;       /* Pointer to the parent thread */
   };
 
-/* Memory mapped file */
-struct mmap_file
-  {
-	  int mid;
-    struct file *file;                  /* File the memory is mapped to */
-    uint8_t *upage;                     /* User virtual address of the first
-                                           mapping page */
-    size_t num_pages;                   /* Number of pages mapped to the file */
-    struct hash_elem elem;
-  };
-
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
