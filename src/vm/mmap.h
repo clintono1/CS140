@@ -7,8 +7,8 @@
 struct thread;
 
 void mmap_files_init (struct thread *t);
-void free_mmap_files (struct hash *mmfs);
-void free_mmap_file (struct hash_elem *elem, void *aux UNUSED);
+void mmap_free_files (struct hash *mmfs);
+void mmap_free_file (struct hash_elem *elem, void *aux UNUSED);
 
 /* Memory mapped file */
 struct mmap_file

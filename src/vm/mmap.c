@@ -33,7 +33,7 @@ mmap_files_init (struct thread *t)
 }
 
 void
-free_mmap_file (struct hash_elem *elem, void *aux UNUSED)
+mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
 {
   struct mmap_file *mmf_ptr;
   mmf_ptr = hash_entry (elem, struct mmap_file, elem);
@@ -74,7 +74,7 @@ free_mmap_file (struct hash_elem *elem, void *aux UNUSED)
 }
 
 void
-free_mmap_files(struct hash *mmfs)
+mmap_free_files(struct hash *mmfs)
 {
-  hash_destroy (mmfs, free_mmap_file);
+  hash_destroy (mmfs, mmap_free_file);
 }

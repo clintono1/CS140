@@ -477,7 +477,7 @@ _munmap(mapid_t mapping)
   struct hash_elem *h_elem_mf;
   mf.mid = mapping;
   h_elem_mf = hash_delete (&t->mmap_files,&mf.elem);
-  free_mmap_file (h_elem_mf, NULL);
+  mmap_free_file (h_elem_mf, NULL);
 }
 
 /* Preload user memory pages between VADDR and VADDR + SIZE.

@@ -202,7 +202,7 @@ process_exit (void)
   if (!cur->is_kernel)
     printf ("%s: exit(%d)\n", thread_name(), cur->exit_status->exit_value);
   /* free all memory mapped files */
-  free_mmap_files(&cur->mmap_files);
+  mmap_free_files(&cur->mmap_files);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
