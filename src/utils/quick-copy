@@ -1,0 +1,1 @@
+pintos -p tests/$1/$2 -a $2 -- -f -q
