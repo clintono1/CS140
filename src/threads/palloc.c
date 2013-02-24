@@ -157,6 +157,15 @@ pool_increase_clock (struct pool *pool)
 static void *
 page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *page)
 {
+  printf("page out then get page for va= %p\n", page); 
+// uint32_t i; 
+/*
+  for ( i= 0; i<pool->frame_table.page_cnt; i++)
+  {
+    uint32_t *fte = pool->frame_table.frames[i];
+    printf("fte[%d] = %p\n", i, fte);
+  }*/
+
   uint32_t *fte = NULL;
 
   if (flags & PAL_USER)
@@ -171,10 +180,14 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     else
       fte = pte;
   }
+  else
+  {
+    printf("Wrong, only user can request!\n");
+  }
 
   ASSERT (((flags & PAL_USER) && (void *) fte > PHYS_BASE)
           || (!(flags & PAL_USER) && (fte == NULL)) );
-
+  
   //TODO: two things can modify the page table entry: by its owner thread, or kicked out by another process
   //there could be race conditions. need to solve. currently just hold the user pool lock.
   lock_acquire (&pool->lock);
@@ -182,7 +195,10 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
   {
     size_t clock_cur = pool->frame_table.clock_cur;
     uint32_t *frame = pool->frame_table.frames[clock_cur];
-    ASSERT (*frame != 0);
+    //shouldn't assert here! frame could be less than PHYS_BASE if MMF and shall cause page fault. Debuged me 2 hours...
+    //ASSERT (*frame != 0);
+    //TODO: pls delete this after you see this.
+    //printf("frame[%d]= %p\n", clock_cur, frame);
 
     uint32_t *pte;
     struct suppl_pte *s_pte = NULL;
@@ -199,6 +215,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     ASSERT (*pte & PTE_P);
     bool accessed = (*pte & PTE_A);
     bool dirty = (*pte & PTE_D);
+    //printf("MMF = %d, accessed = %d, dirty = %d\n", mmap, accessed, dirty);
     
     /* If neither accessed nor dirty, throw away current page */
     size_t swap_frame_no;

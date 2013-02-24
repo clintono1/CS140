@@ -1,6 +1,7 @@
 #include "vm/frame.h"
 #include "threads/vaddr.h"
 #include <string.h>
+#include "stdio.h"
 
 
 /* Finds and returns the starting index of the first group of CNT

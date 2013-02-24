@@ -123,11 +123,13 @@ kill (struct intr_frame *f)
 void
 load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
 {
+  printf("load from file. faulting upage = %p, the helping spte address = %p\n", upage, s_pte);
   uint8_t *kpage = palloc_get_page (PAL_USER | PAL_MMAP, upage);
-
   if (kpage == NULL)
+  {
+    printf("load from file fail\n");
     _exit(-1);
-
+  }
   /* If MMF or code or initilized data, Load this page. 
      If uninitialized data, load zero page 
      This is self-explanatory by s_pte->bytes_read and memset zeros*/
@@ -135,6 +137,7 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
   if (file_read_at ( s_pte->file, kpage, s_pte->bytes_read, s_pte->offset)
       != (int) s_pte->bytes_read)
   {
+      printf("load from file fail\n");
     palloc_free_page (kpage);
     _exit(-1);
   }
@@ -142,13 +145,17 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
   /* Set the unmapped area to zeros */
   if (PGSIZE - s_pte->bytes_read > 0)
     memset (kpage + s_pte->bytes_read, 0, PGSIZE - s_pte->bytes_read);
+  
 
   /* Add the page to the process's address space. */
   if (!install_page (upage, kpage, s_pte->flags & SPTE_W))
   {
     palloc_free_page (kpage);
+      printf("load from file fail\n");
     _exit(-1);
   }
+  uint32_t *pte = lookup_page(thread_current()->pagedir,upage, false);
+  printf("after install, pte = %x \n", *pte);
 }
 
 void
@@ -159,21 +166,24 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
       _exit (-1);
     uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);
     if (kpage == NULL)
+    {
+      printf("kpage = null\n");
       _exit (-1);
+    }
 
    size_t swap_frame_no = *pte & PTE_ADDR;
-   /* TODO:load stack is treated separately, since only accessing esp-4 and esp -16 is legal. */
-   /* TODO: however, for David's method of growing stack, swap_frame_no is exactly the point 
-    * when we should trigger stack growth, but need to make sure only esp-4 and esp -16 is legal */
+  
    if (swap_frame_no == 0 )
+   {
+     printf("swap_no ==0 \n");
       _exit (-1);
+   }
 
-   /* TODO: disk read API has no return value indicating success or not. (Song) */
+   
    swap_read ( &swap_table, swap_frame_no, kpage);  
    swap_free ( &swap_table, swap_frame_no);
    
    /* Add the page to the process's address space. */
-   /* TODO: for higher efficiency, use this:  *pte | = vtop (kpage) | PTE_P | PTE_W | PTE_U;*/
    /* TODO: make sure that data loaded from swap is indeed writable (Song) */
    if (!install_page (fault_page, kpage, true))
    {
@@ -187,13 +197,16 @@ stack_growth( void *fault_page)
 {
   uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, fault_page);
   if (kpage == NULL)
+  {
+    printf("stack grow fail\n");
     _exit (-1);
-
+  }
   memset (kpage, 0, PGSIZE);
 
   if (!install_page (fault_page, kpage, 1))
   {
     palloc_free_page (kpage);
+      printf("stack grow fail\n");
     _exit (-1);
   }
 }
@@ -268,7 +281,10 @@ page_fault (struct intr_frame *f)
         map the faulted page to the new allocated frame */
      pte = lookup_page (cur->pagedir, fault_page, false);
      if (pte == NULL)
+     {
+       printf("pte = null\n");
        _exit (-1);
+     }
 
      /* Case 1. Stack growth
         Note: there is a false negative here:
@@ -300,6 +316,7 @@ page_fault (struct intr_frame *f)
      }
      
      /* Case 4. Access to an invalid user address or a read-only page */
+     printf(" Case 4 exit!\n");
      _exit (-1);
   }
 }
