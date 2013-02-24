@@ -128,7 +128,10 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
   if (kpage == NULL)
     _exit(-1);
 
-  /* Load this page. */
+  /* If MMF or code or initilized data, Load this page. 
+     If uninitialized data, load zero page 
+     This is self-explanatory by s_pte->bytes_read and memset zeros*/
+
   if (file_read_at ( s_pte->file, kpage, s_pte->bytes_read, s_pte->offset)
       != (int) s_pte->bytes_read)
   {

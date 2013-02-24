@@ -184,7 +184,10 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags,
     ASSERT (!mmap || (kpage == ptov (*s_pte->pte & PTE_ADDR)));
     if (!accessed)
     {
-      if (mmap)
+      /* if mmap is true, there are still four cases: true mmap, code, 
+         uninitilized data, initialized data. Only the first case need 
+         write back to file, the latter three cases need write back to swap */
+      if (mmap && (s_pte->flags & SPTE_MMF))
       {
         if (dirty)
           file_write_at (s_pte->file, kpage,
@@ -195,6 +198,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags,
         swap_frame_no = swap_allocate_page (&swap_table);
         swap_write (&swap_table, swap_frame_no, kpage);
       }
+      /* For all cases when !accessed, choose this frame to return (kicked out)*/
       if (flags & PAL_MMAP)
         fte = (uint32_t *) ((uint8_t *) fte - (unsigned) PHYS_BASE);
       pool->frame_table.frames[clock_cur] = fte;

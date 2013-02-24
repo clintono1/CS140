@@ -702,11 +702,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (writable == 0)
         s_pte->flags |= SPTE_CODE;
       else if (page_read_bytes != 0)
-        s_pte->flags |= SPTE_DATA_INI;
-        
-      
-      
-
+        s_pte->flags |= SPTE_DATA_INI;                    
 
       ofs = ofs + (uint32_t) PGSIZE;
       s_pte->bytes_read = page_read_bytes;
