@@ -43,3 +43,14 @@ suppl_pt_insert_mmf (struct thread *t, uint32_t *pte, bool is_writable,
   }
   return true;
 }
+
+struct suppl_pte *
+suppl_pt_get_spte (struct hash *suppl_pt, uint32_t *pte)
+{
+  struct suppl_pte temp;
+  temp.pte = pte;
+  struct hash_elem *e = hash_find (suppl_pt, &temp.elem_hash);
+  ASSERT (e != NULL);
+  struct suppl_pte *spte = hash_entry (e, struct suppl_pte, elem_hash);
+  return spte;
+}

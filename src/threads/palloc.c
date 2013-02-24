@@ -104,11 +104,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         uint32_t *pte, *fte;
         pte = lookup_page (cur->pagedir, page, true);
         ASSERT (*pte & PTE_M);
-        struct suppl_pte temp;
-        temp.pte = pte;
-        struct hash_elem *e = hash_find (&cur->suppl_pt, &temp.elem_hash);
-        ASSERT (e != NULL);
-        fte = (uint32_t *) hash_entry (e, struct suppl_pte, elem_hash);
+        fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
         pool->frame_table.frames[page_idx] =
             (uint32_t *) ((uint8_t *)fte - (unsigned) PHYS_BASE);
       }
@@ -170,11 +166,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     if (*pte & PTE_M)
     {
       ASSERT (flags & PAL_MMAP);
-      struct suppl_pte temp;
-      temp.pte = pte;
-      struct hash_elem *e = hash_find (&cur->suppl_pt, &temp.elem_hash);
-      ASSERT (e != NULL);
-      fte = (uint32_t *) hash_entry (e, struct suppl_pte, elem_hash);
+      fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
     }
     else
       fte = pte;

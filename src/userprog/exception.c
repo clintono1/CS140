@@ -262,9 +262,7 @@ page_fault (struct intr_frame *f)
      if (!is_user_vaddr (fault_addr))
        _exit(-1);
 
-     struct hash_elem *e;
      uint32_t *pte;
-     struct suppl_pte *s_pte;
      void *fault_page = pg_round_down (fault_addr);
      /* Find an empty page, fill it with the source indicated by s_ptr,
         map the faulted page to the new allocated frame */
@@ -296,12 +294,7 @@ page_fault (struct intr_frame *f)
      /* Case 3. In the memory mapped file */
      if (not_present && (*pte & PTE_M))
      {
-       struct suppl_pte temp;
-       temp.pte = lookup_page (cur->pagedir, fault_page, false);
-       e = hash_find (&cur->suppl_pt, &temp.elem_hash);
-       if ( e == NULL )
-         _exit (-1);
-       s_pte = hash_entry (e, struct suppl_pte, elem_hash);
+       struct suppl_pte *s_pte = suppl_pt_get_spte (&cur->suppl_pt, pte);
        load_page_from_file (s_pte, fault_page);
        return;
      }
@@ -309,6 +302,5 @@ page_fault (struct intr_frame *f)
      /* Case 4. Access to an invalid user address or a read-only page */
      _exit (-1);
   }
-
 }
 

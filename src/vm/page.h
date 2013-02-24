@@ -6,21 +6,20 @@
 #include "filesys/file.h"
 #include "threads/thread.h"
 
-
 enum spte_flags
 {
   SPTE_W = 0x1,           /* 1: Writable 0: Read-only  */
   SPTE_MMF = 0x2,         /* 1: Memory mapped file 0: Executable*/
   SPTE_CODE = 0x4,        /* 1: Executable's Code Segment 
-                            0: Executable's Data Segment */
+                             0: Executable's Data Segment */
   SPTE_DATA_INI = 0x8,    /* 1: Initialized Data 
-                            0: Uninitialized Data */
+                             0: Uninitialized Data */
 };
-
 
 void suppl_pt_init (struct hash *suppl_pt);
 bool suppl_pt_insert_mmf (struct thread *t, uint32_t *pte, bool is_writable,
 		struct file *file, off_t offset, size_t read_bytes);
+struct suppl_pte * suppl_pt_get_spte (struct hash *suppl_pt, uint32_t *pte);
 
 /* Supplemental page table entry */
 struct suppl_pte
@@ -32,8 +31,5 @@ struct suppl_pte
   size_t bytes_read;              /* Number of bytes read from the file */
   struct hash_elem elem_hash;     /* Element for supplemental page table */
 };
-
-
-
 
 #endif /* vm/page.h */
