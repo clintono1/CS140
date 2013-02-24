@@ -141,7 +141,7 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
     memset (kpage + s_pte->bytes_read, 0, PGSIZE - s_pte->bytes_read);
 
   /* Add the page to the process's address space. */
-  if (!install_page (upage, kpage, s_pte->writable))
+  if (!install_page (upage, kpage, s_pte->flags & SPTE_W))
   {
     palloc_free_page (kpage);
     _exit(-1);

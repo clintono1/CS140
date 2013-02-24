@@ -61,7 +61,7 @@ free_mmap_file (struct hash_elem *elem, void *aux UNUSED)
       /* Make this frame available in the frame_table */      
       palloc_free_page(kpage);
       /* Set the previously mapped virtual address to non-present*/
-      *spte_ptr->pte &= ~PTE_P;
+      *spte_ptr->pte = 0;
     }
     
     free(spte_ptr);

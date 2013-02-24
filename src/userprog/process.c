@@ -698,7 +698,16 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       s_pte->pte = pte;
       s_pte->file = file;
       s_pte->offset = ofs;
-      s_pte->writable = writable;
+      s_pte->flags = writable? SPTE_W : 0;
+      if (writable == 0)
+        s_pte->flags |= SPTE_CODE;
+      else if (page_read_bytes != 0)
+        s_pte->flags |= SPTE_DATA_INI;
+        
+      
+      
+
+
       ofs = ofs + (uint32_t) PGSIZE;
       s_pte->bytes_read = page_read_bytes;
      //TODO printf("[spte added:upage:%p, pte:%p, file:%p,w:(%d),RB(%d),ZB(%d)]\n",upage,pte,file,writable,page_read_bytes,page_zero_bytes);
