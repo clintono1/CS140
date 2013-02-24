@@ -78,7 +78,7 @@ palloc_init (size_t user_page_limit)
    available, returns a null pointer, unless PAL_ASSERT is set in
    FLAGS, in which case the kernel panics. */
 void *
-palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint32_t *fte)
+palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
 {
   struct pool *pool = flags & PAL_USER ? &user_pool : &kernel_pool;
   void *pages;
@@ -93,23 +93,34 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint32_t *fte)
   {
     if (flags & PAL_USER)
     {
+      ASSERT (page != NULL);
+      ASSERT ((void *) page < PHYS_BASE);
+      struct thread *cur = thread_current ();
       if (flags & PAL_MMAP)
       {
         /* Do NOT support allocating multiple pages for memory mapped
            files at a time */
         ASSERT (page_cnt == 1);
-        ASSERT (fte != NULL);
-        pool->frame_table.frames[page_idx] = fte;
+        uint32_t *pte, *fte;
+        pte = lookup_page (cur->pagedir, page, true);
+        ASSERT (*pte & PTE_M);
+        struct suppl_pte temp;
+        temp.pte = pte;
+        struct hash_elem *e = hash_find (&cur->suppl_pt, &temp.elem_hash);
+        ASSERT (e != NULL);
+        fte = (uint32_t *) hash_entry (e, struct suppl_pte, elem_hash);
+        pool->frame_table.frames[page_idx] =
+            (uint32_t *) ((uint8_t *)fte - (unsigned) PHYS_BASE);
       }
       else
       {
-        uint8_t *upage = ptov (*fte & PTE_ADDR);
         frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt,
-                                  thread_current ()->pagedir, upage, false);
+                                  cur->pagedir, page, true);
       }
     }
     else /* Kernel Pool */
     {
+      ASSERT (page == NULL);
       uint32_t *pd = init_page_dir ? init_page_dir : (uint32_t*)KERNEL_PAGE_DIR;
       uint8_t *kpage = pool->base + page_idx * PGSIZE;
       frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt,
@@ -148,10 +159,29 @@ pool_increase_clock (struct pool *pool)
 /* Page out a page from the frame table in POOL and then return the page's
    virtual kernel address */
 static void *
-page_out_then_get_page (struct pool *pool, enum palloc_flags flags,
-                        uint32_t *fte)
+page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *page)
 {
-  ASSERT ((void *) fte > PHYS_BASE);
+  uint32_t *fte = NULL;
+
+  if (flags & PAL_USER)
+  {
+    struct thread *cur = thread_current ();
+    uint32_t *pte = lookup_page (cur->pagedir, page, true);
+    if (*pte & PTE_M)
+    {
+      ASSERT (flags & PAL_MMAP);
+      struct suppl_pte temp;
+      temp.pte = pte;
+      struct hash_elem *e = hash_find (&cur->suppl_pt, &temp.elem_hash);
+      ASSERT (e != NULL);
+      fte = (uint32_t *) hash_entry (e, struct suppl_pte, elem_hash);
+    }
+    else
+      fte = pte;
+  }
+
+  ASSERT (((flags & PAL_USER) && (void *) fte > PHYS_BASE)
+          || (!(flags & PAL_USER) && (fte == NULL)) );
 
   //TODO: two things can modify the page table entry: by its owner thread, or kicked out by another process
   //there could be race conditions. need to solve. currently just hold the user pool lock.
@@ -230,31 +260,13 @@ void *
 palloc_get_page (enum palloc_flags flags, uint8_t *page)
 {
   ASSERT (pg_ofs (page) == 0);
-  uint32_t *fte = NULL;
 
-  if (flags & PAL_USER)
-  {
-    struct thread *cur = thread_current ();
-    uint32_t *pte = lookup_page (cur->pagedir, page, true);
-    if (*pte & PTE_M)
-    {
-      ASSERT (flags & PAL_MMAP);
-      struct suppl_pte temp;
-      temp.pte = pte;
-      struct hash_elem *e = hash_find (&cur->suppl_pt, &temp.elem_hash);
-      ASSERT (e != NULL);
-      fte = (uint32_t *) hash_entry (e, struct suppl_pte, elem_hash);
-    }
-    else
-      fte = pte;
-  }
-
-  void * frame = palloc_get_multiple (flags, 1, fte);
+  void * frame = palloc_get_multiple (flags, 1, page);
   if (frame == NULL)  /* Not enough frames. Need page-out */
   {
     if (flags & PAL_USER)
     {
-      frame = page_out_then_get_page (&user_pool, flags, fte);
+      frame = page_out_then_get_page (&user_pool, flags, page);
     }
     else
       PANIC ("Running out of kernel memory pages... Kill the kernel :-(");

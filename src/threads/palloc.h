@@ -15,7 +15,7 @@ enum palloc_flags
 
 void palloc_init (size_t user_page_limit);
 void *palloc_get_page (enum palloc_flags, uint8_t *upage);
-void *palloc_get_multiple (enum palloc_flags, size_t page_cnt, uint32_t *fte);
+void *palloc_get_multiple (enum palloc_flags, size_t page_cnt, uint8_t *page);
 void palloc_free_page (void *);
 void palloc_free_multiple (void *, size_t page_cnt);
 void palloc_kernel_pool_change_pd (uint32_t *pd);

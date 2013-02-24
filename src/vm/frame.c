@@ -50,6 +50,7 @@ frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
   for (i = 0; i < cnt; i++)
   {
     uint32_t *pte_addr = lookup_page (pd, page + i * PGSIZE, create);
+    ASSERT ((void *) pte_addr > PHYS_BASE);
     ft->frames[start + i] = pte_addr;
   }
 }
