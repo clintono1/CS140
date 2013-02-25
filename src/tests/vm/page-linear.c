@@ -21,9 +21,8 @@ test_main (void)
   msg("buf=%p, main=%p", buf, (void *)test_main );
   for (i = 0; i < SIZE; i++)
   { 
-    *(buf+i) = 0x5a;
+    buf[i] = 0x5a;
     msg("buf moved to=%p, buf[%d]=%x", buf+i, i, buf[i] );
-
   }
 
   msg("inidone");

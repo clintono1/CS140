@@ -133,7 +133,8 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
   /* If MMF or code or initilized data, Load this page. 
      If uninitialized data, load zero page 
      This is self-explanatory by s_pte->bytes_read and memset zeros*/
-
+  printf("bytes read=%d\n", s_pte->bytes_read);
+  
   if (file_read_at ( s_pte->file, kpage, s_pte->bytes_read, s_pte->offset)
       != (int) s_pte->bytes_read)
   {
@@ -274,14 +275,18 @@ page_fault (struct intr_frame *f)
   /* TODO: update comments: If fault in the user program or syscall, should get the info about where to get the page */
   {
      if (!is_user_vaddr (fault_addr))
+     {
+       //debug_backtrace();
+       printf("\nerror add= %p\n", fault_addr);
        _exit(-1);
+     }
 
      uint32_t *pte;
      void *fault_page = pg_round_down (fault_addr);
      /* Find an empty page, fill it with the source indicated by s_ptr,
         map the faulted page to the new allocated frame */
      printf("\nfault page = %p np:%d, w:%d, u:%d", fault_page, not_present, write, user);
-     //debug_backtrace();
+    //debug_backtrace();
      pte = lookup_page (cur->pagedir, fault_page, false);
      if (pte == NULL)
      {
@@ -308,6 +313,7 @@ page_fault (struct intr_frame *f)
      if (not_present && !(*pte & PTE_M))
      {
        load_page_from_swap (pte, fault_page);
+       print_frame_table();
        return;
      }
 
@@ -316,6 +322,7 @@ page_fault (struct intr_frame *f)
      {
        struct suppl_pte *s_pte = suppl_pt_get_spte (&cur->suppl_pt, pte);
        load_page_from_file (s_pte, fault_page);
+       print_frame_table();
        return;
      }
      
