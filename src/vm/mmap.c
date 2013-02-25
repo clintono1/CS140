@@ -35,36 +35,29 @@ mmap_files_init (struct thread *t)
 void
 mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
 {
-  struct mmap_file *mmf_ptr;
-  mmf_ptr = hash_entry (elem, struct mmap_file, elem);
-
-  struct thread *t = thread_current();
-  /* delete the entries in suppl_pt */
-  struct suppl_pte *spte_ptr;
-  struct hash_elem *h_elem_spte;
-  int pg_num = mmf_ptr->num_pages;
-  int pg_cnt = 0;
+  struct mmap_file *mmf_ptr = hash_entry (elem, struct mmap_file, elem);
+  struct thread *cur = thread_current();
+  size_t pg_num = mmf_ptr->num_pages;
+  size_t pg_cnt = 0;
   for (pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
   {
-    struct suppl_pte temp_spte;
-    temp_spte.pte = lookup_page (t->pagedir, mmf_ptr->upage +
+    uint32_t *pte = lookup_page (cur->pagedir, mmf_ptr->upage +
                                  pg_cnt * PGSIZE, false);
-    h_elem_spte = hash_delete (&t->suppl_pt, &temp_spte.elem_hash);
-    spte_ptr = hash_entry (h_elem_spte, struct suppl_pte, elem_hash);
-    void * kpage = pte_get_page (*spte_ptr->pte);    
-    if (spte_ptr->pte != NULL && (*spte_ptr->pte & PTE_D) != 0)
+    ASSERT (*pte & PTE_M);
+    struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte);
+    void * kpage = pte_get_page (*pte);
+    if (*pte & PTE_D)
     {
+      ASSERT (*pte & PTE_P);
       lock_acquire (&global_lock_filesys);
-      file_write_at (spte_ptr->file, kpage,
-                     spte_ptr->bytes_read, spte_ptr->offset);
+      file_write_at (spte->file, kpage, spte->bytes_read, spte->offset);
       lock_release (&global_lock_filesys);
-      /* Make this frame available in the frame_table */      
-      palloc_free_page(kpage);
-      /* Set the previously mapped virtual address to non-present*/
-      *spte_ptr->pte = 0;
     }
-    
-    free(spte_ptr);
+    if (*pte & PTE_P)
+      palloc_free_page (kpage);
+    hash_delete (&cur->suppl_pt, &spte->elem_hash);
+    *pte = 0;
+    free(spte);
   }
 
   lock_acquire (&global_lock_filesys);
