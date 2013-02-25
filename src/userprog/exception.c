@@ -161,17 +161,19 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
 void
 load_page_from_swap (uint32_t *pte, void *fault_page)
 {
+    
     // TODO Need to pin the page
-    if (! (*pte & PTE_U ))
-      _exit (-1);
-    uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);
+
+    printf("load from swap: fault page = %p, it's pte = %p\n", fault_page, *pte);
+    uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);    
     if (kpage == NULL)
     {
       printf("kpage = null\n");
       _exit (-1);
     }
 
-   size_t swap_frame_no = *pte & PTE_ADDR;
+   size_t swap_frame_no = (*pte & PTE_ADDR)>>PGBITS;
+   printf("swap in from frame no = %d\n", swap_frame_no);
   
    if (swap_frame_no == 0 )
    {
@@ -190,11 +192,13 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
      palloc_free_page (kpage);
      _exit (-1);
    }
+   printf("load from swap finish\n");
 }
 
 static void 
 stack_growth( void *fault_page)  
 {
+  printf("stack growth\n");
   uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, fault_page);
   if (kpage == NULL)
   {
@@ -209,6 +213,7 @@ stack_growth( void *fault_page)
       printf("stack grow fail\n");
     _exit (-1);
   }
+
 }
 
 
@@ -268,9 +273,7 @@ page_fault (struct intr_frame *f)
     kill (f);
   }
   else 
-  /* If fault in the user program or syscall, should search current thread's
-     suppl_page table (a hash table) with the rounded down fault address as key,
-     to get the info about where to get the page */
+  /* TODO: update comments: If fault in the user program or syscall, should get the info about where to get the page */
   {
      if (!is_user_vaddr (fault_addr))
        _exit(-1);
@@ -279,10 +282,11 @@ page_fault (struct intr_frame *f)
      void *fault_page = pg_round_down (fault_addr);
      /* Find an empty page, fill it with the source indicated by s_ptr,
         map the faulted page to the new allocated frame */
+     printf("\nfault page = %p not present:%d, write:%d, user:%d\n", fault_page, not_present, write, user);
      pte = lookup_page (cur->pagedir, fault_page, false);
      if (pte == NULL)
      {
-       printf("pte = null\n");
+       printf("!!pte = null\n");
        _exit (-1);
      }
 
@@ -292,9 +296,10 @@ page_fault (struct intr_frame *f)
           To be really strict, need to check the opcode of the instruction
           pointed by f->eip */
      if (( fault_addr == f->esp - 4  ||    /* PUSH  */
-           fault_addr == f->esp - 32 ||    /* PUSHA */
+           fault_addr == f->esp - 32 ||
            fault_addr >= f->esp)           /* SUB $n, %esp; MOV ..., m(%esp) */
-         && fault_addr >= STACK_BASE)
+         && fault_addr >= STACK_BASE
+         && (*pte & PTE_ADDR) == 0)
      {
        stack_growth (fault_page);
        return;

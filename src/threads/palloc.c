@@ -178,11 +178,12 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
     }
     else
-      fte = pte;
+      fte = pte;  /* here fte is the value that's going to be written to frame table */
+   // printf(" pte = %p\n", *pte);
   }
   else
   {
-    printf("Wrong, only user can request!\n");
+   // printf("Wrong, only user can request!\n");
   }
 
   ASSERT (((flags & PAL_USER) && (void *) fte > PHYS_BASE)
@@ -198,7 +199,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     //shouldn't assert here! frame could be less than PHYS_BASE if MMF and shall cause page fault. Debuged me 2 hours...
     //ASSERT (*frame != 0);
     //TODO: pls delete this after you see this.
-    //printf("frame[%d]= %p\n", clock_cur, frame);
+  //printf("frame[%d]= %p\n", clock_cur, frame);
 
     uint32_t *pte;
     struct suppl_pte *s_pte = NULL;
@@ -215,7 +216,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     ASSERT (*pte & PTE_P);
     bool accessed = (*pte & PTE_A);
     bool dirty = (*pte & PTE_D);
-    //printf("MMF = %d, accessed = %d, dirty = %d\n", mmap, accessed, dirty);
+ // printf("MMF = %d, accessed = %d, dirty = %d\n", mmap, accessed, dirty);
     
     /* If neither accessed nor dirty, throw away current page */
     size_t swap_frame_no;
@@ -229,26 +230,31 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       if (mmap && (s_pte->flags & SPTE_MMF))
       {
         if (dirty)
+        {
           file_write_at (s_pte->file, kpage,
                          s_pte->bytes_read, s_pte->offset);
+       //   printf("  write kpage %p to file\n", kpage);
+        }
+        *pte = 0;
       }
       else
       {
         swap_frame_no = swap_allocate_page (&swap_table);
         swap_write (&swap_table, swap_frame_no, kpage);
+        *pte = swap_frame_no << 12;
+       // printf("  write kpage %p to swap_frame %d\n", kpage, swap_frame_no);
       }
       /* For all cases when !accessed, choose this frame to return (kicked out)*/
       if (flags & PAL_MMAP)
         fte = (uint32_t *) ((uint8_t *) fte - (unsigned) PHYS_BASE);
       pool->frame_table.frames[clock_cur] = fte;
-      *pte = vtop (kpage);
       if (flags & PAL_ZERO)
         memset ((void *) kpage, 0, PGSIZE);
-      // TODO
-      *pte |= PTE_A;
+      //printf("  the pte that was kicked out was updated to: %p\n", *pte);
       pool_increase_clock (pool);
       lock_release (&pool->lock);
-      return ptov (*pte & PTE_ADDR);
+      printf("DONE! find kpage = %p for it.\n", kpage); 
+      return kpage;
     }
     else  /* If accessed */
     {
