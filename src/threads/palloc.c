@@ -157,7 +157,7 @@ pool_increase_clock (struct pool *pool)
 static void *
 page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *page)
 {
-  printf("page out then get page for va= %p\n", page); 
+  printf("\npage out then get page for va= %p\n", page); 
 // uint32_t i; 
 /*
   for ( i= 0; i<pool->frame_table.page_cnt; i++)
@@ -225,24 +225,51 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     if (!accessed)
     {
       /* if mmap is true, there are still four cases: true mmap, code, 
-         uninitilized data, initialized data. Only the first case need 
+         uninitilized data, initialized data. Only true MMP need 
          write back to file, the latter three cases need write back to swap */
-      if (mmap && (s_pte->flags & SPTE_MMF))
+      if (mmap) 
       {
-        if (dirty)
+        printf("pte=%x", *pte);
+        ASSERT(*pte & PTE_M);
+        if ((s_pte->flags & SPTE_MMF) && dirty)
         {
           file_write_at (s_pte->file, kpage,
                          s_pte->bytes_read, s_pte->offset);
-       //   printf("  write kpage %p to file\n", kpage);
+          printf("  write kpage %p to FILE! \n", kpage);
         }
-        *pte = 0;
+        else if(*pte & PTE_W)
+        {
+          swap_frame_no = swap_allocate_page (&swap_table);
+          swap_write (&swap_table, swap_frame_no, kpage);
+          *pte &= PTE_FLAGS;
+          *pte |= swap_frame_no << 12;
+          printf("  write DATA kpage %p to swap_frame %d\n", kpage, swap_frame_no);
+        }
+        *pte &= ~PTE_P;
       }
-      else
+      else //not from code, data, mmf
       {
         swap_frame_no = swap_allocate_page (&swap_table);
         swap_write (&swap_table, swap_frame_no, kpage);
-        *pte = swap_frame_no << 12;
-       // printf("  write kpage %p to swap_frame %d\n", kpage, swap_frame_no);
+        
+    /*
+        hex_dump(0,kpage, PGSIZE, 0);
+            printf("\n\n");*/
+    
+/*
+        memset(kpage,1, PGSIZE);
+        hex_dump(0,kpage, PGSIZE, 0);
+        printf("\n\n");
+        swap_read (&swap_table, swap_frame_no, kpage);
+        hex_dump(0,kpage, PGSIZE, 0);*/
+
+
+
+        printf("old pte=%x\n", *pte); 
+        *pte &= PTE_FLAGS;
+        *pte |= swap_frame_no << 12;
+        *pte &= ~PTE_P;
+        printf("  write kpage %p to swap_frame %d\n", kpage, swap_frame_no);
       }
       /* For all cases when !accessed, choose this frame to return (kicked out)*/
       if (flags & PAL_MMAP)
@@ -250,7 +277,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       pool->frame_table.frames[clock_cur] = fte;
       if (flags & PAL_ZERO)
         memset ((void *) kpage, 0, PGSIZE);
-      //printf("  the pte that was kicked out was updated to: %p\n", *pte);
+      printf("  the pte that was kicked out was updated to: %p\n", *pte);
       pool_increase_clock (pool);
       lock_release (&pool->lock);
       printf("DONE! find kpage = %p for it.\n", kpage); 

@@ -86,6 +86,7 @@ bitmap_create (size_t bit_cnt)
       if (b->bits != NULL || bit_cnt == 0)
         {
           bitmap_set_all (b, false);
+          printf("bit map success!\n\n\n");
           return b;
         }
       free (b);

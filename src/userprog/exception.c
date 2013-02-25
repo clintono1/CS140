@@ -123,7 +123,7 @@ kill (struct intr_frame *f)
 void
 load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
 {
-  printf(" load from file.the helping spte address = %p\n", upage, s_pte);
+  printf(" [load from file] spte=%p ", s_pte);
   uint8_t *kpage = palloc_get_page (PAL_USER | PAL_MMAP, upage);
   if (kpage == NULL)
   {
@@ -146,7 +146,6 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
   if (PGSIZE - s_pte->bytes_read > 0)
     memset (kpage + s_pte->bytes_read, 0, PGSIZE - s_pte->bytes_read);
   
-
   /* Add the page to the process's address space. */
   if (!install_page (upage, kpage, s_pte->flags & SPTE_W))
   {
@@ -155,7 +154,8 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
     _exit(-1);
   }
   uint32_t *pte = lookup_page(thread_current()->pagedir,upage, false);
-//  printf("after install, pte = %x \n", *pte);
+  *pte |= PTE_M;
+  printf("after install, kpage=%p, pte = %x \n", kpage,*pte);
 }
 
 void
@@ -164,7 +164,7 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
     
     // TODO Need to pin the page
 
-    printf(" load from swap: pte = %p\n", fault_page, *pte);
+    printf(" [load from swap]: pte = %p\n", fault_page, *pte);
     uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);    
     if (kpage == NULL)
     {
@@ -182,7 +182,8 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
    }
 
    
-   swap_read ( &swap_table, swap_frame_no, kpage);  
+   swap_read ( &swap_table, swap_frame_no, kpage); 
+//   hex_dump(0,kpage, PGSIZE, 0);
    swap_free ( &swap_table, swap_frame_no);
    
    /* Add the page to the process's address space. */
@@ -192,7 +193,7 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
      palloc_free_page (kpage);
      _exit (-1);
    }
-   printf("load from swap finish\n");
+   printf("after install, kpage=%p, pte = %x \n", kpage,*pte);
 }
 
 static void 
@@ -235,7 +236,7 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
-
+  
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
      data.  It is not necessarily the address of the instruction
@@ -262,9 +263,6 @@ page_fault (struct intr_frame *f)
   /* If fault in kernel except in system calls, kill the kernel */
   if (!user && !cur->in_syscall)
   {
-    /* To implement virtual memory, delete the rest of the function
-       body, and replace it with code that brings in the page to
-       which fault_addr refers. */
     printf ("Page fault at %p: %s error %s page in %s context.\n",
             fault_addr,
             not_present ? "not present" : "rights violation",
@@ -282,7 +280,8 @@ page_fault (struct intr_frame *f)
      void *fault_page = pg_round_down (fault_addr);
      /* Find an empty page, fill it with the source indicated by s_ptr,
         map the faulted page to the new allocated frame */
-     printf("\nfault page = %p not present:%d, write:%d, user:%d", fault_page, not_present, write, user);
+     printf("\nfault page = %p np:%d, w:%d, u:%d", fault_page, not_present, write, user);
+     //debug_backtrace();
      pte = lookup_page (cur->pagedir, fault_page, false);
      if (pte == NULL)
      {

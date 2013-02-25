@@ -1,1 +1,1 @@
-pintos -v --gdb -- -q run $1
+pintos -v --gdb -- -q -ul=6 run $1

@@ -1,0 +1,5 @@
+#!/bin/bash
+
+../../utils/quick-disk
+../../utils/quick-copy vm page-linear
+../../utils/quick-gdb page-linear
