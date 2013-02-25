@@ -313,7 +313,7 @@ page_fault (struct intr_frame *f)
      if (not_present && !(*pte & PTE_M))
      {
        load_page_from_swap (pte, fault_page);
-       print_frame_table();
+      // print_frame_table();
        return;
      }
 
@@ -322,7 +322,7 @@ page_fault (struct intr_frame *f)
      {
        struct suppl_pte *s_pte = suppl_pt_get_spte (&cur->suppl_pt, pte);
        load_page_from_file (s_pte, fault_page);
-       print_frame_table();
+       //print_frame_table();
        return;
      }
      

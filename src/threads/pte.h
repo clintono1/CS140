@@ -84,6 +84,7 @@ static inline uint32_t pde_create (uint32_t *pt) {
    PDE, which must "present", points to. */
 static inline uint32_t *pde_get_pt (uint32_t pde) {
   ASSERT (pde & PTE_P);
+  printf("--------------------returning %x-------------------\n", ptov (pde & PTE_ADDR));
   return ptov (pde & PTE_ADDR);
 }
 
@@ -108,6 +109,7 @@ static inline uint32_t pte_create_user (void *page, bool writable) {
    to. */
 static inline void *pte_get_page (uint32_t pte) 
 {
+  printf("--------------------returning %x-------------------\n", ptov(pte & PTE_ADDR));
   return ptov (pte & PTE_ADDR);
 }
 

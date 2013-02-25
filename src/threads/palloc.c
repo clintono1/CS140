@@ -213,6 +213,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     {
       mmap = true;
       s_pte = (struct suppl_pte *) ((uint8_t *)frame + (unsigned) PHYS_BASE);
+      printf("palloc.c:285 after plus PHYSBASE: %x\n",s_pte);
       pte = s_pte->pte;
     }
 
