@@ -123,7 +123,7 @@ kill (struct intr_frame *f)
 void
 load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
 {
-  printf("load from file. faulting upage = %p, the helping spte address = %p\n", upage, s_pte);
+  printf(" load from file.the helping spte address = %p\n", upage, s_pte);
   uint8_t *kpage = palloc_get_page (PAL_USER | PAL_MMAP, upage);
   if (kpage == NULL)
   {
@@ -155,7 +155,7 @@ load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
     _exit(-1);
   }
   uint32_t *pte = lookup_page(thread_current()->pagedir,upage, false);
-  printf("after install, pte = %x \n", *pte);
+//  printf("after install, pte = %x \n", *pte);
 }
 
 void
@@ -164,7 +164,7 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
     
     // TODO Need to pin the page
 
-    printf("load from swap: fault page = %p, it's pte = %p\n", fault_page, *pte);
+    printf(" load from swap: pte = %p\n", fault_page, *pte);
     uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);    
     if (kpage == NULL)
     {
@@ -282,7 +282,7 @@ page_fault (struct intr_frame *f)
      void *fault_page = pg_round_down (fault_addr);
      /* Find an empty page, fill it with the source indicated by s_ptr,
         map the faulted page to the new allocated frame */
-     printf("\nfault page = %p not present:%d, write:%d, user:%d\n", fault_page, not_present, write, user);
+     printf("\nfault page = %p not present:%d, write:%d, user:%d", fault_page, not_present, write, user);
      pte = lookup_page (cur->pagedir, fault_page, false);
      if (pte == NULL)
      {

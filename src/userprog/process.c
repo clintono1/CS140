@@ -706,7 +706,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       ofs = ofs + (uint32_t) PGSIZE;
       s_pte->bytes_read = page_read_bytes;
-     //TODO printf("[spte added:upage:%p, pte:%p, file:%p,w:(%d),RB(%d),ZB(%d)]\n",upage,pte,file,writable,page_read_bytes,page_zero_bytes);
+    printf("[spte added:upage:%p, pte:%p, file:%p,w:(%d),RB(%d),ZB(%d)]\n",upage,pte,file,writable,page_read_bytes,page_zero_bytes);
 
       lock_acquire (&cur->spt_lock);
       hash_insert (&cur->suppl_pt, &s_pte->elem_hash);
