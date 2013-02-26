@@ -66,9 +66,9 @@ palloc_init (size_t user_page_limit)
   init_pool (&kernel_pool, free_start, kernel_pages, "kernel pool");
   init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
              user_pages, "user pool");
-  
+
   /*Clock algorithm initialization is done inside the init_pool function
-   *init_pool calls frame_table_create */ 
+   *init_pool calls frame_table_create */
 }
 
 /* Obtains and returns a group of PAGE_CNT contiguous free pages.
@@ -130,12 +130,12 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
   else  /* There's not enough empty spaces */
     pages = NULL;
 
-  if (pages != NULL) 
+  if (pages != NULL)
   {
     if (flags & PAL_ZERO)
       memset (pages, 0, PGSIZE * page_cnt);
   }
-  else 
+  else
   {
     if (flags & PAL_ASSERT)
       PANIC ("palloc_get: out of pages");
@@ -155,7 +155,7 @@ pool_increase_clock (struct pool *pool)
 // TODO: remove before submit
 void print_user_frame_table (void)
 {
-  uint32_t i; 
+  uint32_t i;
   for (i = 0; i < user_pool.frame_table.page_cnt; i++)
   {
     uint32_t *fte = user_pool.frame_table.frames[i];
@@ -193,7 +193,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
 
   ASSERT (((flags & PAL_USER) && (void *) fte_new != NULL)
           || (!(flags & PAL_USER) && (fte_new == NULL)) );
-  
+
   //TODO: two things can modify the page table entry: by its owner thread, or kicked out by another process
   //there could be race conditions. need to solve. currently just hold the user pool lock.
   lock_acquire (&pool->lock);
@@ -215,13 +215,16 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     }
 
     ASSERT (*pte & PTE_P);
-    
+
     /* If neither accessed nor dirty, throw away current page */
     size_t swap_frame_no;
     uint8_t *page = pool->base + clock_cur * PGSIZE;
     ASSERT (page == ptov (*pte & PTE_ADDR));
     if (!(*pte & PTE_A))
     {
+      *pte &= ~PTE_P;
+      invalidate_pagedir (thread_current ()->pagedir);
+      pool_increase_clock (pool);
       if (*pte & PTE_M)
       {
         /* Initialized/uninitialized data pages are changed to normal memory
@@ -232,21 +235,18 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
           ASSERT ((spte->flags & ~SPTE_M) == 0);
           file_write_at (spte->file, page, spte->bytes_read, spte->offset);
         }
-        *pte &= ~PTE_P;
       }
       else
       {
+        *pte &= PTE_FLAGS;
         swap_frame_no = swap_allocate_page (&swap_table);
         swap_write (&swap_table, swap_frame_no, page);
-        *pte &= PTE_FLAGS;
         *pte |= swap_frame_no << PGBITS;
-        *pte &= ~PTE_P;
+        invalidate_pagedir (thread_current ()->pagedir);
       }
-      invalidate_pagedir (thread_current ()->pagedir);
       pool->frame_table.frames[clock_cur] = fte_new;
       if (flags & PAL_ZERO)
         memset ((void *) page, 0, PGSIZE);
-      pool_increase_clock (pool);
       lock_release (&pool->lock);
       return page;
     }
@@ -283,7 +283,7 @@ palloc_get_page (enum palloc_flags flags, uint8_t *page)
 
 /* Frees the PAGE_CNT pages starting at PAGES. */
 void
-palloc_free_multiple (void *pages, size_t page_cnt) 
+palloc_free_multiple (void *pages, size_t page_cnt)
 {
   struct pool *pool;
   size_t page_idx;
@@ -315,7 +315,7 @@ palloc_free_multiple (void *pages, size_t page_cnt)
 
 /* Frees the page at PAGE. */
 void
-palloc_free_page (void *page) 
+palloc_free_page (void *page)
 {
   palloc_free_multiple (page, 1);
 }
@@ -323,7 +323,7 @@ palloc_free_page (void *page)
 /* Initializes pool P as starting at START and ending at END,
    naming it NAME for debugging purposes. */
 static void
-init_pool (struct pool *p, void *base, size_t page_cnt, const char *name) 
+init_pool (struct pool *p, void *base, size_t page_cnt, const char *name)
 {
   size_t ft_pages = DIV_ROUND_UP (frame_table_size (page_cnt), PGSIZE);
   if (ft_pages > page_cnt)
