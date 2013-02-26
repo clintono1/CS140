@@ -602,7 +602,10 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
-  // TODO: add file to the mmap_files
+
+  /* Add the executable file to the process file resource list */
+  thread_add_file_handler (thread_current (), file);
+
   return success;
 
  fail:
@@ -698,11 +701,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       s_pte->pte = pte;
       s_pte->file = file;
       s_pte->offset = ofs;
-      s_pte->flags = writable? SPTE_W : 0;
+      s_pte->writable = writable;
+      s_pte->flags = 0;
       if (writable == 0)
-        s_pte->flags |= SPTE_CODE;
+        s_pte->flags |= SPTE_C;
       else if (page_read_bytes != 0)
-        s_pte->flags |= SPTE_DATA_INI;                    
+        s_pte->flags |= SPTE_DI;                    
 
       ofs = ofs + (uint32_t) PGSIZE;
       s_pte->bytes_read = page_read_bytes;

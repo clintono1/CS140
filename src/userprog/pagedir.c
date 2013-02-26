@@ -7,7 +7,6 @@
 #include "threads/palloc.h"
 
 static uint32_t *active_pd (void);
-static void invalidate_pagedir (uint32_t *);
 
 /* Creates a new page directory that has mappings for kernel
    virtual addresses, but none for user virtual addresses.
@@ -167,12 +166,10 @@ pagedir_is_dirty (uint32_t *pd, const void *vpage)
   return pte != NULL && (*pte & PTE_D) != 0;
 }
 
-/* Set the dirty bit to DIRTY in the PTE for virtual page VPAGE
-   in PD. */
+/* Set the dirty bit to DIRTY in the PTE in PD */
 void
-pagedir_set_dirty (uint32_t *pd, const void *vpage, bool dirty) 
+pagedir_set_dirty_pte (uint32_t *pd, uint32_t *pte, bool dirty)
 {
-  uint32_t *pte = lookup_page (pd, vpage, false);
   if (pte != NULL) 
     {
       if (dirty)
@@ -183,6 +180,15 @@ pagedir_set_dirty (uint32_t *pd, const void *vpage, bool dirty)
           invalidate_pagedir (pd);
         }
     }
+}
+
+/* Set the dirty bit to DIRTY in the PTE for virtual page VPAGE
+   in PD. */
+void
+pagedir_set_dirty (uint32_t *pd, const void *vpage, bool dirty)
+{
+  uint32_t *pte = lookup_page (pd, vpage, false);
+  pagedir_set_dirty_pte (pd, pte, dirty);
 }
 
 /* Returns true if the PTE for virtual page VPAGE in PD has been
@@ -196,12 +202,10 @@ pagedir_is_accessed (uint32_t *pd, const void *vpage)
   return pte != NULL && (*pte & PTE_A) != 0;
 }
 
-/* Sets the accessed bit to ACCESSED in the PTE for virtual page
-   VPAGE in PD. */
+/* Sets the accessed bit to ACCESSED in the PTE in PD */
 void
-pagedir_set_accessed (uint32_t *pd, const void *vpage, bool accessed) 
+pagedir_set_accessed_pte (uint32_t *pd, uint32_t *pte, bool accessed)
 {
-  uint32_t *pte = lookup_page (pd, vpage, false);
   if (pte != NULL) 
     {
       if (accessed)
@@ -212,6 +216,15 @@ pagedir_set_accessed (uint32_t *pd, const void *vpage, bool accessed)
           invalidate_pagedir (pd);
         }
     }
+}
+
+/* Sets the accessed bit to ACCESSED in the PTE for virtual page
+   VPAGE in PD. */
+void
+pagedir_set_accessed (uint32_t *pd, const void *vpage, bool accessed)
+{
+  uint32_t *pte = lookup_page (pd, vpage, false);
+  pagedir_set_accessed_pte (pd, pte, accessed);
 }
 
 /* Loads page directory PD into the CPU's page directory base
@@ -243,7 +256,7 @@ active_pd (void)
   return ptov (pd);
 }
 
-/* Seom page table changes can cause the CPU's translation
+/* Some page table changes can cause the CPU's translation
    lookaside buffer (TLB) to become out-of-sync with the page
    table.  When this happens, we have to "invalidate" the TLB by
    re-activating it.
@@ -251,7 +264,7 @@ active_pd (void)
    This function invalidates the TLB if PD is the active page
    directory.  (If PD is not active then its entries are not in
    the TLB, so there is no need to invalidate anything.) */
-static void
+void
 invalidate_pagedir (uint32_t *pd) 
 {
   if (active_pd () == pd) 

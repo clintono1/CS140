@@ -121,42 +121,60 @@ kill (struct intr_frame *f)
 /* Load data from file into a page according to the supplemental page table
    entry S_PTE and the virtual user address UPAGE */
 void
-load_page_from_file (struct suppl_pte *s_pte, uint8_t *upage)
+load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
 {
-  printf(" [load from file] spte=%p ", s_pte);
-  uint8_t *kpage = palloc_get_page (PAL_USER | PAL_MMAP, upage);
+  // TODO
+  printf(" [load from file] spte=%p ", spte);
+  bool mmap = (spte->flags & SPTE_M) || (spte->flags & SPTE_C);
+  enum palloc_flags flags = PAL_USER | (mmap ? PAL_MMAP : 0);
+  uint8_t *kpage = palloc_get_page (flags, upage);
   if (kpage == NULL)
   {
-    printf("load from file fail\n");
+    // TODO
+    printf("failed to get page in load_from_file\n");
     _exit(-1);
   }
   /* If MMF or code or initilized data, Load this page. 
      If uninitialized data, load zero page 
      This is self-explanatory by s_pte->bytes_read and memset zeros*/
-  printf("bytes read=%d\n", s_pte->bytes_read);
+  // TODO
+  printf("bytes read=%d\n", spte->bytes_read);
   
-  if (file_read_at ( s_pte->file, kpage, s_pte->bytes_read, s_pte->offset)
-      != (int) s_pte->bytes_read)
+  if ( file_read_at ( spte->file, kpage, spte->bytes_read, spte->offset)
+      != (int) spte->bytes_read)
   {
-      printf("load from file fail\n");
+    // TODO
+    printf("file_read_at in load_page_from_file unmatch\n");
     palloc_free_page (kpage);
     _exit(-1);
   }
 
   /* Set the unmapped area to zeros */
-  if (PGSIZE - s_pte->bytes_read > 0)
-    memset (kpage + s_pte->bytes_read, 0, PGSIZE - s_pte->bytes_read);
-  
+  if (PGSIZE - spte->bytes_read > 0)
+    memset (kpage + spte->bytes_read, 0, PGSIZE - spte->bytes_read);
+
   /* Add the page to the process's address space. */
-  if (!install_page (upage, kpage, s_pte->flags & SPTE_W))
+  if (!install_page (upage, kpage, spte->writable))
   {
+    // TODO
+    printf("failed to install page in load_from_file\n");
     palloc_free_page (kpage);
-      printf("load from file fail\n");
     _exit(-1);
   }
-  uint32_t *pte = lookup_page(thread_current()->pagedir,upage, false);
-  *pte |= PTE_M;
-  printf("after install, kpage=%p, pte = %x \n", kpage,*pte);
+  uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
+  ASSERT (pte != NULL);
+
+  /* Set mmap bit to 1 if it is code or mmap file.
+     Otherwise 0 since it is uninitialized/initialized data page */
+  if (mmap)
+    *pte |= PTE_M;
+  else
+  {
+    hash_delete (&thread_current ()->suppl_pt, &spte->elem_hash);
+    free (spte);
+  }
+  // TODO
+  printf("after install, kpage=%p, pte = %x \n", kpage, *pte);
 }
 
 void
@@ -276,8 +294,8 @@ page_fault (struct intr_frame *f)
   {
      if (!is_user_vaddr (fault_addr))
      {
-       //debug_backtrace();
-       printf("\nerror add= %p\n", fault_addr);
+       // TODO
+       printf("\nerror fault_addr = %p\n", fault_addr);
        _exit(-1);
      }
 
@@ -285,8 +303,8 @@ page_fault (struct intr_frame *f)
      void *fault_page = pg_round_down (fault_addr);
      /* Find an empty page, fill it with the source indicated by s_ptr,
         map the faulted page to the new allocated frame */
+     // TODO
      printf("\nfault page = %p np:%d, w:%d, u:%d", fault_page, not_present, write, user);
-    //debug_backtrace();
      pte = lookup_page (cur->pagedir, fault_page, false);
      if (pte == NULL)
      {
@@ -299,11 +317,11 @@ page_fault (struct intr_frame *f)
           MOV ..., -4(%esp) will be treated as a stack growth.
           To be really strict, need to check the opcode of the instruction
           pointed by f->eip */
-     if (( fault_addr == f->esp - 4  ||    /* PUSH  */
-           fault_addr == f->esp - 32 ||
-           fault_addr >= f->esp)           /* SUB $n, %esp; MOV ..., m(%esp) */
-         && fault_addr >= STACK_BASE
-         && (*pte & PTE_ADDR) == 0)
+     if (( fault_addr == f->esp - 4  ||  /* PUSH  */
+           fault_addr == f->esp - 32 ||  /* PUSHA */
+           fault_addr >= f->esp)         /* SUB $n, %esp; MOV ..., m(%esp) */
+         && fault_addr >= STACK_BASE     /* Stack limit */
+         && (*pte & PTE_ADDR) == 0)      /* Page is NOT allocated or paged out*/
      {
        stack_growth (fault_page);
        return;
@@ -312,6 +330,7 @@ page_fault (struct intr_frame *f)
      /* Case 2. In the swap block*/
      if (not_present && !(*pte & PTE_M))
      {
+       ASSERT ((*pte & PTE_ADDR) != 0);
        load_page_from_swap (pte, fault_page);
       // print_frame_table();
        return;
