@@ -71,6 +71,7 @@ static inline uintptr_t pd_no (const void *va) {
 #define PTE_S 0x10              /* 1=shared memory, 0=not shared */
 #define PTE_A 0x20              /* 1=accessed, 0=not acccessed. */
 #define PTE_D 0x40              /* 1=dirty, 0=not dirty (PTEs only). */
+#define PTE_I 0x80              /* 1=pinned, 0=not pinned */
 #define MAX_SWAP_PAGE_NO 0xfffff
 
 

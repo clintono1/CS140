@@ -512,6 +512,7 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
           palloc_free_page (kpage);
           return false;
         }
+        ASSERT (!(*pte & PTE_I));
       }
       else
         return false;

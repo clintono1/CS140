@@ -102,8 +102,10 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
            files at a time */
         ASSERT (page_cnt == 1);
         uint32_t *pte, *fte;
-        pte = lookup_page (cur->pagedir, page, true);
+        pte = lookup_page (cur->pagedir, page, false);
+        ASSERT (pte != NULL);
         ASSERT (*pte & PTE_M);
+        *pte |= PTE_I;
         fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
         pool->frame_table.frames[page_idx] =
             (uint32_t *) ((uint8_t *)fte - (unsigned) PHYS_BASE);
@@ -111,7 +113,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
       else
       {
         frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt,
-                                  cur->pagedir, page, true);
+                                  cur->pagedir, page, true, true);
       }
     }
     else /* Kernel Pool */
@@ -120,7 +122,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
       uint32_t *pd = init_page_dir ? init_page_dir : (uint32_t*)KERNEL_PAGE_DIR;
       uint8_t *kpage = pool->base + page_idx * PGSIZE;
       frame_table_set_multiple (&pool->frame_table, page_idx, page_cnt,
-                                pd, kpage, false);
+                                pd, kpage, false, false);
     }
   }
   lock_release (&pool->lock);
@@ -201,6 +203,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
   {
     size_t clock_cur = pool->frame_table.clock_cur;
     uint32_t *fte_old = pool->frame_table.frames[clock_cur];
+    uint8_t *page = pool->base + clock_cur * PGSIZE;
     ASSERT (fte_old != 0);
 
     uint32_t *pte;
@@ -214,17 +217,36 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       ASSERT(*pte & PTE_M);
     }
 
-    ASSERT (*pte & PTE_P);
+    if (*pte & PTE_I)
+    {
+      pool_increase_clock (pool);
+      continue;
+    }
+
+    /* If another process releases its pages from the frame table,
+       an unpresent PTE will show up here. */
+    if (!(*pte & PTE_P))
+    {
+      *pte |= PTE_I;
+      invalidate_pagedir (thread_current ()->pagedir);
+      pool->frame_table.frames[clock_cur] = fte_new;
+      pool_increase_clock (pool);
+      lock_release (&pool->lock);
+      if (flags & PAL_ZERO)
+        memset ((void *) page, 0, PGSIZE);
+      return page;
+    }
 
     /* If neither accessed nor dirty, throw away current page */
-    size_t swap_frame_no;
-    uint8_t *page = pool->base + clock_cur * PGSIZE;
     ASSERT (page == ptov (*pte & PTE_ADDR));
     if (!(*pte & PTE_A))
     {
       *pte &= ~PTE_P;
+      *pte |= PTE_I;
       invalidate_pagedir (thread_current ()->pagedir);
+      pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
+      lock_release (&pool->lock);
       if (*pte & PTE_M)
       {
         /* Initialized/uninitialized data pages are changed to normal memory
@@ -239,15 +261,13 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       else
       {
         *pte &= PTE_FLAGS;
-        swap_frame_no = swap_allocate_page (&swap_table);
-        swap_write (&swap_table, swap_frame_no, page);
+        size_t swap_frame_no = swap_allocate_page (&swap_table);
         *pte |= swap_frame_no << PGBITS;
         invalidate_pagedir (thread_current ()->pagedir);
+        swap_write (&swap_table, swap_frame_no, page);
       }
-      pool->frame_table.frames[clock_cur] = fte_new;
       if (flags & PAL_ZERO)
         memset ((void *) page, 0, PGSIZE);
-      lock_release (&pool->lock);
       return page;
     }
     else  /* If accessed */
