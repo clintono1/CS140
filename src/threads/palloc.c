@@ -218,11 +218,10 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     ASSERT (page == ptov (*pte & PTE_ADDR));
     if (!(*pte & PTE_A))
     {
-      /* if mmap is true, there are still four cases: true mmap, code, 
-         uninitilized data, initialized data. Only true MMP need 
-         write back to file, the latter three cases need write back to swap */
       if (*pte & PTE_M)
       {
+        /* Initialized/uninitialized data pages are changed to normal memory
+           pages once loaded. Thus they should not reach here. */
         ASSERT ((spte->flags & SPTE_C) || (spte->flags & SPTE_M));
         if ((spte->flags & SPTE_M) && (*pte & PTE_D))
         {
@@ -240,7 +239,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
         *pte &= ~PTE_P;
       }
       invalidate_pagedir (thread_current ()->pagedir);
-      /* For all cases when !accessed, choose this fte_old to return (kicked out)*/
       pool->frame_table.frames[clock_cur] = fte_new;
       if (flags & PAL_ZERO)
         memset ((void *) page, 0, PGSIZE);

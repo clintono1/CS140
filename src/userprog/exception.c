@@ -77,6 +77,7 @@ exception_print_stats (void)
   printf ("Exception: %lld page faults\n", page_fault_cnt);
 }
 
+// TODO: clean or simplify
 /* Handler for an exception (probably) caused by a user process. */
 static void
 kill (struct intr_frame *f) 
@@ -166,31 +167,28 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
 void
 load_page_from_swap (uint32_t *pte, void *fault_page)
 {
-    
-    // TODO Need to pin the page
+  // TODO Need to pin the page
+  uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);
+  if (kpage == NULL)
+    _exit (-1);
 
-    uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);    
-    if (kpage == NULL)
-      _exit (-1);
+  size_t swap_frame_no = (*pte & PTE_ADDR) >> PGBITS;
 
-   size_t swap_frame_no = (*pte & PTE_ADDR)>>PGBITS;
-  
-   if (swap_frame_no == 0 )
-      _exit (-1);
+  if (swap_frame_no == 0 )
+    _exit (-1);
 
-   swap_read ( &swap_table, swap_frame_no, kpage); 
-   swap_free ( &swap_table, swap_frame_no);
-   
-   /* Add the page to the process's address space. */
-   /* TODO: make sure that data loaded from swap is indeed writable (Song) */
-   if (!install_page (fault_page, kpage, true))
-   {
-     palloc_free_page (kpage);
-     _exit (-1);
-   }
+  swap_read ( &swap_table, swap_frame_no, kpage);
+  swap_free ( &swap_table, swap_frame_no);
+
+  /* Add the page to the process's address space. */
+  if (!install_page (fault_page, kpage, true))
+  {
+    palloc_free_page (kpage);
+    _exit (-1);
+  }
 }
 
-static void 
+static void
 stack_growth( void *fault_page)  
 {
   uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, fault_page);
@@ -238,7 +236,7 @@ page_fault (struct intr_frame *f)
   intr_enable ();
 
   /* Count page faults. */
-  page_fault_cnt++;
+  page_fault_cnt ++;
 
   /* Determine cause. */
   not_present = (f->error_code & PF_P) == 0;
@@ -261,7 +259,7 @@ page_fault (struct intr_frame *f)
   /* TODO: update comments: If fault in the user program or syscall, should get the info about where to get the page */
   {
      if (!is_user_vaddr (fault_addr))
-       _exit(-1);
+       _exit (-1);
 
      uint32_t *pte;
      void *fault_page = pg_round_down (fault_addr);
@@ -285,7 +283,7 @@ page_fault (struct intr_frame *f)
        stack_growth (fault_page);
        return;
      }
-    
+
      /* Case 2. In the swap block*/
      if (not_present && !(*pte & PTE_M) && (*pte & PTE_ADDR))
      {
@@ -300,7 +298,7 @@ page_fault (struct intr_frame *f)
        load_page_from_file (s_pte, fault_page);
        return;
      }
-     
+
      /* Case 4. Access to an invalid user address or a read-only page */
      _exit (-1);
   }

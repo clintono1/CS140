@@ -12,11 +12,11 @@
 
 
 struct swap_table
-{
-  struct block *swap_block;
-  struct bitmap *bitmap;
-  struct lock lock;
-};
+  {
+    struct block *swap_block;  /* Swap block used for swap table on the disk */
+    struct bitmap *bitmap;     /* Bitmap keeps track of allocation status */
+    struct lock lock;          /* Lock to synchronize access to swap table */
+  };
 
 
 void swap_table_init (struct swap_table *);

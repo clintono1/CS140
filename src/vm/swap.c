@@ -12,9 +12,8 @@ void swap_table_init (struct swap_table *swap_table)
   {
     int pages_in_swap = 
       block_size (swap_table->swap_block) / SECTORS_PER_PAGE;
-    //TODO: can this bitmap be swapped out?
     swap_table->bitmap = bitmap_create (pages_in_swap); 
-    /* false means not occupied */
+    /* False means not occupied */
     bitmap_set_all (swap_table->bitmap, false);
     /* The first frame is reserved for stack growth */
     bitmap_set (swap_table->bitmap, 0, true); 
@@ -34,8 +33,7 @@ swap_allocate_page ( struct swap_table * swap_table)
   return swap_frame_no; 
 }
 
-/* Go to the swap block and free the frame number SWAP_FRAME_NO 
-    just mark the bitmap as unused */
+/* Free the swap page with index SWAP_FRAME_NO in SWAP_TABLE */
 void
 swap_free (struct swap_table * swap_table, size_t swap_frame_no)
 {
@@ -47,35 +45,33 @@ swap_free (struct swap_table * swap_table, size_t swap_frame_no)
   lock_release(&swap_table->lock);
 }
 
-
-/* Read one page from the swap_block to the memory, the source frame number is 
-    SWAP_FRAME_NO and the destination memory address is BUF */
+/* Read a page of data from SWAP_TABLE with index SWAP_FRAME_NO to the memory
+   page at BUF */
 void
 swap_read (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
 {
   int i;
-  /*TODO: should prevent reading from a frame that is un-allocated, add detection later*/
-  /* Each loop read in BLOCK_SECTOR_SIZE, that is 512 Bytes */
+  ASSERT (bitmap_contains (swap_table->bitmap, swap_frame_no, 1, true));
+  /* Each iteration reads in BLOCK_SECTOR_SIZE bytes */
   for (i = 0; i < SECTORS_PER_PAGE; i ++)
   {
-    block_read (swap_table->swap_block,  SECTORS_PER_PAGE * swap_frame_no + i,  buf);
+    block_read (swap_table->swap_block,
+                SECTORS_PER_PAGE * swap_frame_no + i, buf);
     buf += BLOCK_SECTOR_SIZE;
   }
 }
 
-
-/* write one page from memory to the swap_block, the destination frame number is 
-    SWAP_FRAME_NO and the source memory address is BUF */
+/* Write the memory page BUF to the SWAP_TABLE at index SWAP_FRAME_NO */
 void
 swap_write (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
 {
   int i;
-  /* each loop read in BLOCK_SECTOR_SIZE, that is 512 Bytes */
+  ASSERT (bitmap_contains (swap_table->bitmap, swap_frame_no, 1, false));
+  /* Each iteration reads in BLOCK_SECTOR_SIZE bytes */
   for (i = 0; i < SECTORS_PER_PAGE; i ++)
   {
-    block_write (swap_table->swap_block,  SECTORS_PER_PAGE * swap_frame_no + i,  buf);
+    block_write (swap_table->swap_block,
+                 SECTORS_PER_PAGE * swap_frame_no + i, buf);
     buf += BLOCK_SECTOR_SIZE;
   }
 }
-
-

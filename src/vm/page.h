@@ -16,7 +16,7 @@ enum spte_flags
 
 void suppl_pt_init (struct hash *suppl_pt);
 bool suppl_pt_insert_mmf (struct thread *t, uint32_t *pte, bool is_writable,
-		struct file *file, off_t offset, size_t read_bytes);
+                          struct file *file, off_t offset, size_t read_bytes);
 struct suppl_pte * suppl_pt_get_spte (struct hash *suppl_pt, uint32_t *pte);
 
 /* Supplemental page table entry */

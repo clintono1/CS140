@@ -1,4 +1,4 @@
-#include "page.h"
+#include "vm/page.h"
 
 static unsigned
 suppl_pte_hash_func (const struct hash_elem *e, void *aux UNUSED)
@@ -38,9 +38,7 @@ suppl_pt_insert_mmf (struct thread *t, uint32_t *pte, bool is_writable,
   spte->writable = is_writable;
   spte->flags = SPTE_M;
   if (hash_insert (&t->suppl_pt, &spte->elem_hash))
-  {
-	  return false;
-  }
+    return false;
   return true;
 }
 

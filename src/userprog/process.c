@@ -733,7 +733,6 @@ setup_stack (void **esp)
   uint8_t *upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO, upage);
-  uint32_t *pte = lookup_page(thread_current()->pagedir, upage, false);
   if (kpage != NULL) 
   {
     success = install_page (upage, kpage, true);
