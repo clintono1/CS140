@@ -66,7 +66,7 @@ void
 swap_write (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
 {
   int i;
-  ASSERT (bitmap_contains (swap_table->bitmap, swap_frame_no, 1, false));
+  ASSERT (bitmap_contains (swap_table->bitmap, swap_frame_no, 1, true));
   /* Each iteration reads in BLOCK_SECTOR_SIZE bytes */
   for (i = 0; i < SECTORS_PER_PAGE; i ++)
   {
