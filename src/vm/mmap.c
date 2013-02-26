@@ -54,7 +54,7 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
     		                 spte->bytes_read, spte->offset);
       /* Since we cannot change the size of file in project 3
        * the following assertion must be true in project 3*/
-      ASSERT (bytes_written >= 0 && bytes_written == spte->bytes_read);
+      ASSERT (bytes_written >= 0 && (size_t)bytes_written == spte->bytes_read);
       lock_release (&global_lock_filesys);
     }
     if (*pte & PTE_P)
