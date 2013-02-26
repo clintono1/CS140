@@ -120,14 +120,52 @@ FirstName LastName: contribution
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+struct thread
+{
+  ...
+  struct hash mmap_files;            /* Hashtable of memory mapped files */
+  int mmap_files_num_ever;           /* # of files ever mapped, used as key */
+  ...
+}
+We store information about memory mapped files as a hashtable "mmap_files" in 
+each thread. "mmap_files_num_ever" is used as a key inthis hashtable.
+
+/* Memory mapped file */
+struct mmap_file
+{
+  int mid;
+  struct file *file;                  /* File the memory is mapped to */
+  uint8_t *upage;                     /* User virtual address of the first
+                                         mapping page */
+  size_t num_pages;                   /* Number of pages mapped to the file */
+  struct hash_elem elem;
+};
+We keep id, file pointer, starting user virtual address and number of pages in 
+this struct.
+
 ---- ALGORITHMS ----
 
 >> C2: Describe how memory mapped files integrate into your virtual
 >> memory subsystem.  Explain how the page fault and eviction
 >> processes differ between swap pages and other pages.
 
+The hashtable "mmap_files" is initialized when a process starts. Once a user
+process maps a file to memory, pintos will populate page table and supplementary 
+page table according to the information of the file to be mapped. When some 
+process refers to the mapped data, it will cause a page fault and actually load 
+the corresponding page. When the process unmaps the file, pintos will free
+corresponding memory and supplementary page table entries and clear page table
+entries. For every mapped page, if the page is dirty, write it back to the file.
+When a process terminates, unmap all of its memory mapped files.
+
+differ in page fault
+
+differ in eviction 
+
 >> C3: Explain how you determine whether a new file mapping overlaps
 >> any existing segment.
+
+
 
 ---- RATIONALE ----
 
