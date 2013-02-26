@@ -167,9 +167,6 @@ void print_frame_table(void)
 static void *
 page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *page)
 {
-  // TODO
-  printf("\npage_out_then_get_page for va= %p\n", page); 
-
   uint32_t *fte_new = NULL;
   struct thread *cur = thread_current ();
 
@@ -231,52 +228,29 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
         {
           ASSERT ((spte->flags & ~SPTE_M) == 0);
           file_write_at (spte->file, page, spte->bytes_read, spte->offset);
-          // TODO
-          printf("  write page %p to FILE! \n", page);
         }
-/*
-        else if ((spte->flags & SPTE_DI) || (spte->flags & SPTE_DU))
-        {
-          swap_frame_no = swap_allocate_page (&swap_table);
-          swap_write (&swap_table, swap_frame_no, page);
-          *pte &= PTE_FLAGS;
-          *pte |= swap_frame_no << PGBITS;
-          // TODO
-          printf("  write DATA page %p to swap_frame %d\n", page, swap_frame_no);
-        }
-*/
         *pte &= ~PTE_P;
       }
       else
       {
         swap_frame_no = swap_allocate_page (&swap_table);
         swap_write (&swap_table, swap_frame_no, page);
-        // TODO
-        printf("old pte=%x\n", *pte); 
         *pte &= PTE_FLAGS;
         *pte |= swap_frame_no << PGBITS;
         *pte &= ~PTE_P;
-        // TODO
-        printf("  write page %p to swap_frame %d\n", page, swap_frame_no);
       }
       invalidate_pagedir (thread_current ()->pagedir);
       /* For all cases when !accessed, choose this fte_old to return (kicked out)*/
       pool->frame_table.frames[clock_cur] = fte_new;
       if (flags & PAL_ZERO)
         memset ((void *) page, 0, PGSIZE);
-      // TODO
-      printf("  the pte that was kicked out was updated to: %p\n", *pte);
       pool_increase_clock (pool);
       lock_release (&pool->lock);
-      // TODO
-      printf("DONE! find page = %p for it.\n", page);
       return page;
     }
     else  /* If accessed */
     {
       *pte &= ~PTE_A;
-      // TODO
-      invalidate_pagedir (thread_current ()->pagedir);
       pool_increase_clock (pool);
     }
   }

@@ -123,28 +123,18 @@ kill (struct intr_frame *f)
 void
 load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
 {
-  // TODO
-  printf(" [load from file] spte=%p ", spte);
   bool mmap = (spte->flags & SPTE_M) || (spte->flags & SPTE_C);
   enum palloc_flags flags = PAL_USER | (mmap ? PAL_MMAP : 0);
   uint8_t *kpage = palloc_get_page (flags, upage);
   if (kpage == NULL)
-  {
-    // TODO
-    printf("failed to get page in load_from_file\n");
     _exit(-1);
-  }
+
   /* If MMF or code or initilized data, Load this page. 
      If uninitialized data, load zero page 
      This is self-explanatory by s_pte->bytes_read and memset zeros*/
-  // TODO
-  printf("bytes read=%d\n", spte->bytes_read);
-  
   if ( file_read_at ( spte->file, kpage, spte->bytes_read, spte->offset)
       != (int) spte->bytes_read)
   {
-    // TODO
-    printf("file_read_at in load_page_from_file unmatch\n");
     palloc_free_page (kpage);
     _exit(-1);
   }
@@ -156,8 +146,6 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
   /* Add the page to the process's address space. */
   if (!install_page (upage, kpage, spte->writable))
   {
-    // TODO
-    printf("failed to install page in load_from_file\n");
     palloc_free_page (kpage);
     _exit(-1);
   }
@@ -173,8 +161,6 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
     hash_delete (&thread_current ()->suppl_pt, &spte->elem_hash);
     free (spte);
   }
-  // TODO
-  printf("after install, kpage=%p, pte = %x \n", kpage, *pte);
 }
 
 void
@@ -183,26 +169,16 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
     
     // TODO Need to pin the page
 
-    printf(" [load from swap]: pte = %p\n", fault_page, *pte);
     uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);    
     if (kpage == NULL)
-    {
-      printf("kpage = null\n");
       _exit (-1);
-    }
 
    size_t swap_frame_no = (*pte & PTE_ADDR)>>PGBITS;
-   printf("swap in from frame no = %d\n", swap_frame_no);
   
    if (swap_frame_no == 0 )
-   {
-     printf("swap_no ==0 \n");
       _exit (-1);
-   }
 
-   
    swap_read ( &swap_table, swap_frame_no, kpage); 
-//   hex_dump(0,kpage, PGSIZE, 0);
    swap_free ( &swap_table, swap_frame_no);
    
    /* Add the page to the process's address space. */
@@ -212,30 +188,22 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
      palloc_free_page (kpage);
      _exit (-1);
    }
-   printf("after install, kpage=%p, pte = %x \n", kpage,*pte);
 }
 
 static void 
 stack_growth( void *fault_page)  
 {
-  printf("stack growth\n");
   uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, fault_page);
   if (kpage == NULL)
-  {
-    printf("stack grow fail\n");
     _exit (-1);
-  }
   memset (kpage, 0, PGSIZE);
 
   if (!install_page (fault_page, kpage, 1))
   {
     palloc_free_page (kpage);
-      printf("stack grow fail\n");
     _exit (-1);
   }
-
 }
-
 
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
@@ -293,24 +261,15 @@ page_fault (struct intr_frame *f)
   /* TODO: update comments: If fault in the user program or syscall, should get the info about where to get the page */
   {
      if (!is_user_vaddr (fault_addr))
-     {
-       // TODO
-       printf("\nerror fault_addr = %p\n", fault_addr);
        _exit(-1);
-     }
 
      uint32_t *pte;
      void *fault_page = pg_round_down (fault_addr);
      /* Find an empty page, fill it with the source indicated by s_ptr,
         map the faulted page to the new allocated frame */
-     // TODO
-     printf("\nfault page = %p np:%d, w:%d, u:%d", fault_page, not_present, write, user);
      pte = lookup_page (cur->pagedir, fault_page, false);
      if (pte == NULL)
-     {
-       printf("!!pte = null\n");
        _exit (-1);
-     }
 
      /* Case 1. Stack growth
         Note: there is a false negative here:
@@ -328,11 +287,9 @@ page_fault (struct intr_frame *f)
      }
     
      /* Case 2. In the swap block*/
-     if (not_present && !(*pte & PTE_M))
+     if (not_present && !(*pte & PTE_M) && (*pte & PTE_ADDR))
      {
-       ASSERT ((*pte & PTE_ADDR) != 0);
        load_page_from_swap (pte, fault_page);
-      // print_frame_table();
        return;
      }
 
@@ -341,12 +298,10 @@ page_fault (struct intr_frame *f)
      {
        struct suppl_pte *s_pte = suppl_pt_get_spte (&cur->suppl_pt, pte);
        load_page_from_file (s_pte, fault_page);
-       //print_frame_table();
        return;
      }
      
      /* Case 4. Access to an invalid user address or a read-only page */
-     printf(" Case 4 exit!\n");
      _exit (-1);
   }
 }

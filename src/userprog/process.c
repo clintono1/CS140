@@ -710,7 +710,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       ofs = ofs + (uint32_t) PGSIZE;
       s_pte->bytes_read = page_read_bytes;
-    printf("[spte added:upage:%p, pte:%p, file:%p,w:(%d),RB(%d),ZB(%d)]\n",upage,pte,file,writable,page_read_bytes,page_zero_bytes);
 
       lock_acquire (&cur->spt_lock);
       hash_insert (&cur->suppl_pt, &s_pte->elem_hash);
@@ -735,8 +734,6 @@ setup_stack (void **esp)
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO, upage);
   uint32_t *pte = lookup_page(thread_current()->pagedir, upage, false);
-  //TODO
-  //printf("setup stack: upage = %p, kpage = %p, pte_addr = %p\n", upage, kpage, pte);
   if (kpage != NULL) 
   {
     success = install_page (upage, kpage, true);
