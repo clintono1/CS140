@@ -935,6 +935,8 @@ thread_add_file_handler (struct thread* thread, struct file* file)
       thread->file_handlers_size = FILE_HDL_SIZE;
       new_file_handlers = (struct file**)
           malloc (FILE_HDL_SIZE * sizeof(struct file*));
+      if(new_file_handlers == NULL)
+    	return -1;
       memset (new_file_handlers, 0, FILE_HDL_SIZE * sizeof(struct file*));
       thread->file_handlers_num = 2;
     }
@@ -943,6 +945,8 @@ thread_add_file_handler (struct thread* thread, struct file* file)
       thread->file_handlers_size *= 2;
       new_file_handlers = (struct file**)
           malloc (thread->file_handlers_size * sizeof(struct file*));
+      if(new_file_handlers == NULL)
+    	return -1;
       memcpy (new_file_handlers, thread->file_handlers,
               thread->file_handlers_num * sizeof(struct file*));
       memset (&new_file_handlers[thread->file_handlers_num], 0,

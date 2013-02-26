@@ -604,7 +604,9 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   /* Add the executable file to the process file resource list */
-  thread_add_file_handler (thread_current (), file);
+  int fd = thread_add_file_handler (thread_current (), file);
+  if(fd == -1)
+	goto fail;
 
   return success;
 
@@ -696,6 +698,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       struct suppl_pte *s_pte;
 
       s_pte = (struct suppl_pte * ) malloc (sizeof (struct suppl_pte));
+      if(s_pte == NULL)
+    	return false;
       pte =  lookup_page (cur->pagedir, upage, true);
       *pte |= PTE_M;
       s_pte->pte = pte;

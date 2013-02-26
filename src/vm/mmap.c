@@ -50,12 +50,18 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
     {
       ASSERT (*pte & PTE_P);
       lock_acquire (&global_lock_filesys);
-      file_write_at (spte->file, kpage, spte->bytes_read, spte->offset);
+      off_t bytes_written = file_write_at (spte->file, kpage,
+    		                 spte->bytes_read, spte->offset);
+      /* Since we cannot change the size of file in project 3
+       * the following assertion must be true in project 3*/
+      ASSERT (bytes_written >= 0 && bytes_written == spte->bytes_read);
       lock_release (&global_lock_filesys);
     }
     if (*pte & PTE_P)
       palloc_free_page (kpage);
-    hash_delete (&cur->suppl_pt, &spte->elem_hash);
+    struct hash_elem * spte_d = hash_delete (&cur->suppl_pt, &spte->elem_hash);
+    /* ASSERT that this spte must be in the original suppl_pt */
+    ASSERT (spte_d);
     *pte = 0;
     free(spte);
   }
