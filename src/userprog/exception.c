@@ -120,7 +120,7 @@ kill (struct intr_frame *f)
 }
 
 /* Load data from file into a page according to the supplemental page table
-   entry S_PTE and the virtual user address UPAGE */
+   entry SPTE and the virtual user address UPAGE */
 void
 load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
 {
@@ -164,11 +164,13 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
   }
 }
 
+/* Load the page pointed by PTE and install the page with the virtual
+   address UPAGE */
 void
-load_page_from_swap (uint32_t *pte, void *fault_page)
+load_page_from_swap (uint32_t *pte, void *page)
 {
   // TODO Need to pin the page
-  uint8_t *kpage = palloc_get_page (PAL_USER, fault_page);
+  uint8_t *kpage = palloc_get_page (PAL_USER, page);
   if (kpage == NULL)
     _exit (-1);
 
@@ -181,22 +183,23 @@ load_page_from_swap (uint32_t *pte, void *fault_page)
   swap_free ( &swap_table, swap_frame_no);
 
   /* Add the page to the process's address space. */
-  if (!install_page (fault_page, kpage, true))
+  if (!install_page (page, kpage, true))
   {
     palloc_free_page (kpage);
     _exit (-1);
   }
 }
 
+/* Grow the stack at the page with user virtual address UPAGE */
 static void
-stack_growth( void *fault_page)  
+stack_growth( void *upage)
 {
-  uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, fault_page);
+  uint8_t *kpage = palloc_get_page (PAL_USER | PAL_ZERO, upage);
   if (kpage == NULL)
     _exit (-1);
   memset (kpage, 0, PGSIZE);
 
-  if (!install_page (fault_page, kpage, 1))
+  if (!install_page (upage, kpage, 1))
   {
     palloc_free_page (kpage);
     _exit (-1);

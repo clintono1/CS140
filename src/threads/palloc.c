@@ -152,18 +152,22 @@ pool_increase_clock (struct pool *pool)
                                 % pool->frame_table.page_cnt;
 }
 
-void print_frame_table(void)
+// TODO: remove before submit
+void print_user_frame_table (void)
 {
   uint32_t i; 
-  for ( i= 0; i<user_pool.frame_table.page_cnt; i++)
+  for (i = 0; i < user_pool.frame_table.page_cnt; i++)
   {
     uint32_t *fte = user_pool.frame_table.frames[i];
-    printf("fte[%d] = %p\n", i, fte);
+    printf ("fte[%d] = %p\n", i, fte);
   }
 }
 
 /* Page out a page from the frame table in POOL and then return the page's
-   virtual kernel address */
+   virtual kernel address.
+   FLAGS carries the allocation specification.
+   PAGE denotes the user virtual address to set the frame table entry to if
+   the page is allocated for a user process. */
 static void *
 page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *page)
 {
@@ -254,13 +258,11 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
   }
 }
 
-/* Obtains a single free page and returns its kernel virtual
-   address.
-   If PAL_USER is set, the page is obtained from the user pool,
-   otherwise from the kernel pool.  If PAL_ZERO is set in FLAGS,
-   then the page is filled with zeros.  If no pages are
-   available, returns a null pointer, unless PAL_ASSERT is set in
-   FLAGS, in which case the kernel panics. */
+/* Obtains a single free page and returns its kernel virtual address.
+   If PAL_USER is set, the page is obtained from the user pool, otherwise
+   from the kernel pool.  If PAL_ZERO is set in FLAGS, then the page is
+   filled with zeros.  If no pages are available, returns a null pointer,
+   unless PAL_ASSERT is set in FLAGS, in which case the kernel panics. */
 void *
 palloc_get_page (enum palloc_flags flags, uint8_t *page)
 {
