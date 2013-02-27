@@ -152,19 +152,43 @@ this struct.
 The hashtable "mmap_files" is initialized when a process starts. Once a user
 process maps a file to memory, pintos will populate page table and supplementary 
 page table according to the information of the file to be mapped. When some 
-process refers to the mapped data, it will cause a page fault and actually load 
-the corresponding page. When the process unmaps the file, pintos will free
-corresponding memory and supplementary page table entries and clear page table
+process queries to the mapped data, it will cause a page fault and actually 
+load the corresponding page. When the process unmaps the file, pintos will free
+corresponding frames and supplementary page table entries and clear page table
 entries. For every mapped page, if the page is dirty, write it back to the file.
 When a process terminates, unmap all of its memory mapped files.
 
-differ in page fault
+In page fault handler, there are 4 cases:
+The first case is that the fault page is for stack growth. This is checked by 
+comparing the fault address with stack pointer. In this case, we call 
+stack_growth() to allocate a new frame. 
+The second case is that the fault page should be loaded from swap. The page 
+content might be data, stack, etc, but not memory mapped file. We call 
+load_page_from_swap() in this case.
+The third case is that the fault page should be loaded from memory mapped file. 
+Since memory mapped file use itself as backing store, We will call 
+load_page_from_file() in this case. We use PET_M bit and present bit in PTE to
+see whether the page should be loaded from memory mapped file.
+The fourth case is none of the above. We simply call _exit(-1) here.
 
-differ in eviction 
+The eviction algorithm is implemented in page_out_then_get_page() in palloc.c.
+If the page should be evicted is a memory mapped file page, then write it back
+to the file. If the page should be evicted to swap, then write it to swap.
+Another difference is that when a swap page is evicted, we record the 
+swap_frame_no in corresponding PTE, while for memory mapped file, the offset 
+and file pointer are already stored in corresponding supplementary page table 
+entry.
+
 
 >> C3: Explain how you determine whether a new file mapping overlaps
 >> any existing segment.
 
+We calculate how many pages the mapping needs by round up file_length/PGSIZE. 
+Then for each of the pages (the first page starts at the virtual address 
+provided by the user), we call lookup_page(t->pagedir, page addr, false) 
+to see whether there is a corresponding PTE for this page address in the page 
+directory of current thread. If there is, this means an overlap and MAP_FAILED
+is returned. 
 
 
 ---- RATIONALE ----
@@ -175,6 +199,33 @@ differ in eviction
 >> that much of their implementation can be shared.  Explain why your
 >> implementation either does or does not share much of the code for
 >> the two situations.
+
+In our spte_flag in supplementary page table entries, there are 4 kinds:
+enum spte_flags
+{
+  SPTE_M  = 0x1,   /* 1 if memory mapped file */
+  SPTE_C  = 0x2,   /* 1 if executable's code segment */
+  SPTE_DI = 0x4,   /* 1 if initialized data */
+  SPTE_DU = 0x8    /* 1 if uninitialized data */
+};
+
+When memory mapped file pages trigger page fault, our pintos will call 
+load_page_from_file(). 
+
+We treat memory mapped files and code as the same in the page_fault handler and
+the eviction process. We have a bit PTE_M in PTE to denote whether the page is 
+memory mapped. Because once loaded, the memory mapped file pages and code pages 
+both set their PTE_M bit in their PTEs to be 1. We haven't seen any disadvantage
+for sharing code for these two kinds of pages.
+
+Their are two kinds of data, initialized data and uninitialized data. When we 
+load segment lazily, we add PTEs with PET_M set to 1 to page directory for them.
+For the first time of page fault, they are treated as memory mapped files, 
+except uninitialized data is set as 0 instead of being loaded from file. After
+they are loaded for the first time, we set the PTE_M bit in their PTEs to be 0.
+Then they will be swapped between memory and swap afterwards. The data pages do
+not share much code with memory mapped files because they mainly interact with 
+swap once they are loaded from executables.
 
          SURVEY QUESTIONS
          ================

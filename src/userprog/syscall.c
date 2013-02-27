@@ -414,9 +414,7 @@ _mmap (int fd, void *addr)
   if(len <= 0)
     return MAP_FAILED;
 
-  /* check if there is enough virtual memory to map this file
-   * should I check supplementary page table too ? not sure
-   * whether this is fully correct or not */
+  /* check whether this new file mapping overlaps any existing segment */
   int offset = 0;
   for(offset = 0; offset < len; offset += PGSIZE)
   {
