@@ -162,7 +162,6 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
     hash_delete (&thread_current ()->suppl_pt, &spte->elem_hash);
     free (spte);
   }
-  ASSERT (!(*pte & PTE_I));
 }
 
 /* Load the page pointed by PTE and install the page with the virtual
@@ -188,7 +187,6 @@ load_page_from_swap (uint32_t *pte, void *page)
     palloc_free_page (kpage);
     _exit (-1);
   }
-  ASSERT (!(*pte & PTE_I));
 }
 
 /* Grow the stack at the page with user virtual address UPAGE */
@@ -205,9 +203,6 @@ stack_growth( void *upage)
     palloc_free_page (kpage);
     _exit (-1);
   }
-  uint32_t *pte = lookup_page (thread_current ()->pagedir, upage, false);
-  ASSERT (pte != NULL);
-  ASSERT (!(*pte & PTE_I));
 }
 
 /* Page fault handler.  This is a skeleton that must be filled in

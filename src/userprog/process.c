@@ -745,9 +745,6 @@ setup_stack (void **esp)
     else
       palloc_free_page (kpage);
   }
-  uint32_t *pte = lookup_page (thread_current ()->pagedir, upage, false);
-  ASSERT (pte != NULL);
-  ASSERT (!(*pte & PTE_I));
   return success;
 }
 
