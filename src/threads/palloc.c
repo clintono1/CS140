@@ -246,7 +246,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       invalidate_pagedir (thread_current ()->pagedir);
       pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
-      lock_release (&pool->lock);
+      
       if (*pte & PTE_M)
       {
         /* Initialized/uninitialized data pages are changed to normal memory
@@ -256,6 +256,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
         {
           ASSERT ((spte->flags & ~SPTE_M) == 0);
           file_write_at (spte->file, page, spte->bytes_read, spte->offset);
+          //printf("write back to file"); 
         }
       }
       else
@@ -268,6 +269,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       }
       if (flags & PAL_ZERO)
         memset ((void *) page, 0, PGSIZE);
+      lock_release (&pool->lock);
       return page;
     }
     else  /* If accessed */
