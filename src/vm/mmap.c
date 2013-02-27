@@ -63,6 +63,7 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
     /* ASSERT that this spte must be in the original suppl_pt */
     ASSERT (spte_d);
     *pte = 0;
+    invalidate_pagedir(thread_current()->pagedir);
     free(spte);
   }
 
