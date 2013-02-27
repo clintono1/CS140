@@ -7,8 +7,10 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "userprog/exception.h"
+#include "vm/swap.h"
 
 static uint32_t *active_pd (void);
+extern struct swap_table swap_table;
 
 /* Creates a new page directory that has mappings for kernel
    virtual addresses, but none for user virtual addresses.
@@ -36,15 +38,28 @@ pagedir_destroy (uint32_t *pd)
   ASSERT (pd != init_page_dir);
   for (pde = pd; pde < pd + pd_no (PHYS_BASE); pde++)
     if (*pde & PTE_P) 
-      {
+    {
         uint32_t *pt = pde_get_pt (*pde);
         uint32_t *pte;
         
         for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
+        {
           if (*pte & PTE_P) 
+          {
             palloc_free_page (pte_get_page (*pte));
+          }
+          else if  (*pte & PTE_ADDR ) /* not present, but in swap*/
+          {
+            size_t swap_frame_no = (*pte & PTE_ADDR) >> PGBITS;
+            swap_free ( &swap_table, swap_frame_no);  
+          }
+        }
+          
         palloc_free_page (pt);
-      }
+    }
+    
+    
+
   palloc_free_page (pd);
 }
 
