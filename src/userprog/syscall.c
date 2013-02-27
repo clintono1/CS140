@@ -20,6 +20,7 @@ static void syscall_handler (struct intr_frame *);
 static inline bool valid_vaddr_range(const void * vaddr, unsigned size);
 static bool preload_user_memory (const void *vaddr, size_t size,
                                  bool allocate, uint8_t *esp);
+static bool unpin_user_memory (uint32_t *pd, const void *vaddr, size_t size);
 
 void  _exit (int status);
 static void  _halt (void);
@@ -312,6 +313,7 @@ _read (int fd, void *buffer, unsigned size, uint8_t *esp)
         result ++;
         buffer ++;
       }
+      unpin_user_memory (t->pagedir, buffer, size);
       return result;
   }
   else if(valid_file_handler (t, fd))
@@ -320,6 +322,7 @@ _read (int fd, void *buffer, unsigned size, uint8_t *esp)
       lock_acquire (&global_lock_filesys );
       result = file_read (file, buffer, size);
       lock_release (&global_lock_filesys);
+      unpin_user_memory (t->pagedir, buffer, size);
       return result;
   }
   return -1;
@@ -352,6 +355,7 @@ _write (int fd, const void *buffer, unsigned size, uint8_t *esp)
     result = file_write (file, buffer, size);
     lock_release (&global_lock_filesys);
   }
+  unpin_user_memory (t->pagedir, buffer, size);
   return result;
 }
 
@@ -493,10 +497,11 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
   while (upage < vaddr + size)
   {
     uint32_t *pte = lookup_page (thread_current()->pagedir, upage, allocate);
-    if (*pte == 0)
+    if (pte == NULL || *pte == 0)
     {
       if (!allocate)
         return false;
+      ASSERT (pte != NULL);
       /* If the accessing page if not on stack, return false.
          Note: when to support malloc in user programs, it is also valid
          if [vaddr, vaddr+size) is in the allocated VA space. */
@@ -523,16 +528,31 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
       }
       else
       {
-        struct suppl_pte temp;
-        temp.pte = pte;
-        struct hash_elem *e;
-        e = hash_find (&thread_current()->suppl_pt, &temp.elem_hash);
-        if ( e == NULL )
-          _exit (-1);
-        struct suppl_pte *s_pte = hash_entry (e, struct suppl_pte, elem_hash);
-        load_page_from_file (s_pte, upage);
+        struct suppl_pte *spte;
+        spte = suppl_pt_get_spte (&thread_current()->suppl_pt, pte);
+        load_page_from_file (spte, upage);
       }
     }
+    if (!pin_page (thread_current()->pagedir, upage))
+      return false;
+    upage += PGSIZE;
+  }
+  return true;
+}
+
+/* Unpins user memory pages between VADDR and VADDR + SIZE. */
+static bool
+unpin_user_memory (uint32_t *pd, const void *vaddr, size_t size)
+{
+  if (!valid_vaddr_range (vaddr, size))
+    return false;
+
+  void *upage = pg_round_down (vaddr);
+
+  while (upage < vaddr + size)
+  {
+    if (!unpin_page (pd, upage))
+      return false;
     upage += PGSIZE;
   }
   return true;

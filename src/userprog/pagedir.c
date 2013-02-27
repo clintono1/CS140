@@ -5,6 +5,8 @@
 #include "threads/init.h"
 #include "threads/pte.h"
 #include "threads/palloc.h"
+#include "threads/thread.h"
+#include "userprog/exception.h"
 
 static uint32_t *active_pd (void);
 
@@ -82,6 +84,74 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
   /* Return the page table entry. */
   pt = pde_get_pt (*pde);
   return &pt[pt_no (vaddr)];
+}
+
+/* Pins a PAGE pointed by PTE.
+   If the page is not in memory, page it in first.
+   Returns true if the page is successfully pinned. */
+bool
+pin_pte (uint32_t *pte, void *page)
+{
+  if (pte == NULL || (*pte & PTE_ADDR) == 0)
+    return false;
+  *pte |= PTE_I;
+  /* If the page is not in memory, load it. */
+  if ((*pte & PTE_P) == 0)
+  {
+    if ((*pte & PTE_M) == 0)
+    {
+      load_page_from_swap (pte, page);
+    }
+    else
+    {
+      struct suppl_pte *spte;
+      spte = suppl_pt_get_spte (&thread_current ()->suppl_pt, pte);
+      load_page_from_file (spte, page);
+    }
+  }
+  *pte |= PTE_I;
+  invalidate_pagedir (thread_current ()->pagedir);
+  return true;
+}
+
+/* Pins a PAGE in the page directory PD to prevent it being paged out.
+   If the page is not in memory, page it in first.
+   Returns true if the page is successfully pinned. */
+bool
+pin_page (uint32_t *pd, void *page)
+{
+  /* Note: currently only support pinning user pages
+     since no page out in kernel memory */
+  if (page > PHYS_BASE)
+    return false;
+
+  uint32_t *pte = lookup_page (pd, page, false);
+  return pin_pte (pte, page);
+}
+
+/* Unpins a page pointed by PTE. */
+bool
+unpin_pte (uint32_t *pte)
+{
+  if (pte == NULL || (*pte & PTE_ADDR) == 0)
+    return false;
+  *pte &= ~PTE_I;
+  invalidate_pagedir (thread_current ()->pagedir);
+  return true;
+}
+
+/* Unpins a PAGE in the page directory PD.
+   Returns true if the page is successfully unpinned. */
+bool
+unpin_page (uint32_t *pd, const void *page)
+{
+  /* Note: currently only support pinning user pages
+     since no page out in kernel memory */
+  if (page > PHYS_BASE)
+    return false;
+
+  uint32_t *pte = lookup_page (pd, page, false);
+  return unpin_pte (pte);
 }
 
 /* Adds a mapping in page directory PD from user virtual page
