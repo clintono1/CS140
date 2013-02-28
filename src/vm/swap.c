@@ -2,21 +2,23 @@
 
 struct swap_table swap_table;
 
+extern struct lock global_lock_filesys;
+
 /* Initialize the swap_table */
 void swap_table_init (struct swap_table *swap_table)
 {
   lock_init ( &swap_table->lock);
   swap_table->swap_block = block_get_role ( BLOCK_SWAP );
-  block_print_stats ();  
+  block_print_stats ();
   if (swap_table->swap_block)
   {
     int pages_in_swap = 
       block_size (swap_table->swap_block) / SECTORS_PER_PAGE;
-    swap_table->bitmap = bitmap_create (pages_in_swap); 
+    swap_table->bitmap = bitmap_create (pages_in_swap);
     /* False means not occupied */
     bitmap_set_all (swap_table->bitmap, false);
     /* The first frame is reserved for stack growth */
-    bitmap_set (swap_table->bitmap, 0, true); 
+    bitmap_set (swap_table->bitmap, 0, true);
   }
 }
 
@@ -30,7 +32,7 @@ swap_allocate_page ( struct swap_table * swap_table)
   lock_release(&swap_table->lock);
   if (swap_frame_no == BITMAP_ERROR)
     PANIC ("out of swap space");
-  return swap_frame_no; 
+  return swap_frame_no;
 }
 
 /* Free the swap page with index SWAP_FRAME_NO in SWAP_TABLE */
@@ -52,6 +54,7 @@ swap_read (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
 {
   int i;
   ASSERT (bitmap_contains (swap_table->bitmap, swap_frame_no, 1, true));
+  lock_acquire (&global_lock_filesys);
   /* Each iteration reads in BLOCK_SECTOR_SIZE bytes */
   for (i = 0; i < SECTORS_PER_PAGE; i ++)
   {
@@ -59,6 +62,7 @@ swap_read (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
                 SECTORS_PER_PAGE * swap_frame_no + i, buf);
     buf += BLOCK_SECTOR_SIZE;
   }
+  lock_release (&global_lock_filesys);
 }
 
 /* Write the memory page BUF to the SWAP_TABLE at index SWAP_FRAME_NO */
@@ -67,6 +71,7 @@ swap_write (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
 {
   int i;
   ASSERT (bitmap_contains (swap_table->bitmap, swap_frame_no, 1, true));
+  lock_acquire (&global_lock_filesys);
   /* Each iteration reads in BLOCK_SECTOR_SIZE bytes */
   for (i = 0; i < SECTORS_PER_PAGE; i ++)
   {
@@ -74,4 +79,5 @@ swap_write (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
                  SECTORS_PER_PAGE * swap_frame_no + i, buf);
     buf += BLOCK_SECTOR_SIZE;
   }
+  lock_release (&global_lock_filesys);
 }
