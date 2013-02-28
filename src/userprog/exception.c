@@ -200,7 +200,7 @@ stack_growth( void *upage)
     _exit (-1);
   memset (kpage, 0, PGSIZE);
 
-  if (!install_page (upage, kpage, 1))
+  if (!install_page (upage, kpage, true))
   {
     palloc_free_page (kpage);
     _exit (-1);
@@ -267,11 +267,7 @@ page_fault (struct intr_frame *f)
 
      uint32_t *pte;
      void *fault_page = pg_round_down (fault_addr);
-     /* Find an empty page, fill it with the source indicated by s_ptr,
-        map the faulted page to the new allocated frame */
      pte = lookup_page (cur->pagedir, fault_page, false);
-     if (pte == NULL)
-       _exit (-1);
 
      /* Case 1. Stack growth
         Note: there is a false negative here:
@@ -282,21 +278,22 @@ page_fault (struct intr_frame *f)
            fault_addr == f->esp - 32 ||  /* PUSHA */
            fault_addr >= f->esp)         /* SUB $n, %esp; MOV ..., m(%esp) */
          && fault_addr >= STACK_BASE     /* Stack limit */
-         && (*pte & PTE_ADDR) == 0)      /* Page is NOT allocated or paged out*/
+         && ((pte == NULL) ||            /* Page is NOT allocated */
+             (*pte & PTE_ADDR) == 0))    /* Page is NOT paged out*/
      {
        stack_growth (fault_page);
        return;
      }
 
      /* Case 2. In the swap block*/
-     if (not_present && !(*pte & PTE_M) && (*pte & PTE_ADDR))
+     if ((pte != NULL) && not_present && !(*pte & PTE_M) && (*pte & PTE_ADDR))
      {
        load_page_from_swap (pte, fault_page);
        return;
      }
 
      /* Case 3. In the memory mapped file */
-     if (not_present && (*pte & PTE_M))
+     if ((pte != NULL) && not_present && (*pte & PTE_M))
      {
        struct suppl_pte *s_pte = suppl_pt_get_spte (&cur->suppl_pt, pte);
        load_page_from_file (s_pte, fault_page);

@@ -172,13 +172,15 @@ void print_user_frame_table (void)
 static void *
 page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *page)
 {
+  uint32_t *pte_new;
   uint32_t *fte_new = NULL;
   struct thread *cur = thread_current ();
 
   if (flags & PAL_USER)
   {
-    uint32_t *pte_new = lookup_page (cur->pagedir, page, true);
+    pte_new = lookup_page (cur->pagedir, page, true);
     ASSERT ((void *) pte_new > PHYS_BASE);
+    *pte_new |= PTE_I;
     if (*pte_new & PTE_M)
     {
       struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte_new);
@@ -259,7 +261,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
         *pte_old &= PTE_FLAGS;
         size_t swap_frame_no = swap_allocate_page (&swap_table);
         *pte_old |= swap_frame_no << PGBITS;
-        invalidate_pagedir (thread_current ()->pagedir);
         swap_write (&swap_table, swap_frame_no, page);
       }
       if (flags & PAL_ZERO)
@@ -267,6 +268,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       /* Unpin the page since it has been paged out */
       // TODO potential race with pinning this page elsewhere
       *pte_old &= ~PTE_I;
+      *pte_new &= ~PTE_I;
       return page;
     }
     else  /* If accessed */
