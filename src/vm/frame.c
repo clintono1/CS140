@@ -37,11 +37,10 @@ frame_table_scan (struct frame_table *ft, size_t start, size_t cnt)
 /* Set the CNT consecutive frame table entries in FT starting at index START
    to the kernel virtual addresses of PTEs pointing to consecutive pages
    starting at PAGE according to page directory PD.
-   Create a new page table if not found and CREATE is true.
-   Pin a new page table if PIN is true. */
+   Create a new page table if not found and CREATE is true. */
 void
 frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
-                          uint32_t *pd, uint8_t *page, bool create, bool pin)
+                          uint32_t *pd, uint8_t *page, bool create)
 {
   ASSERT (ft != NULL);
   ASSERT (start <= ft->page_cnt);
@@ -54,8 +53,6 @@ frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
     uint32_t *pte = lookup_page (pd, page + i * PGSIZE, create);
     ASSERT ((void *) pte > PHYS_BASE);
     ft->frames[start + i] = pte;
-    if (pin)
-      *pte |= PTE_I;
   }
 }
 

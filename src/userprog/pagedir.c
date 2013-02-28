@@ -39,27 +39,22 @@ pagedir_destroy (uint32_t *pd)
   for (pde = pd; pde < pd + pd_no (PHYS_BASE); pde++)
     if (*pde & PTE_P) 
     {
-        uint32_t *pt = pde_get_pt (*pde);
-        uint32_t *pte;
-        
-        for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
+      uint32_t *pt = pde_get_pt (*pde);
+      uint32_t *pte;
+      for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
+      {
+        if (*pte & PTE_P)
         {
-          if (*pte & PTE_P) 
-          {
-            palloc_free_page (pte_get_page (*pte));
-          }
-          else if  (*pte & PTE_ADDR ) /* not present, but in swap*/
-          {
-            size_t swap_frame_no = (*pte & PTE_ADDR) >> PGBITS;
-            swap_free ( &swap_table, swap_frame_no);  
-          }
+          palloc_free_page (pte_get_page (*pte));
         }
-          
-        palloc_free_page (pt);
+        else if  (*pte & PTE_ADDR ) /* not present, but in swap*/
+        {
+          size_t swap_frame_no = (*pte & PTE_ADDR) >> PGBITS;
+          swap_free ( &swap_table, swap_frame_no);
+        }
+      }
+      palloc_free_page (pt);
     }
-    
-    
-
   palloc_free_page (pd);
 }
 
@@ -109,6 +104,7 @@ pin_pte (uint32_t *pte, void *page)
 {
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
+  // TODO potential race with pinning this page elsewhere
   *pte |= PTE_I;
   /* If the page is not in memory, load it. */
   if ((*pte & PTE_P) == 0)
@@ -124,8 +120,6 @@ pin_pte (uint32_t *pte, void *page)
       load_page_from_file (spte, page);
     }
   }
-  *pte |= PTE_I;
-  invalidate_pagedir (thread_current ()->pagedir);
   return true;
 }
 
@@ -150,8 +144,8 @@ unpin_pte (uint32_t *pte)
 {
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
+  // TODO potential race with pinning this page elsewhere
   *pte &= ~PTE_I;
-  invalidate_pagedir (thread_current ()->pagedir);
   return true;
 }
 
@@ -195,7 +189,9 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
   if (pte != NULL) 
     {
       ASSERT ((*pte & PTE_P) == 0);
-      *pte = pte_create_user (kpage, writable);
+      // TODO potential race with pinning this page elsewhere
+      bool pin = (*pte & PTE_I) != 0;
+      *pte = pte_create_user (kpage, writable) | (pin ? PTE_I : 0);
       return true;
     }
   else

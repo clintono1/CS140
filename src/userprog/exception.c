@@ -130,7 +130,7 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
   if (kpage == NULL)
     _exit(-1);
 
-  /* If MMF or code or initilized data, Load this page. 
+  /* If MMF or code or initialized data, Load this page.
      If uninitialized data, load zero page 
      This is self-explanatory by s_pte->bytes_read and memset zeros*/
   if ( file_read_at ( spte->file, kpage, spte->bytes_read, spte->offset)
@@ -150,13 +150,15 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
     palloc_free_page (kpage);
     _exit(-1);
   }
-  uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
-  ASSERT (pte != NULL);
 
   /* Set mmap bit to 1 if it is code or mmap file.
      Otherwise 0 since it is uninitialized/initialized data page */
   if (mmap)
+  {
+    uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
+    ASSERT (pte != NULL);
     *pte |= PTE_M;
+  }
   else
   {
     hash_delete (&thread_current ()->suppl_pt, &spte->elem_hash);
