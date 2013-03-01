@@ -173,6 +173,23 @@ efficiently.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+/* global frame table, frames stores pointers to PTE or SPTE, clock_cur is used
+   in clock algorithm */
+struct frame_table
+{
+  size_t page_cnt;
+  uint32_t **frames;
+  size_t clock_cur;
+};
+
+/* global swap table to track the usage of each sector in swap */
+struct swap_table
+  {
+    struct block *swap_block;  /* Swap block used for swap table on the disk */
+    struct bitmap *bitmap;     /* Bitmap keeps track of allocation status */
+    struct lock lock;          /* Lock to synchronize access to swap table */
+  };
+
 ---- ALGORITHMS ----
 
 >> B2: When a frame is required but none is free, some frame must be
