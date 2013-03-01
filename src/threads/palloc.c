@@ -348,12 +348,8 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
   size_t i;
   for (i = 0; i < page_cnt; i++)
   {
-    if (pool->frame_table.frames[page_idx + i] != NULL)
+      ASSERT (pool->frame_table.frames[page_idx + i] != NULL)
       pool->frame_table.frames[page_idx + i] = NULL;
-    else
-    {
-      // TODO
-    }
   }
   lock_release(&pool->lock);
 }
