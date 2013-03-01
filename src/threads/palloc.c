@@ -15,7 +15,7 @@
 
 extern uint32_t *init_page_dir;
 extern struct swap_table swap_table;
-
+extern struct lock pin_lock;
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -105,7 +105,11 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         ASSERT (page_cnt == 1);
         uint32_t *pte, *fte;
         pte = lookup_page (cur->pagedir, page, false);
+
+        lock_acquire (&pin_lock);
         *pte |= PTE_I;
+        lock_release (&pin_lock);
+
         ASSERT (pte != NULL);
         ASSERT (*pte & PTE_M);
         fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
@@ -183,7 +187,11 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
   {
     pte_new = lookup_page (cur->pagedir, upage, true);
     ASSERT ((void *) pte_new > PHYS_BASE);
+
+    lock_acquire (&pin_lock);
     *pte_new |= PTE_I;
+    lock_release (&pin_lock);
+
     if (*pte_new & PTE_M)
     {
       struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte_new);
@@ -219,8 +227,12 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       ASSERT(*pte_old & PTE_M);
     }
 
+    lock_acquire (&pin_lock);
+    bool pinned = *pte_old & PTE_I;
+    lock_release (&pin_lock);
+
     /* If the page is pinned, skip this frame table entry */
-    if (*pte_old & PTE_I)
+    if (pinned)
     {
       // TODO
       printf ("(tid=%d) page out skip pinned %p\n", thread_current()->tid, page);

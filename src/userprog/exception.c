@@ -166,6 +166,9 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
     free (spte);
   }
 
+  // TODO
+  printf ("(tid=%d) load_page_from_file %p\n", thread_current ()->tid, upage);
+
   unpin_pte (pte);
 }
 
@@ -304,6 +307,12 @@ page_fault (struct intr_frame *f)
      {
        stack_growth (fault_page);
        goto success;
+     }
+
+     // TODO
+     if ((unsigned)fault_page <= 0x804a000)
+     {
+       ASSERT (*pte & PTE_M);
      }
 
      /* Case 2. In the swap block*/

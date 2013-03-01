@@ -44,6 +44,8 @@ extern struct swap_table swap_table;
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir = NULL;
 
+struct lock pin_lock;
+
 #ifdef FILESYS
 /* -f: Format the file system? */
 static bool format_filesys;
@@ -96,6 +98,8 @@ main (void)
   /* Greet user. */
   printf ("Pintos booting with %'"PRIu32" kB RAM...\n",
           init_ram_pages * PGSIZE / 1024);
+
+  lock_init (&pin_lock);
 
   /* Initialize memory system. */
   palloc_init (user_page_limit);

@@ -11,6 +11,7 @@
 
 static uint32_t *active_pd (void);
 extern struct swap_table swap_table;
+extern struct lock pin_lock;
 
 /* Creates a new page directory that has mappings for kernel
    virtual addresses, but none for user virtual addresses.
@@ -105,7 +106,10 @@ pin_pte (uint32_t *pte, void *page)
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
   // TODO potential race with pinning this page elsewhere
+  lock_acquire (&pin_lock);
   *pte |= PTE_I;
+  lock_release (&pin_lock);
+
   /* If the page is not in memory, load it. */
   if ((*pte & PTE_P) == 0)
   {
@@ -145,10 +149,12 @@ unpin_pte (uint32_t *pte)
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
 
+  lock_acquire (&pin_lock);
   ASSERT (*pte & PTE_I);
-
   // TODO potential race with pinning this page elsewhere
   *pte &= ~PTE_I;
+  lock_release (&pin_lock);
+
   return true;
 }
 
@@ -194,8 +200,10 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
     {
       ASSERT ((*pte & PTE_P) == 0);
       // TODO potential race with pinning this page elsewhere
+      lock_acquire (&pin_lock);
       bool pin = (*pte & PTE_I) != 0;
       *pte = pte_create_user (kpage, writable) | (pin ? PTE_I : 0);
+      lock_release (&pin_lock);
       return true;
     }
   else
