@@ -114,6 +114,8 @@ struct thread
     int nice;                           /* Nice value of each thread*/
     bool is_kernel;                     /* True if this is a kernel process */
     bool in_syscall;                    /* True if thread is in system call */
+    void *esp;                          /* Saved stack pointer for interrupt
+                                           in the kernel */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

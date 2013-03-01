@@ -762,6 +762,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
   t->is_kernel = true;
   t->in_syscall = false;
+  t->esp = NULL;
 
   t->elem.prev = NULL;
   t->elem.next = NULL;

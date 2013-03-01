@@ -71,6 +71,9 @@ syscall_handler (struct intr_frame *f UNUSED)
   struct thread *t = thread_current();
   t->in_syscall = true;
 
+  ASSERT (t->esp == NULL);
+  t->esp = f->esp;
+
   /* Get syscall number */
   int syscall_no = *esp;
 
@@ -161,6 +164,9 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
   }
   t->in_syscall = false;
+
+  ASSERT (t->esp != NULL);
+  t->esp = NULL;
 }
 
 /* Return true if virtual address range [vaddr, vadd+size] is valid */

@@ -232,6 +232,7 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
+  bool esp_set;      /* True if thread_current->esp is set in this page fault */
   
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
@@ -274,6 +275,14 @@ page_fault (struct intr_frame *f)
      if (fault_addr > PHYS_BASE)
        debug_backtrace ();
 
+     if (cur->esp == NULL)
+     {
+       cur->esp = f->esp;
+       esp_set = true;
+     }
+     else
+       esp_set = false;
+
      if (!is_user_vaddr (fault_addr))
        _exit (-1);
 
@@ -286,22 +295,22 @@ page_fault (struct intr_frame *f)
           MOV ..., -4(%esp) will be treated as a stack growth.
           To be really strict, need to check the opcode of the instruction
           pointed by f->eip */
-     if (( fault_addr == f->esp - 4  ||  /* PUSH  */
-           fault_addr == f->esp - 32 ||  /* PUSHA */
-           fault_addr >= f->esp)         /* SUB $n, %esp; MOV ..., m(%esp) */
-         && fault_addr >= STACK_BASE     /* Stack limit */
-         && ((pte == NULL) ||            /* Page is NOT allocated */
-             (*pte & PTE_ADDR) == 0))    /* Page is NOT paged out*/
+     if (( fault_addr == cur->esp - 4  ||  /* PUSH  */
+           fault_addr == cur->esp - 32 ||  /* PUSHA */
+           fault_addr >= cur->esp)         /* SUB $n, %esp; MOV ..., m(%esp) */
+         && fault_addr >= STACK_BASE       /* Stack limit */
+         && ((pte == NULL) ||              /* Page is NOT allocated */
+             (*pte & PTE_ADDR) == 0))      /* Page is NOT paged out*/
      {
        stack_growth (fault_page);
-       return;
+       goto success;
      }
 
      /* Case 2. In the swap block*/
      if ((pte != NULL) && not_present && !(*pte & PTE_M) && (*pte & PTE_ADDR))
      {
        load_page_from_swap (pte, fault_page);
-       return;
+       goto success;
      }
 
      /* Case 3. In the memory mapped file */
@@ -309,13 +318,18 @@ page_fault (struct intr_frame *f)
      {
        struct suppl_pte *s_pte = suppl_pt_get_spte (&cur->suppl_pt, pte);
        load_page_from_file (s_pte, fault_page);
-       return;
+       goto success;
      }
 
      /* Case 4. Access to an invalid user address or a read-only page */
      printf ("%s: Case 4: %p\n", thread_current()->name, fault_addr);
      debug_backtrace ();
      _exit (-1);
+
+success:
+     if (esp_set)
+       cur->esp = NULL;
+     return;
   }
 }
 
