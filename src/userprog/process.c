@@ -204,8 +204,6 @@ process_exit (void)
   /* free all memory mapped files */
   mmap_free_files(&cur->mmap_files);
 
-
-
   /* First step: free the exit_status of terminated children processes
      Order of acquiring locks:
       1. list_lock
@@ -296,12 +294,12 @@ process_exit (void)
   if (cur->process_file)
   {
     lock_acquire (&global_lock_filesys);
-      file_allow_write (cur->process_file);
-      file_close (cur->process_file);
+    file_allow_write (cur->process_file);
+    file_close (cur->process_file);
     lock_release (&global_lock_filesys);
   }
 
-    /* Destroy the current process's page directory and switch back
+  /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
   if (pd != NULL) 
@@ -317,9 +315,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-
-
-
 }
 
 /* Sets up the CPU for running user code in the current
@@ -702,9 +697,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       struct suppl_pte *s_pte;
 
       s_pte = (struct suppl_pte * ) malloc (sizeof (struct suppl_pte));
-      if(s_pte == NULL)
-    	return false;
-      pte =  lookup_page (cur->pagedir, upage, true);
+      if (s_pte == NULL)
+        return false;
+      pte = lookup_page (cur->pagedir, upage, true);
       *pte |= PTE_M;
       s_pte->pte = pte;
       s_pte->file = file;
