@@ -715,9 +715,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       ofs = ofs + (uint32_t) PGSIZE;
       s_pte->bytes_read = page_read_bytes;
 
-      lock_acquire (&cur->spt_lock);
       hash_insert (&cur->suppl_pt, &s_pte->elem_hash);
-      lock_release (&cur->spt_lock);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -744,6 +742,7 @@ setup_stack (void **esp)
       *esp = PHYS_BASE;
     else
       palloc_free_page (kpage);
+    unpin_page (thread_current()->pagedir, upage);
   }
   return success;
 }

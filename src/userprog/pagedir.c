@@ -144,6 +144,9 @@ unpin_pte (uint32_t *pte)
 {
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
+
+  ASSERT (*pte & PTE_I);
+
   // TODO potential race with pinning this page elsewhere
   *pte &= ~PTE_I;
   return true;
@@ -176,7 +179,8 @@ unpin_page (uint32_t *pd, const void *page)
 bool
 pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
 {
-  uint32_t *pte;
+  // TODO
+  volatile uint32_t *pte;
 
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (pg_ofs (kpage) == 0);

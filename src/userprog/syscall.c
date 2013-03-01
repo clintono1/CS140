@@ -192,6 +192,7 @@ _exec (const char *cmd_line)
 
   if (!valid_vaddr_range (cmd_line, strlen(cmd_line)))
     _exit (-1);
+
   char file_path[MAX_FILE_LENGTH];
   get_first_string (cmd_line, file_path);
   /* Lock on process_execute since it needs to open the executable file */

@@ -52,6 +52,8 @@ frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
   {
     uint32_t *pte = lookup_page (pd, page + i * PGSIZE, create);
     ASSERT ((void *) pte > PHYS_BASE);
+    if ((void *) page < PHYS_BASE)
+      *pte |= PTE_I;
     ft->frames[start + i] = pte;
   }
 }

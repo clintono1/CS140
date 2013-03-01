@@ -95,6 +95,8 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
     {
       ASSERT (page != NULL);
       ASSERT ((void *) page < PHYS_BASE);
+      // TODO
+      // printf ("(tid=%d) palloc_get_multiple %p\n", thread_current()->tid, page);
       struct thread *cur = thread_current ();
       if (flags & PAL_MMAP)
       {
@@ -103,6 +105,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         ASSERT (page_cnt == 1);
         uint32_t *pte, *fte;
         pte = lookup_page (cur->pagedir, page, false);
+        *pte |= PTE_I;
         ASSERT (pte != NULL);
         ASSERT (*pte & PTE_M);
         fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
@@ -167,10 +170,10 @@ void print_user_frame_table (void)
 /* Page out a page from the frame table in POOL and then return the page's
    virtual kernel address.
    FLAGS carries the allocation specification.
-   PAGE denotes the user virtual address to set the frame table entry to if
+   UPAGE denotes the user virtual address to set the frame table entry to if
    the page is allocated for a user process. */
 static void *
-page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *page)
+page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upage)
 {
   uint32_t *pte_new;
   uint32_t *fte_new = NULL;
@@ -178,7 +181,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
 
   if (flags & PAL_USER)
   {
-    pte_new = lookup_page (cur->pagedir, page, true);
+    pte_new = lookup_page (cur->pagedir, upage, true);
     ASSERT ((void *) pte_new > PHYS_BASE);
     *pte_new |= PTE_I;
     if (*pte_new & PTE_M)
@@ -219,6 +222,8 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     /* If the page is pinned, skip this frame table entry */
     if (*pte_old & PTE_I)
     {
+      // TODO
+      printf ("(tid=%d) page out skip pinned %p\n", thread_current()->tid, page);
       pool_increase_clock (pool);
       continue;
     }
@@ -227,9 +232,9 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
        an unpresent PTE will show up here. */
     if (!(*pte_old & PTE_P))
     {
-      // TODO potential race with pinning this page elsewhere
-      *pte_old |= PTE_I;
-      invalidate_pagedir (thread_current ()->pagedir);
+      // TODO
+      printf ("page out found empty page %p\n", page);
+      pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
       if (flags & PAL_ZERO)
@@ -240,6 +245,9 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
     ASSERT (page == ptov (*pte_old & PTE_ADDR));
     if (!(*pte_old & PTE_A))
     {
+      // TODO
+      printf ("(tid=%d) page out replace %p\n", thread_current()->tid, page);
+
       *pte_old &= ~PTE_P;
       invalidate_pagedir (thread_current ()->pagedir);
       pool->frame_table.frames[clock_cur] = fte_new;
@@ -247,6 +255,8 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       lock_release (&pool->lock);
       if (*pte_old & PTE_M)
       {
+        // TODO
+        printf ("(tid=%d) page out unmap %p\n", thread_current()->tid, page);
         /* Initialized/uninitialized data pages are changed to normal memory
            pages once loaded. Thus they should not reach here. */
         ASSERT ((spte->flags & SPTE_C) || (spte->flags & SPTE_M));
@@ -258,6 +268,8 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       }
       else
       {
+        // TODO
+        printf ("(tid=%d) page out swap %p\n", thread_current()->tid, page);
         *pte_old &= PTE_FLAGS;
         size_t swap_frame_no = swap_allocate_page (&swap_table);
         *pte_old |= swap_frame_no << PGBITS;
@@ -265,15 +277,15 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *pag
       }
       if (flags & PAL_ZERO)
         memset ((void *) page, 0, PGSIZE);
-      /* Unpin the page since it has been paged out */
-      // TODO potential race with pinning this page elsewhere
-      *pte_old &= ~PTE_I;
-      *pte_new &= ~PTE_I;
       return page;
     }
     else  /* If accessed */
     {
+      // TODO
+      printf ("(tid=%d) page_out skip accessed %p\n", thread_current()->tid, page);
       *pte_old &= ~PTE_A;
+      // TODO
+      invalidate_pagedir (thread_current()->pagedir);
       pool_increase_clock (pool);
     }
   }
@@ -299,6 +311,11 @@ palloc_get_page (enum palloc_flags flags, uint8_t *page)
     else
       PANIC ("Running out of kernel memory pages... Kill the kernel :-(");
   }
+
+  // TODO
+  if (flags & PAL_USER)
+    printf ("(tid=%d) palloc_get_page %p for %p\n", thread_current()->tid, frame, page);
+
   return frame;
 }
 
@@ -322,7 +339,8 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
   page_idx = pg_no (kpage) - pg_no (pool->base);
 
 #ifndef NDEBUG
-  memset (kpage, 0xcc, PGSIZE * page_cnt);
+  // TODO
+  memset (kpage, 0xdd, PGSIZE * page_cnt);
 #endif
 
   lock_acquire(&pool->lock);

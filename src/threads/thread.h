@@ -119,7 +119,6 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                 /* Page directory. */
     struct hash suppl_pt;              /* Supplemental page table */
-    struct lock spt_lock;              /* Supplemental page table lock */
     struct exit_status *exit_status;   /* Exit status of this thread */
     struct list child_exit_status;     /* List of child processes' exit status */
     struct lock list_lock;             /* Lock on child exit status list  */

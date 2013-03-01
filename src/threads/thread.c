@@ -751,7 +751,6 @@ init_thread (struct thread *t, const char *name, int priority)
 
   if (t!= initial_thread)
   {
-    lock_init(&t->spt_lock);
     suppl_pt_init (&t->suppl_pt);
     mmap_files_init(t);
   }

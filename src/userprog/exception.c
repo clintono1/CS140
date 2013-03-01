@@ -151,12 +151,13 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
     _exit(-1);
   }
 
+  uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
+  ASSERT (pte != NULL);
+
   /* Set mmap bit to 1 if it is code or mmap file.
      Otherwise 0 since it is uninitialized/initialized data page */
   if (mmap)
   {
-    uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
-    ASSERT (pte != NULL);
     *pte |= PTE_M;
   }
   else
@@ -164,6 +165,8 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
     hash_delete (&thread_current ()->suppl_pt, &spte->elem_hash);
     free (spte);
   }
+
+  unpin_pte (pte);
 }
 
 /* Load the page pointed by PTE and install the page with the virtual
@@ -189,6 +192,8 @@ load_page_from_swap (uint32_t *pte, void *page)
     palloc_free_page (kpage);
     _exit (-1);
   }
+
+  unpin_pte (pte);
 }
 
 /* Grow the stack at the page with user virtual address UPAGE */
@@ -205,6 +210,8 @@ stack_growth( void *upage)
     palloc_free_page (kpage);
     _exit (-1);
   }
+
+  unpin_page (thread_current()->pagedir, upage);
 }
 
 /* Page fault handler.  This is a skeleton that must be filled in
@@ -262,6 +269,11 @@ page_fault (struct intr_frame *f)
   else 
   /* TODO: update comments: If fault in the user program or syscall, should get the info about where to get the page */
   {
+     // TODO
+     printf ("(tid=%d) page_fault = %p\n", thread_current()->tid, fault_addr);
+     if (fault_addr > PHYS_BASE)
+       debug_backtrace ();
+
      if (!is_user_vaddr (fault_addr))
        _exit (-1);
 
@@ -301,6 +313,8 @@ page_fault (struct intr_frame *f)
      }
 
      /* Case 4. Access to an invalid user address or a read-only page */
+     printf ("%s: Case 4: %p\n", thread_current()->name, fault_addr);
+     debug_backtrace ();
      _exit (-1);
   }
 }
