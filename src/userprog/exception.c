@@ -17,7 +17,8 @@
 static long long page_fault_cnt;
 extern struct swap_table swap_table;
 extern struct lock pin_lock;
-extern struct condition pin_cond;
+extern struct lock flush_lock;
+extern struct condition flush_cond;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
@@ -135,12 +136,12 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
   uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
   ASSERT (pte != NULL);
 
-  lock_acquire (&pin_lock);
-  while (*pte & PTE_I)
+  lock_acquire (&flush_lock);
+  while (*pte & PTE_F)
   {
-    cond_wait (&pin_cond, &pin_lock);
+    cond_wait (&flush_cond, &flush_lock);
   }
-  lock_release (&pin_lock);
+  lock_release (&flush_lock);
 
   /* If MMF or code or initialized data, Load this page.
      If uninitialized data, load zero page 
@@ -192,12 +193,12 @@ load_page_from_swap (uint32_t *pte, void *page)
   if (kpage == NULL)
     _exit (-1);
 
-  lock_acquire (&pin_lock);
-  while (*pte & PTE_I)
+  lock_acquire (&flush_lock);
+  while (*pte & PTE_F)
   {
-    cond_wait (&pin_cond, &pin_lock);
+    cond_wait (&flush_cond, &flush_lock);
   }
-  lock_release (&pin_lock);
+  lock_release (&flush_lock);
 
   size_t swap_frame_no = (*pte & PTE_ADDR) >> PGBITS;
 

@@ -45,7 +45,8 @@ extern struct swap_table swap_table;
 uint32_t *init_page_dir = NULL;
 
 struct lock pin_lock;
-struct condition pin_cond;
+struct lock flush_lock;
+struct condition flush_cond;
 
 #ifdef FILESYS
 /* -f: Format the file system? */
@@ -101,7 +102,8 @@ main (void)
           init_ram_pages * PGSIZE / 1024);
 
   lock_init (&pin_lock);
-  cond_init (&pin_cond);
+  lock_init (&flush_lock);
+  cond_init (&flush_cond);
 
   /* Initialize memory system. */
   palloc_init (user_page_limit);

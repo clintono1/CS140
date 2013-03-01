@@ -72,6 +72,7 @@ static inline uintptr_t pd_no (const void *va) {
 #define PTE_A 0x20              /* 1=accessed, 0=not acccessed. */
 #define PTE_D 0x40              /* 1=dirty, 0=not dirty (PTEs only). */
 #define PTE_I 0x80              /* 1=pinned, 0=not pinned */
+#define PTE_F 0x100             /* 1=being flushed, 0=not being flushed */
 #define MAX_SWAP_PAGE_NO 0xfffff
 
 
