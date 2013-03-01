@@ -38,14 +38,81 @@ FirstName LastName: contribution
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+/* spte_flags is used to denote the kind of a page, memory mapped file, code, 
+   initialized data or uninitialized data */
+enum spte_flags
+{
+  SPTE_M  = 0x1,   /* 1 if memory mapped file */
+  SPTE_C  = 0x2,   /* 1 if executable's code segment */
+  SPTE_DI = 0x4,   /* 1 if initialized data */
+  SPTE_DU = 0x8    /* 1 if uninitialized data */
+};
+
+/* Supplemental page table entry, used for each page of memory mapped file
+   and code, also data before it has ever been loaded */
+struct suppl_pte
+{
+  uint32_t *pte;                  /* Kernel virtual address to 
+                                     the page table entry */
+  struct file *file;              /* File this page is mapped to */
+  enum spte_flags flags;          /* Types of the page */
+  bool writable;                  /* Whether this page is writable */
+  off_t offset;                   /* Offset in the file the page is mapped to */
+  size_t bytes_read;              /* Number of bytes read from the file */
+  struct hash_elem elem_hash;     /* Element for supplemental page table */
+};
+
+/* each thread has a supplementary page table with a lock */
+struct thread
+{
+  ...
+  struct hash suppl_pt;              /* Supplemental page table */
+  struct lock spt_lock;              /* Supplemental page table lock */
+  ...
+}
+
+#define PTE_FLAGS 0x00000fff    /* Flag bits. */
+#define PTE_ADDR  0xfffff000    /* Address bits. */
+#define PTE_AVL   0x00000e00    /* Bits available for OS use. */
+#define PTE_P 0x1               /* 1=present, 0=not present. */
+#define PTE_W 0x2               /* 1=read/write, 0=read-only. */
+#define PTE_U 0x4               /* 1=user/kernel, 0=kernel only. */
+#define PTE_M 0x8               /* 1=memory mapped file, 0=normal memory */
+#define PTE_S 0x10              /* 1=shared memory, 0=not shared */
+#define PTE_A 0x20              /* 1=accessed, 0=not acccessed. */
+#define PTE_D 0x40              /* 1=dirty, 0=not dirty (PTEs only). */
+#define PTE_I 0x80              /* 1=pinned, 0=not pinned */
+#define MAX_SWAP_PAGE_NO 0xfffff
+
 ---- ALGORITHMS ----
 
 >> A2: In a few paragraphs, describe your code for locating the frame,
 >> if any, that contains the data of a given page.
 
+Given the user virtual address of a page, we first look up the page in the 
+page directory of current thread. No matter what kind a page is, there is always
+a corresponding page table entry unless we are referring to an nonexistent page.
+
+Once we get the page table entry (PTE for short), we check whether it is present
+by the PTE_P bit. If it is present, then it is in memory and we can get the 
+physical address of the frame by the top 20 bits in the PTE (the low 12 bits of
+a frame address are always 0). 
+If it is not present and PTE_M bit is 1, then it is in memory mapped file. We 
+use the pointer to PTE as the key to look up the corresponding supplementary 
+page table entry (SPTE for short). We can locate the frame via the file pointer 
+and offset.
+If it is not present and PTE_M bit is 0 and the top 20 bits of PTE is not 0,
+then it is in swap. We can get the swap frame number from the top 20 bits of
+PTE (a frame is 8 sectors here). Then we can easily locate the frame in the swap
+using this swap frame number.
+If it is not present and PTE_M is 0 and the top 20 bits of PTE is also 0, this 
+means such page doens't exist. In this case, just exit(-1). 
+
 >> A3: How does your code coordinate accessed and dirty bits between
 >> kernel and user virtual addresses that alias a single frame, or
 >> alternatively how do you avoid the issue?
+
+
 
 ---- SYNCHRONIZATION ----
 
