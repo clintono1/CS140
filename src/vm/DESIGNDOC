@@ -112,17 +112,57 @@ means such page doens't exist. In this case, just exit(-1).
 >> kernel and user virtual addresses that alias a single frame, or
 >> alternatively how do you avoid the issue?
 
-
+We avoid this issue by only accessing user data through user virtual addresses 
+(only through user threads' page table entries). Also, whenever we changes a
+PTE, we flush the TLB to ensure consistency.
 
 ---- SYNCHRONIZATION ----
 
 >> A4: When two user processes both need a new frame at the same time,
 >> how are races avoided?
 
+We change the original bitmap to our frame table.
+
+struct frame_table
+{
+  size_t page_cnt;
+  uint32_t **frames;
+  size_t clock_cur;
+};
+
+Here each frame table entry stores a pointer to
+1)  page table entry if the page is present or in swap
+or  
+2)  supplementary page table entry if the page is in file
+
+When we allocate a page, we will scan the frame table to get a new frame. We 
+will call palloc_get_page(). It will then call palloc_get_multiple() if there 
+are free frames, or page_out_then_get_page() if there is no free frame. Both 
+functions have to acquire pool->lock before they can scan the frames or do clock
+algorithm to get a frame. Therefore one process have to wait till the other 
+process get a frame before it can search for a new frame.
+
 ---- RATIONALE ----
 
 >> A5: Why did you choose the data structure(s) that you did for
 >> representing virtual-to-physical mappings?
+
+All pages that are currently in memory can be located by page table entries as 
+in project 2.
+
+All pages that are in swap can also be located by page table entries. The 
+address of each allocated swap frame is stored as the top 20 bits in 
+corresponding page table entry (where physical address was stored when this page
+was in memory). Therefore, we don't even need to lookup in supplementary page 
+table. We only need the top 20 bits in the PTE to locate the frame in swap.
+Comparing with creating a supplementary page table entry for a swap page, this 
+method saves both time and space.
+
+All pages that are in file (memory mapped file, code or data) can be located 
+by supplementary page table entries. We choose to use hashtable to implement our 
+supplementary page table because insertion, deletion and lookup only need O(1) 
+time in hashtable. Therefore, we can do virtual-to-physical mappings very 
+efficiently.  
 
            PAGING TO AND FROM DISK
            =======================
