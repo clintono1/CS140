@@ -34,7 +34,7 @@ main (int argc, char *argv[])
     {
       size_t j;
       for (j = i; j < SIZE; j++)
-        printf ("%u ", (unsigned) buf[j]);
+        printf ("%d ", (int) buf[j]);
       printf ("\n");
       fail ("byte %zu != 0", i);
     }
