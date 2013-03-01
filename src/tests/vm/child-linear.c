@@ -1,43 +1,44 @@
-/* Child process of page-parallel.
-   Encrypts 1 MB of zeros, then decrypts it, and ensures that
-   the zeros are back. */
+/* Encrypts, then decrypts, 2 MB of memory and verifies that the
+   values are as they should be. */
 
 #include <string.h>
 #include "tests/arc4.h"
 #include "tests/lib.h"
 #include "tests/main.h"
-#include <stdio.h>
 
-const char *test_name = "child-linear";
+#define SIZE (2 * 1024 * 1024)
 
-#define SIZE (1024 * 1024)
-static unsigned char buf[SIZE];
+static char buf[SIZE];
 
-int
-main (int argc, char *argv[])
+void
+test_main (void)
 {
-  const char *key = argv[argc - 1];
   struct arc4 arc4;
   size_t i;
 
+  /* Initialize to 0x5a. */
+  msg ("initialize");
+  memset (buf, 0x5a, sizeof buf);
+
+  /* Check that it's all 0x5a. */
+  msg ("read pass");
+  for (i = 0; i < SIZE; i++)
+    if (buf[i] != 0x5a)
+      fail ("byte %zu != 0x5a", i);
+
   /* Encrypt zeros. */
-  arc4_init (&arc4, key, strlen (key));
+  msg ("read/modify/write pass one");
+  arc4_init (&arc4, "foobar", 6);
   arc4_crypt (&arc4, buf, SIZE);
 
   /* Decrypt back to zeros. */
-  arc4_init (&arc4, key, strlen (key));
+  msg ("read/modify/write pass two");
+  arc4_init (&arc4, "foobar", 6);
   arc4_crypt (&arc4, buf, SIZE);
 
-  /* Check that it's all zeros. */
+  /* Check that it's all 0x5a. */
+  msg ("read pass");
   for (i = 0; i < SIZE; i++)
-    if (buf[i] != '\0')
-    {
-      size_t j;
-      for (j = i; j < SIZE; j++)
-        printf ("%u ", (unsigned) buf[j]);
-      printf ("\n");
-      fail ("byte %zu != 0", i);
-    }
-
-  return 0x42;
+    if (buf[i] != 0x5a)
+      fail ("byte %zu != 0x5a", i);
 }
