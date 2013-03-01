@@ -16,6 +16,7 @@
 extern uint32_t *init_page_dir;
 extern struct swap_table swap_table;
 extern struct lock pin_lock;
+extern struct condition pin_cond;
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -266,8 +267,13 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       // TODO
       printf ("(tid=%d) page out replace %p\n", thread_current()->tid, page);
 
+      lock_acquire (&pin_lock);
+      *pte_old |= PTE_I;
+      lock_release (&pin_lock);
+
       *pte_old &= ~PTE_P;
       invalidate_pagedir (thread_current ()->pagedir);
+
       pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
@@ -293,6 +299,12 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
         *pte_old |= swap_frame_no << PGBITS;
         swap_write (&swap_table, swap_frame_no, page);
       }
+
+      lock_acquire (&pin_lock);
+      *pte_old &= ~PTE_I;
+      cond_broadcast (&pin_cond, &pin_lock);
+      lock_release (&pin_lock);
+
       if (flags & PAL_ZERO)
         memset ((void *) page, 0, PGSIZE);
       return page;

@@ -10,7 +10,7 @@
 
 const char *test_name = "child-linear";
 
-#define SIZE (1024 * 8)
+#define SIZE (1024 * 32)
 static unsigned char buf[SIZE];
 
 int

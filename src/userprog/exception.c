@@ -16,6 +16,8 @@
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 extern struct swap_table swap_table;
+extern struct lock pin_lock;
+extern struct condition pin_cond;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
@@ -130,6 +132,16 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
   if (kpage == NULL)
     _exit(-1);
 
+  uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
+  ASSERT (pte != NULL);
+
+  lock_acquire (&pin_lock);
+  while (*pte & PTE_I)
+  {
+    cond_wait (&pin_cond, &pin_lock);
+  }
+  lock_release (&pin_lock);
+
   /* If MMF or code or initialized data, Load this page.
      If uninitialized data, load zero page 
      This is self-explanatory by s_pte->bytes_read and memset zeros*/
@@ -150,9 +162,6 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
     palloc_free_page (kpage);
     _exit(-1);
   }
-
-  uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
-  ASSERT (pte != NULL);
 
   /* Set mmap bit to 1 if it is code or mmap file.
      Otherwise 0 since it is uninitialized/initialized data page */
@@ -177,9 +186,18 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
 void
 load_page_from_swap (uint32_t *pte, void *page)
 {
+  ASSERT (pte != NULL);
+
   uint8_t *kpage = palloc_get_page (PAL_USER, page);
   if (kpage == NULL)
     _exit (-1);
+
+  lock_acquire (&pin_lock);
+  while (*pte & PTE_I)
+  {
+    cond_wait (&pin_cond, &pin_lock);
+  }
+  lock_release (&pin_lock);
 
   size_t swap_frame_no = (*pte & PTE_ADDR) >> PGBITS;
 
