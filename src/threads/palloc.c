@@ -214,7 +214,18 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     size_t clock_cur = pool->frame_table.clock_cur;
     uint32_t *fte_old = pool->frame_table.frames[clock_cur];
     uint8_t *page = pool->base + clock_cur * PGSIZE;
-    ASSERT (fte_old != 0);
+
+    if (fte_old == NULL)
+    {
+      // TODO
+      printf ("page out found empty page %p\n", page);
+      pool->frame_table.frames[clock_cur] = fte_new;
+      pool_increase_clock (pool);
+      lock_release (&pool->lock);
+      if (flags & PAL_ZERO)
+        memset ((void *) page, 0, PGSIZE);
+      return page;
+    }
 
     uint32_t *pte_old;
     struct suppl_pte *spte = NULL;
@@ -246,13 +257,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     if (!(*pte_old & PTE_P))
     {
       // TODO
-      printf ("page out found empty page %p\n", page);
-      pool->frame_table.frames[clock_cur] = fte_new;
-      pool_increase_clock (pool);
-      lock_release (&pool->lock);
-      if (flags & PAL_ZERO)
-        memset ((void *) page, 0, PGSIZE);
-      return page;
+      ASSERT (0);
     }
 
     ASSERT (page == ptov (*pte_old & PTE_ADDR));

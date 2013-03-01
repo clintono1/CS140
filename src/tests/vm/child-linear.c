@@ -10,8 +10,8 @@
 
 const char *test_name = "child-linear";
 
-#define SIZE (1024 * 1024)
-static char buf[SIZE];
+#define SIZE (1024 * 8)
+static unsigned char buf[SIZE];
 
 int
 main (int argc, char *argv[])
@@ -34,7 +34,7 @@ main (int argc, char *argv[])
     {
       size_t j;
       for (j = i; j < SIZE; j++)
-        printf ("%d ", (int) buf[j]);
+        printf ("%u ", (unsigned) buf[j]);
       printf ("\n");
       fail ("byte %zu != 0", i);
     }
