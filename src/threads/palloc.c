@@ -96,7 +96,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
       ASSERT (page != NULL);
       ASSERT ((void *) page < PHYS_BASE);
       // TODO
-      // printf ("(tid=%d) palloc_get_multiple %p\n", thread_current()->tid, page);
+      printf ("(tid=%d) palloc_get_multiple %p\n", thread_current()->tid, page);
       struct thread *cur = thread_current ();
       if (flags & PAL_MMAP)
       {
@@ -230,6 +230,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
 
     /* If another process releases its pages from the frame table,
        an unpresent PTE will show up here. */
+    // TODO This following situation is never true if locked in palloc_free_multiple
     if (!(*pte_old & PTE_P))
     {
       // TODO
@@ -282,7 +283,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     else  /* If accessed */
     {
       // TODO
-      printf ("(tid=%d) page_out skip accessed %p\n", thread_current()->tid, page);
+      printf ("(tid=%d) page out skip accessed %p\n", thread_current()->tid, page);
       *pte_old &= ~PTE_A;
       // TODO
       invalidate_pagedir (thread_current()->pagedir);
