@@ -6,6 +6,7 @@
 #include "tests/arc4.h"
 #include "tests/lib.h"
 #include "tests/main.h"
+#include <stdio.h>
 
 const char *test_name = "child-linear";
 
@@ -30,7 +31,13 @@ main (int argc, char *argv[])
   /* Check that it's all zeros. */
   for (i = 0; i < SIZE; i++)
     if (buf[i] != '\0')
+    {
+      size_t j;
+      for (j = i; j < SIZE; j++)
+        printf ("%u ", (unsigned) buf[j]);
+      printf ("\n");
       fail ("byte %zu != 0", i);
+    }
 
   return 0x42;
 }
