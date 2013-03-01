@@ -58,8 +58,6 @@ swap_read (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
   int i;
   ASSERT (bitmap_contains (swap_table->bitmap, swap_frame_no, 1, true));
   lock_acquire (&swap_table->lock_swap);
-  // TODO
-  printf ("(tid=%d) swap read %p <-- %d\n", thread_current()->tid, buf, (int)swap_frame_no);
   /* Each iteration reads in BLOCK_SECTOR_SIZE bytes */
   for (i = 0; i < SECTORS_PER_PAGE; i ++)
   {
@@ -77,8 +75,6 @@ swap_write (struct swap_table *swap_table, size_t swap_frame_no, uint8_t *buf)
   int i;
   ASSERT (bitmap_contains (swap_table->bitmap, swap_frame_no, 1, true));
   lock_acquire (&swap_table->lock_swap);
-  // TODO
-  printf ("(tid=%d) swap write %p --> %d\n", thread_current()->tid, buf, (int)swap_frame_no);
   /* Each iteration reads in BLOCK_SECTOR_SIZE bytes */
   for (i = 0; i < SECTORS_PER_PAGE; i ++)
   {

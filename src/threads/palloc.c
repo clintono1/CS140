@@ -97,8 +97,6 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
     {
       ASSERT (page != NULL);
       ASSERT ((void *) page < PHYS_BASE);
-      // TODO
-      printf ("(tid=%d) palloc_get_multiple %p\n", thread_current()->tid, page);
       struct thread *cur = thread_current ();
       if (flags & PAL_MMAP)
       {
@@ -162,17 +160,6 @@ pool_increase_clock (struct pool *pool)
                                 % pool->frame_table.page_cnt;
 }
 
-// TODO: remove before submit
-void print_user_frame_table (void)
-{
-  uint32_t i;
-  for (i = 0; i < user_pool.frame_table.page_cnt; i++)
-  {
-    uint32_t *fte = user_pool.frame_table.frames[i];
-    printf ("fte[%d] = %p\n", i, fte);
-  }
-}
-
 /* Page out a page from the frame table in POOL and then return the page's
    virtual kernel address.
    FLAGS carries the allocation specification.
@@ -217,10 +204,10 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     uint32_t *fte_old = pool->frame_table.frames[clock_cur];
     uint8_t *page = pool->base + clock_cur * PGSIZE;
 
+    /* If another process releases its pages from the frame table,
+       an unpresent PTE will show up here. */
     if (fte_old == NULL)
     {
-      // TODO
-      printf ("page out found empty page %p\n", page);
       pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
@@ -247,27 +234,13 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     /* If the page is pinned, skip this frame table entry */
     if (pinned)
     {
-      // TODO
-      printf ("(tid=%d) page out skip pinned %p\n", thread_current()->tid, page);
       pool_increase_clock (pool);
       continue;
-    }
-
-    /* If another process releases its pages from the frame table,
-       an unpresent PTE will show up here. */
-    // TODO This following situation is never true if locked in palloc_free_multiple
-    if (!(*pte_old & PTE_P))
-    {
-      // TODO
-      ASSERT (0);
     }
 
     ASSERT (page == ptov (*pte_old & PTE_ADDR));
     if (!(*pte_old & PTE_A))
     {
-      // TODO
-      printf ("(tid=%d) page out replace %p\n", thread_current()->tid, page);
-
       lock_acquire (&flush_lock);
       *pte_old |= PTE_F;
       lock_release (&flush_lock);
@@ -280,8 +253,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       lock_release (&pool->lock);
       if (*pte_old & PTE_M)
       {
-        // TODO
-        printf ("(tid=%d) page out unmap %p\n", thread_current()->tid, page);
         /* Initialized/uninitialized data pages are changed to normal memory
            pages once loaded. Thus they should not reach here. */
         ASSERT ((spte->flags & SPTE_C) || (spte->flags & SPTE_M));
@@ -293,8 +264,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       }
       else
       {
-        // TODO
-        printf ("(tid=%d) page out swap %p\n", thread_current()->tid, page);
         *pte_old &= PTE_FLAGS;
         size_t swap_frame_no = swap_allocate_page (&swap_table);
         *pte_old |= swap_frame_no << PGBITS;
@@ -312,8 +281,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     }
     else  /* If accessed */
     {
-      // TODO
-      printf ("(tid=%d) page out skip accessed %p\n", thread_current()->tid, page);
       *pte_old &= ~PTE_A;
       // TODO
       invalidate_pagedir (thread_current()->pagedir);
@@ -343,10 +310,6 @@ palloc_get_page (enum palloc_flags flags, uint8_t *page)
       PANIC ("Running out of kernel memory pages... Kill the kernel :-(");
   }
 
-  // TODO
-  if (flags & PAL_USER)
-    printf ("(tid=%d) palloc_get_page %p for %p\n", thread_current()->tid, frame, page);
-
   return frame;
 }
 
@@ -370,8 +333,7 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
   page_idx = pg_no (kpage) - pg_no (pool->base);
 
 #ifndef NDEBUG
-  // TODO
-  memset (kpage, 0xdd, PGSIZE * page_cnt);
+  memset (kpage, 0xcc, PGSIZE * page_cnt);
 #endif
 
   lock_acquire(&pool->lock);

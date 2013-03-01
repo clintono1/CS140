@@ -176,9 +176,6 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
     free (spte);
   }
 
-  // TODO
-  printf ("(tid=%d) load_page_from_file %p\n", thread_current ()->tid, upage);
-
   unpin_pte (pte);
 }
 
@@ -292,8 +289,6 @@ page_fault (struct intr_frame *f)
   else 
   /* TODO: update comments: If fault in the user program or syscall, should get the info about where to get the page */
   {
-     // TODO
-     printf ("(tid=%d) page_fault = %p\n", thread_current()->tid, fault_addr);
      if (fault_addr > PHYS_BASE)
        debug_backtrace ();
 
@@ -328,12 +323,6 @@ page_fault (struct intr_frame *f)
        goto success;
      }
 
-     // TODO
-     if ((unsigned)fault_page <= 0x804a000)
-     {
-       ASSERT (*pte & PTE_M);
-     }
-
      /* Case 2. In the swap block*/
      if ((pte != NULL) && not_present && !(*pte & PTE_M) && (*pte & PTE_ADDR))
      {
@@ -350,8 +339,6 @@ page_fault (struct intr_frame *f)
      }
 
      /* Case 4. Access to an invalid user address or a read-only page */
-     printf ("%s: Case 4: %p\n", thread_current()->name, fault_addr);
-     debug_backtrace ();
      _exit (-1);
 
 success:

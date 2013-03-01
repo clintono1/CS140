@@ -105,7 +105,6 @@ pin_pte (uint32_t *pte, void *page)
 {
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
-  // TODO potential race with pinning this page elsewhere
   lock_acquire (&pin_lock);
   *pte |= PTE_I;
   lock_release (&pin_lock);
@@ -151,7 +150,6 @@ unpin_pte (uint32_t *pte)
 
   lock_acquire (&pin_lock);
   ASSERT (*pte & PTE_I);
-  // TODO potential race with pinning this page elsewhere
   *pte &= ~PTE_I;
   lock_release (&pin_lock);
 
@@ -185,8 +183,7 @@ unpin_page (uint32_t *pd, const void *page)
 bool
 pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
 {
-  // TODO
-  volatile uint32_t *pte;
+  uint32_t *pte;
 
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (pg_ofs (kpage) == 0);
@@ -199,7 +196,6 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
   if (pte != NULL) 
     {
       ASSERT ((*pte & PTE_P) == 0);
-      // TODO potential race with pinning this page elsewhere
       lock_acquire (&pin_lock);
       bool pin = (*pte & PTE_I) != 0;
       *pte = pte_create_user (kpage, writable) | (pin ? PTE_I : 0);
