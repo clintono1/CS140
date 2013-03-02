@@ -11,7 +11,6 @@
 
 extern struct lock file_flush_lock;
 extern struct lock global_lock_filesys;
-extern struct pool user_pool;
 
 static unsigned
 mmap_files_hash_func (const struct hash_elem *e, void *aux UNUSED)
@@ -52,7 +51,7 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
     struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte);
     bool writable = !file_is_writable(spte->file);
     void * kpage = pte_get_page (*pte);
-    struct lock *pin_lock = pool_get_pin_lock (&user_pool, pte);
+    struct lock *pin_lock = pool_get_pin_lock (pte);
     if (*pte & PTE_P)
     {
       ASSERT (pin_lock != NULL);

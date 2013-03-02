@@ -44,7 +44,7 @@ struct pool
   };
 
 /* Two pools: one for kernel data, one for user pages. */
-struct pool kernel_pool, user_pool;
+static struct pool kernel_pool, user_pool;
 
 static void init_pool (struct pool *, void *base, size_t page_cnt,
                        const char *name);
@@ -276,10 +276,9 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
         lock_acquire (&file_flush_lock);
         *pte_old |= PTE_F;
         *pte_old |= PTE_A;
-        lock_release (&file_flush_lock);
-
         *pte_old &= ~PTE_P;
         invalidate_pagedir (thread_current ()->pagedir);
+        lock_release (&file_flush_lock);
 
         /* Initialized/uninitialized data pages are changed to normal memory
            pages once loaded. Thus they should not reach here. */
@@ -444,16 +443,17 @@ page_from_pool (const struct pool *pool, void *page)
 }
 
 struct lock *
-pool_get_pin_lock (struct pool *pool, uint32_t *pte)
+pool_get_pin_lock (uint32_t *pte)
 {
   if ((*pte & PTE_ADDR) == 0 || !(*pte & PTE_P))
     return NULL;
   void *kpage = ptov (*pte & PTE_ADDR);
-  size_t page_idx = pg_no (kpage) - pg_no (pool->base);
+  int page_idx = pg_no (kpage) - pg_no (user_pool.base);
+  ASSERT (page_idx >= 0);
   // TODO
   printf ("(tid=%d) pool_get_pin_lock pte = %p, *pte = %#x, pool->base = %p, page_idx = %d\n",
-          thread_current()->tid, pte, *pte, pool->base, (int) page_idx);
-  return &pool->frame_table.frames[page_idx].pin_lock;
+          thread_current()->tid, pte, *pte, user_pool.base, page_idx);
+  return &user_pool.frame_table.frames[page_idx].pin_lock;
 }
 
 /* Update the frame table entries in the kernel pool according to the new

@@ -12,11 +12,8 @@
 
 static uint32_t *active_pd (void);
 extern struct swap_table swap_table;
-extern struct pool user_pool;
 extern struct lock swap_flush_lock;
 extern struct condition swap_flush_cond;
-extern struct lock file_flush_lock;
-extern struct condition file_flush_cond;
 
 /* Creates a new page directory that has mappings for kernel
    virtual addresses, but none for user virtual addresses.
@@ -49,7 +46,7 @@ pagedir_destroy (uint32_t *pd)
       uint32_t *pte;
       for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
       {
-        struct lock *pin_lock = pool_get_pin_lock (&user_pool, pte);
+        struct lock *pin_lock = pool_get_pin_lock (pte);
         if (!(*pte & PTE_P))
         {
           if (*pte & PTE_ADDR)
@@ -138,7 +135,7 @@ pin_pte (uint32_t *pte, void *page)
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
 
-  struct lock *pin_lock = pool_get_pin_lock (&user_pool, pte);
+  struct lock *pin_lock = pool_get_pin_lock (pte);
 
   if (pin_lock != NULL)
     lock_acquire (pin_lock);
@@ -151,13 +148,13 @@ pin_pte (uint32_t *pte, void *page)
   {
     if ((*pte & PTE_M) == 0)
     {
-      load_page_from_swap (pte, page);
+      load_page_from_swap (pte, page, true);
     }
     else
     {
       struct suppl_pte *spte;
       spte = suppl_pt_get_spte (&thread_current ()->suppl_pt, pte);
-      load_page_from_file (spte, page);
+      load_page_from_file (spte, page, true);
     }
   }
   return true;
@@ -185,7 +182,7 @@ unpin_pte (uint32_t *pte)
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
 
-  struct lock *pin_lock = pool_get_pin_lock (&user_pool, pte);
+  struct lock *pin_lock = pool_get_pin_lock (pte);
 
   if (pin_lock != NULL)
     lock_acquire (pin_lock);
@@ -238,7 +235,7 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
     {
       ASSERT ((*pte & PTE_P) == 0);
 
-      struct lock *pin_lock = pool_get_pin_lock (&user_pool, pte);
+      struct lock *pin_lock = pool_get_pin_lock (pte);
 
       if (pin_lock != NULL)
         lock_acquire (pin_lock);

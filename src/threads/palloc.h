@@ -21,6 +21,6 @@ void *palloc_get_multiple (enum palloc_flags, size_t page_cnt, uint8_t *page);
 void palloc_free_page (void *);
 void palloc_free_multiple (void *, size_t page_cnt);
 void palloc_kernel_pool_change_pd (uint32_t *pd);
-struct lock *pool_get_pin_lock (struct pool *pool, uint32_t *pte);
+struct lock *pool_get_pin_lock (uint32_t *pte);
 
 #endif /* threads/palloc.h */

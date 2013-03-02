@@ -125,9 +125,10 @@ kill (struct intr_frame *f)
 }
 
 /* Load data from file into a page according to the supplemental page table
-   entry SPTE and the virtual user address UPAGE */
+   entry SPTE and the virtual user address UPAGE.
+   Pin the loaded page if PIN is true. */
 void
-load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
+load_page_from_file (struct suppl_pte *spte, uint8_t *upage, bool pin)
 {
   bool mmap = (spte->flags & SPTE_M) || (spte->flags & SPTE_C);
   enum palloc_flags flags = PAL_USER | (mmap ? PAL_MMAP : 0);
@@ -137,6 +138,7 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
 
   uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
   ASSERT (pte != NULL);
+  ASSERT (*pte & PTE_I);
 
   lock_acquire (&file_flush_lock);
   while (*pte & PTE_F)
@@ -185,19 +187,22 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
   // TODO
   printf ("(tid=%d) load_page_from_file %p\n", thread_current ()->tid, upage);
 
-  unpin_pte (pte);
+  if (!pin)
+    unpin_pte (pte);
 }
 
 /* Load the page pointed by PTE and install the page with the virtual
-   address UPAGE */
+   address UPAGE.
+   Pin the loaded page if PIN is true. */
 void
-load_page_from_swap (uint32_t *pte, void *page)
+load_page_from_swap (uint32_t *pte, void *page, bool pin)
 {
   ASSERT (pte != NULL);
 
   uint8_t *kpage = palloc_get_page (PAL_USER, page);
   if (kpage == NULL)
     _exit (-1);
+  ASSERT (*pte & PTE_I);
 
   lock_acquire (&swap_flush_lock);
   while (*pte & PTE_F)
@@ -221,7 +226,8 @@ load_page_from_swap (uint32_t *pte, void *page)
     _exit (-1);
   }
 
-  unpin_pte (pte);
+  if (!pin)
+    unpin_pte (pte);
 }
 
 /* Grow the stack at the page with user virtual address UPAGE */
@@ -345,7 +351,7 @@ page_fault (struct intr_frame *f)
      if ((pte != NULL) && not_present && !(*pte & PTE_M) && (*pte & PTE_ADDR))
      {
        printf ("(tid=%d) case 2: %p\n", thread_current()->tid, fault_page);
-       load_page_from_swap (pte, fault_page);
+       load_page_from_swap (pte, fault_page, false);
        goto success;
      }
 
@@ -354,7 +360,7 @@ page_fault (struct intr_frame *f)
      {
        printf ("(tid=%d) case 3: %p\n", thread_current()->tid, fault_page);
        struct suppl_pte *s_pte = suppl_pt_get_spte (&cur->suppl_pt, pte);
-       load_page_from_file (s_pte, fault_page);
+       load_page_from_file (s_pte, fault_page, false);
        goto success;
      }
 

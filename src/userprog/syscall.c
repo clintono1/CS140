@@ -543,22 +543,29 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
       }
       else
         return false;
+      ASSERT (*pte & PTE_I);
     }
     else if ((*pte & PTE_P) == 0)
     {
       if ((*pte & PTE_M) == 0)
       {
-        load_page_from_swap (pte, upage);
+        load_page_from_swap (pte, upage, true);
       }
       else
       {
         struct suppl_pte *spte;
         spte = suppl_pt_get_spte (&thread_current()->suppl_pt, pte);
-        load_page_from_file (spte, upage);
+        load_page_from_file (spte, upage, true);
       }
+      ASSERT (*pte & PTE_I);
     }
-    if (!pin_page (thread_current()->pagedir, upage))
-      return false;
+    else
+    {
+      struct lock *pin_lock = pool_get_pin_lock (pte);
+      lock_acquire (pin_lock);
+      *pte |= PTE_I;
+      lock_release (pin_lock);
+    }
     upage += PGSIZE;
   }
   return true;
