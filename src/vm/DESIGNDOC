@@ -327,9 +327,8 @@ continue to handle its page fault, either swapping in or reading from file.
 
 Here we used broadcast to give every waiting process a chance to wake up on
 any process's eviction finishes, although it might not be paired. However, 
-the while loop that checks the PTE_F bit outside the cond_wait() will finally gurantee the pairing of evicting and faulting back in the same page.
-
-
+the while loop that checks the PTE_F bit outside the cond_wait() will finally 
+gurantee the pairing of evicting and faulting back in the same page.
 
 
 >> B7: Suppose a page fault in process P causes a page to be read from
