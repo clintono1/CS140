@@ -190,6 +190,15 @@ struct swap_table
     struct lock lock;          /* Lock to synchronize access to swap table */
   };
 
+struct thread
+{
+  ...
+  void *esp;                          /* Saved stack pointer for interrupt
+                                         in the kernel */
+  bool in_syscall;                    /* True if thread is in system call */
+  ... 
+}
+
 ---- ALGORITHMS ----
 
 >> B2: When a frame is required but none is free, some frame must be
@@ -239,6 +248,38 @@ frame and P has it.
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
 >> the page that faulted.
+
+struct thread
+{
+  ...
+  void *esp;                          /* Saved stack pointer for interrupt
+                                         in the kernel */
+  ... 
+}
+
+First of all, we need to obtain the current value of the user program's stack 
+pointer. Whenever we enter a system call, we save user program's stack pointer 
+as esp in the struct thread. Whenever a page fault occurs, we can check whether
+it is caused by kernel or a user process by checking the f->error_code.
+
+If the page fault is caused by kernel, then we retrieve user program's stack 
+pointer through thread_current()->esp. If the page fault is caused by user 
+program, then the f->esp, i.e. esp in the interrupt frame, is the user 
+program's stack pointer.
+
+Once we get the user program's stack pointer, we check whether all the following
+conditions are met:
+1) fault_addr == user_esp - 4      /* PUSH  */
+   or fault_addr == user_esp - 32  /* PUSHA */
+   or fault_addr >= user_esp       /* SUB $n, %esp; MOV ..., m(%esp) */
+2) fault_addr >= STACK_BASE        /* Stack limit 8MB, cannot extend below
+                                      STACK_BASE */
+3) (pte == NULL) ||                /* Stack growth */
+   (*pte & PTE_ADDR) == 0))        /* Lazily load, only PTE has been 
+                                      generated, no frame allocated yet */
+
+If all of the above three conditions are met, then our heuristic says this 
+should cause the stack to be extended into the page that faulted.
 
 ---- SYNCHRONIZATION ----
 
