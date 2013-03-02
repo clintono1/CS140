@@ -218,7 +218,23 @@ hasn't been visited in the last cycle. We then will choose this frame to evict!
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
 
+In our design, a frame table entry stores pointer to
+1)  corresponding page table entry if the page is present or in swap
+or  
+2)  corresponding supplementary page table entry if the frame is in file
 
+WHen a process P obatains a frame that was previously used by a process Q, it 
+will first clear the PTE_P bit in the Q's PTE corresponding to the frame, write
+it to swap or file. If it is write to swap, the swap_frame_no is stored in the 
+top 20 bits in the PTE. If it is write to file, then find the position according
+to the file pointer and offset in the corresponding SPTE. 
+
+The frame table entry originally pointed to Q's PTE (if the old page was not 
+memory mapped file) or SPTE (if the old page was memory mapped file). We then 
+make the frame table entry point to P's corresponding PTE (if the new page is 
+not memory mapped file) or SPTE (if the new page is memory mapped file). By 
+changing the content of the frame table entry, we refect Q no longer has the 
+frame and P has it.
 
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
