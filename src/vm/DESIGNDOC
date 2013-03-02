@@ -297,7 +297,32 @@ should cause the stack to be extended into the page that faulted.
 >> textbook for an explanation of the necessary conditions for
 >> deadlock.)
 
+The following data structures has lock: 
+1. Supplementary page table: per-process lock. Process B will never try to
+   acquire process A's lock so it won't form loop.
+2. Pool lock: entire pool uses ths same lock, only one process can acquire 
+   this lock. Each thread must first acquire this lock and then sweep the 
+   frames with clock algorithm. 
+3. Pin-lock: per-frame lock TODO. Each process must first hold the pool lock
+   and then acquire the pin-lock. This hierachy structure prevented deadlock.
+   Process should acquire this lock before setting or unsetting the page 
+   table entry.
+4. Global File System Lock: only held during file operation. Won't try to
+   acquire other locks when doing file reading/writing since we have already
+   pre-loaded an pinned the buffer pages so it won't cause page faults during
+   file reading/writing.
+5. Flush lock inside the condition variable to let Q wait for P fully evicts 
+   its page to swap or filesys. This lock is at the bottom of the key chain.
+   Must first hold pool lock. Process won't try to acquire other locks when
+   holding this lock. So it won't cause deadlock.Four conditions for deadlock:
 
+Four conditions for deadlock:
+Limited access. 
+No preemption. 
+Multiple independent requests. 
+Circularity in the graph of requests and ownership.
+
+Here we prevented the fourth condition by hierachial lock acquire
 
 
 >> B6: A page fault in process P can cause another process Q's frame
@@ -388,6 +413,8 @@ kernel.
 >> possibility for deadlock but allows for high parallelism.  Explain
 >> where your design falls along this continuum and why you chose to
 >> design it this way.
+
+
 
        MEMORY MAPPED FILES
        ===================
