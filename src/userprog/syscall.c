@@ -24,11 +24,11 @@ static bool unpin_user_memory (uint32_t *pd, const void *vaddr, size_t size);
 
 void  _exit (int status);
 static void  _halt (void);
-static pid_t _exec (const char *cmd_line);
+static pid_t _exec (const char *cmd_line, uint8_t *esp);
 static int   _wait (pid_t pid);
-static bool  _create (const char *file, unsigned initial_size);
-static bool  _remove (const char *file);
-static int   _open (const char *file);
+static bool  _create (const char *file, unsigned initial_size, uint8_t *esp);
+static bool  _remove (const char *file, uint8_t *esp);
+static int   _open (const char *file, uint8_t *esp);
 static int   _filesize (int fd);
 static int   _read (int fd, void *buffer, unsigned size, uint8_t *esp);
 static int   _write (int fd, const void *buffer, unsigned size, uint8_t *esp);
@@ -90,7 +90,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
     case SYS_EXEC:
       arg1 = get_argument (esp, 1);
-      f->eax = (uint32_t) _exec ((char*) arg1);
+      f->eax = (uint32_t) _exec ((char*) arg1, f->esp);
       break;
 
     case SYS_WAIT:
@@ -101,17 +101,17 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_CREATE:
       arg1 = get_argument (esp, 1);
       arg2 = get_argument (esp, 2);
-      f->eax = (uint32_t) _create ((const char*)arg1, (unsigned)arg2);
+      f->eax = (uint32_t) _create ((const char*)arg1, (unsigned)arg2, f->esp);
       break;
 
     case SYS_REMOVE:
       arg1 = get_argument (esp, 1);
-      f->eax = (uint32_t) _remove ((const char*)arg1);
+      f->eax = (uint32_t) _remove ((const char*)arg1, f->esp);
       break;
 
     case SYS_OPEN:
       arg1 = get_argument (esp, 1);
-      f->eax = (uint32_t) _open ((const char*)arg1);
+      f->eax = (uint32_t) _open ((const char*)arg1, f->esp);
       break;
 
     case SYS_FILESIZE:
@@ -190,7 +190,7 @@ _halt (void)
 }
 
 static pid_t
-_exec (const char *cmd_line)
+_exec (const char *cmd_line, uint8_t *esp)
 {
   /* Check address */
   if (!valid_vaddr_range (cmd_line, 0))
@@ -201,6 +201,11 @@ _exec (const char *cmd_line)
 
   char file_path[MAX_FILE_LENGTH];
   get_first_string (cmd_line, file_path);
+
+  if (!preload_user_memory (cmd_line, strlen (cmd_line), false, esp))
+  {printf("wrong1\n");
+    _exit (-1);
+  }  
   /* Lock on process_execute since it needs to open the executable file */
   lock_acquire (&global_lock_filesys);
   struct file *file = filesys_open (file_path);
@@ -211,7 +216,8 @@ _exec (const char *cmd_line)
   }
   pid_t pid = (pid_t) process_execute (cmd_line);
   lock_release (&global_lock_filesys);
-
+  
+  unpin_user_memory (thread_current()->pagedir, cmd_line, strlen (cmd_line));
   if (pid == (pid_t) TID_ERROR)
     return -1;
   return pid;
@@ -234,7 +240,7 @@ _wait (pid_t pid)
 
 /* Part2: syscalls for file system */
 static bool
-_create (const char *file, unsigned initial_size)
+_create (const char *file, unsigned initial_size, uint8_t *esp)
 {
   
   if (!valid_vaddr_range (file, 0))
@@ -243,29 +249,37 @@ _create (const char *file, unsigned initial_size)
   if (!valid_vaddr_range (file, strlen (file)))
     _exit (-1);
 
+  if (!preload_user_memory (file, strlen (file), false, esp))
+    _exit (-1);
+
   lock_acquire (&global_lock_filesys);
   bool success = filesys_create (file, initial_size);
   lock_release (&global_lock_filesys);
+  unpin_user_memory (thread_current()->pagedir, file, strlen (file));
   return success;
 }
 
 static bool
-_remove (const char *file)
+_remove (const char *file, uint8_t *esp)
 {
   if (!valid_vaddr_range (file, 0))
     _exit (-1);
 
   if (!valid_vaddr_range (file, strlen (file)))
+    _exit (-1);
+
+  if (!preload_user_memory (file, strlen (file), false, esp))
     _exit (-1);
 
   lock_acquire (&global_lock_filesys);
   bool success = filesys_remove (file);
   lock_release (&global_lock_filesys);
+  unpin_user_memory (thread_current()->pagedir, file, strlen (file));
   return success;
 }
 
 static int
-_open (const char *file)
+_open (const char *file, uint8_t *esp)
 {
   if (!valid_vaddr_range (file, 0))
     _exit (-1);
@@ -273,9 +287,13 @@ _open (const char *file)
   if (!valid_vaddr_range (file, strlen (file)))
     _exit (-1);
 
+  if (!preload_user_memory (file, strlen (file), false, esp))
+    _exit (-1);
+
   lock_acquire (&global_lock_filesys);
   struct file *f = filesys_open (file);
   lock_release (&global_lock_filesys);
+  unpin_user_memory (thread_current()->pagedir, file, strlen (file));
 
   if (f == NULL)
     return -1;
@@ -509,7 +527,7 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
       if (!allocate)
         return false;
       ASSERT (pte != NULL);
-      /* If the accessing page if not on stack, return false.
+      /* If the accessing page is not on stack, return false.
          Note: when to support malloc in user programs, it is also valid
          if [vaddr, vaddr+size) is in the allocated VA space. */
       if (upage < (void*) esp)

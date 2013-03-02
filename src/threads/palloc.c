@@ -270,6 +270,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
 
       lock_acquire (&flush_lock);
       *pte_old |= PTE_F;
+      *pte_old |= PTE_A;
       lock_release (&flush_lock);
 
       *pte_old &= ~PTE_P;
