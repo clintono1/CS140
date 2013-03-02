@@ -6,6 +6,8 @@
 #include "userprog/pagedir.h"
 #include "threads/palloc.h"
 
+extern struct lock file_flush_lock;
+extern struct condition file_flush_cond;
 extern struct lock global_lock_filesys;
 
 static unsigned
@@ -45,20 +47,35 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
                                  pg_cnt * PGSIZE, false);
     ASSERT (*pte & PTE_M);
     struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte);
+    bool writable = !file_is_writable(spte->file);
     void * kpage = pte_get_page (*pte);
-    if (*pte & PTE_D)
-    {
-      ASSERT (*pte & PTE_P);
-      lock_acquire (&global_lock_filesys);
-      off_t bytes_written = file_write_at (spte->file, kpage,
-    		                 spte->bytes_read, spte->offset);
-      /* Since we cannot change the size of file in project 3
-       * the following assertion must be true in project 3*/
-      ASSERT (bytes_written >= 0 && (size_t)bytes_written == spte->bytes_read);
-      lock_release (&global_lock_filesys);
-    }
     if (*pte & PTE_P)
-      palloc_free_page (kpage);
+    {
+	 if (*pte & PTE_D)
+     {
+		 lock_acquire (&file_flush_lock);
+		*pte |= PTE_F;
+		*pte |= PTE_A;
+		lock_release (&file_flush_lock);
+
+		*pte &= ~PTE_P;
+		invalidate_pagedir (thread_current ()->pagedir);
+
+		lock_acquire (&global_lock_filesys);
+		off_t bytes_written;
+		if(writable)
+		{
+		  bytes_written = file_write_at (spte->file, kpage,
+							spte->bytes_read, spte->offset);
+		  /* Since we cannot change the size of file in project 3
+		   * the following assertion must be true in project 3*/
+		  ASSERT (bytes_written >= 0 && (size_t)bytes_written == spte->bytes_read);
+		}
+		lock_release (&global_lock_filesys);
+	  }
+	  palloc_free_page (kpage);
+    }
+
     struct hash_elem * spte_d = hash_delete (&cur->suppl_pt, &spte->elem_hash);
     /* ASSERT that this spte must be in the original suppl_pt */
     ASSERT (spte_d);

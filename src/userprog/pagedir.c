@@ -13,8 +13,10 @@
 static uint32_t *active_pd (void);
 extern struct swap_table swap_table;
 extern struct pool user_pool;
-extern struct lock flush_lock;
-extern struct condition flush_cond;
+extern struct lock swap_flush_lock;
+extern struct condition swap_flush_cond;
+extern struct lock file_flush_lock;
+extern struct condition file_flush_cond;
 
 /* Creates a new page directory that has mappings for kernel
    virtual addresses, but none for user virtual addresses.
@@ -71,12 +73,12 @@ pagedir_destroy (uint32_t *pd)
           }
           else
           {
-            lock_acquire (&flush_lock);
+            lock_acquire (&swap_flush_lock);
             while (*pte & PTE_F)
             {
-              cond_wait (&flush_cond, &flush_lock);
+              cond_wait (&swap_flush_cond, &swap_flush_lock);
             }
-            lock_release (&flush_lock);
+            lock_release (&swap_flush_lock);
 
             ASSERT (*pte & PTE_ADDR);
             size_t swap_frame_no = (*pte >> PGBITS);

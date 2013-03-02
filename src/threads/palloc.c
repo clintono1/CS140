@@ -15,8 +15,10 @@
 
 extern uint32_t *init_page_dir;
 extern struct swap_table swap_table;
-extern struct lock flush_lock;
-extern struct condition flush_cond;
+extern struct lock swap_flush_lock;
+extern struct condition swap_flush_cond;
+extern struct lock file_flush_lock;
+extern struct condition file_flush_cond;
 extern struct lock global_lock_filesys;
 
 /* Page allocator.  Hands out memory in page-size (or
@@ -255,14 +257,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       // TODO
       printf ("(tid=%d) page out replace %p\n", thread_current()->tid, page);
 
-      lock_acquire (&flush_lock);
-      *pte_old |= PTE_F;
-      *pte_old |= PTE_A;
-      lock_release (&flush_lock);
-
-      *pte_old &= ~PTE_P;
-      invalidate_pagedir (thread_current ()->pagedir);
-
       pool->frame_table.frames[clock_cur].frame = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
@@ -270,6 +264,15 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       {
         // TODO
         printf ("(tid=%d) page out unmap %p\n", thread_current()->tid, page);
+
+        lock_acquire (&file_flush_lock);
+        *pte_old |= PTE_F;
+        *pte_old |= PTE_A;
+        lock_release (&file_flush_lock);
+
+        *pte_old &= ~PTE_P;
+        invalidate_pagedir (thread_current ()->pagedir);
+
         /* Initialized/uninitialized data pages are changed to normal memory
            pages once loaded. Thus they should not reach here. */
         ASSERT ((spte->flags & SPTE_C) || (spte->flags & SPTE_M));
@@ -280,21 +283,35 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
           file_write_at (spte->file, page, spte->bytes_read, spte->offset);
           lock_release (&global_lock_filesys);
         }
+
+        lock_acquire (&file_flush_lock);
+		*pte_old &= ~PTE_F;
+		cond_broadcast (&file_flush_cond, &file_flush_lock);
+        lock_release (&file_flush_lock);
       }
       else
       {
         // TODO
         printf ("(tid=%d) page out swap %p\n", thread_current()->tid, page);
+
+        lock_acquire (&swap_flush_lock);
+        *pte_old |= PTE_F;
+        *pte_old |= PTE_A;
+        lock_release (&swap_flush_lock);
+
+        *pte_old &= ~PTE_P;
+        invalidate_pagedir (thread_current ()->pagedir);
+
         *pte_old &= PTE_FLAGS;
         size_t swap_frame_no = swap_allocate_page (&swap_table);
         *pte_old |= swap_frame_no << PGBITS;
         swap_write (&swap_table, swap_frame_no, page);
-      }
 
-      lock_acquire (&flush_lock);
-      *pte_old &= ~PTE_F;
-      cond_broadcast (&flush_cond, &flush_lock);
-      lock_release (&flush_lock);
+        lock_acquire (&swap_flush_lock);
+        *pte_old &= ~PTE_F;
+        cond_broadcast (&swap_flush_cond, &swap_flush_lock);
+        lock_release (&swap_flush_lock);
+      }
 
       if (flags & PAL_ZERO)
         memset ((void *) page, 0, PGSIZE);
