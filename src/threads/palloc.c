@@ -119,6 +119,9 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
         pool->frame_table.frames[page_idx].frame =
             (uint32_t *) ((uint8_t *)fte - (unsigned) PHYS_BASE);
+        // TODO
+        printf ("(tid=%d) palloc_get_multiple frames[%d].frame = %p\n",
+            thread_current()->tid, (int) page_idx, pool->frame_table.frames[page_idx].frame);
       }
       else
       {
@@ -188,7 +191,12 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte_new);
       ASSERT ((void *) spte > PHYS_BASE);
       if (flags & PAL_MMAP)
+      {
         fte_new = (uint32_t *) ((uint8_t *) spte - (unsigned) PHYS_BASE);
+        // TODO
+        printf ("(tid=%d) palloc_get_multiple frames[?].frame = %p\n",
+            thread_current()->tid, fte_new);
+      }
       else
         fte_new = pte_new;
     }
@@ -285,8 +293,8 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
         }
 
         lock_acquire (&file_flush_lock);
-		*pte_old &= ~PTE_F;
-		cond_broadcast (&file_flush_cond, &file_flush_lock);
+        *pte_old &= ~PTE_F;
+        cond_broadcast (&file_flush_cond, &file_flush_lock);
         lock_release (&file_flush_lock);
       }
       else
@@ -386,6 +394,11 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
   for (i = 0; i < page_cnt; i++)
   {
       ASSERT (pool->frame_table.frames[page_idx + i].frame != NULL);
+      // TODO
+      printf ("(tid=%d) palloc_free_multiple frames[%d].frame = %p\n",
+              thread_current()->tid, (int) (page_idx + i),
+              pool->frame_table.frames[page_idx + i].frame);
+      // TODO should only check the equality below when *frame > PHYS_BASE
       ASSERT (ptov (*pool->frame_table.frames[page_idx + i].frame & PTE_ADDR)
               == kpage);
       pool->frame_table.frames[page_idx + i].frame = NULL;
@@ -438,8 +451,8 @@ pool_get_pin_lock (struct pool *pool, uint32_t *pte)
   void *kpage = ptov (*pte & PTE_ADDR);
   size_t page_idx = pg_no (kpage) - pg_no (pool->base);
   // TODO
-  printf ("pte = %p, *pte = %#x, pool->base = %p, page_idx = %d\n",
-      pte, *pte, pool->base, (int) page_idx);
+  printf ("(tid=%d) pool_get_pin_lock pte = %p, *pte = %#x, pool->base = %p, page_idx = %d\n",
+          thread_current()->tid, pte, *pte, pool->base, (int) page_idx);
   return &pool->frame_table.frames[page_idx].pin_lock;
 }
 
