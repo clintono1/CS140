@@ -44,14 +44,22 @@ pagedir_destroy (uint32_t *pd)
       uint32_t *pte;
       for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
       {
+        lock_acquire (&pin_lock);
         if (*pte & PTE_P)
         {
+          *pte |= PTE_I;
+          lock_release (&pin_lock);
           palloc_free_page (pte_get_page (*pte));
         }
         else if  (*pte & PTE_ADDR ) /* not present, but in swap*/
         {
+          lock_release (&pin_lock);
           size_t swap_frame_no = (*pte & PTE_ADDR) >> PGBITS;
           swap_free ( &swap_table, swap_frame_no);
+        }
+        else
+        {
+          lock_release (&pin_lock);
         }
       }
       palloc_free_page (pt);
