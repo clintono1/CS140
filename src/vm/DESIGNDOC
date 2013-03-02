@@ -195,9 +195,30 @@ struct swap_table
 >> B2: When a frame is required but none is free, some frame must be
 >> evicted.  Describe your code for choosing a frame to evict.
 
+We use clock algorithm to choose a frame to evict. As shown in B1, we have a 
+clock "hand" clock_cur defined in the struct frame_table. Whenever we need to 
+choose a frame to evict, the "hand" clock_cur scans through the frames in the 
+frame_table. Since we don't implement sharing, there is only 1 corresponding PTE
+in user memory for each frame. In our design, frames store the pointers to PTEs
+or SPTEs, and each SPTE also has a PTE pointer in it. Therefore, we can access
+each frame's corresponding PTE. 
+
+We first check PTE_I bit of the corresponding PTE. If it is 1, then it means
+that the corresponding frame is being swapped out or written to file. Therefore
+we increment the "hand" clock_cur and continue to search.
+
+Else if the PTE_A bit of the corresponding PTE is 1, it means that this frame 
+has recently been visited recently. In this case, we reset the PTE_A bit, flush 
+TLB, increment the "hand" clock_cur and continue to search.
+
+Else then the PTE_A bit of the corresponding PTE is 0, it means that this frame
+hasn't been visited in the last cycle. We then will choose this frame to evict!
+
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
+
+
 
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
