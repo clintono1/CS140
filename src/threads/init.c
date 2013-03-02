@@ -44,7 +44,6 @@ extern struct swap_table swap_table;
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir = NULL;
 
-struct lock pin_lock;
 struct lock flush_lock;
 struct condition flush_cond;
 
@@ -101,7 +100,6 @@ main (void)
   printf ("Pintos booting with %'"PRIu32" kB RAM...\n",
           init_ram_pages * PGSIZE / 1024);
 
-  lock_init (&pin_lock);
   lock_init (&flush_lock);
   cond_init (&flush_cond);
 

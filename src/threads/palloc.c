@@ -8,14 +8,13 @@
 #include <stdio.h>
 #include <string.h>
 #include "threads/loader.h"
-#include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "vm/frame.h"
+#include "threads/synch.h"
 #include "vm/swap.h"
+#include "vm/frame.h"
 
 extern uint32_t *init_page_dir;
 extern struct swap_table swap_table;
-extern struct lock pin_lock;
 extern struct lock flush_lock;
 extern struct condition flush_cond;
 extern struct lock global_lock_filesys;
@@ -43,7 +42,7 @@ struct pool
   };
 
 /* Two pools: one for kernel data, one for user pages. */
-static struct pool kernel_pool, user_pool;
+struct pool kernel_pool, user_pool;
 
 static void init_pool (struct pool *, void *base, size_t page_cnt,
                        const char *name);
@@ -109,14 +108,14 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         uint32_t *pte, *fte;
         pte = lookup_page (cur->pagedir, page, false);
 
-        lock_acquire (&pin_lock);
+        lock_acquire (&pool->frame_table.frames[page_idx].pin_lock);
         *pte |= PTE_I;
-        lock_release (&pin_lock);
+        lock_release (&pool->frame_table.frames[page_idx].pin_lock);
 
         ASSERT (pte != NULL);
         ASSERT (*pte & PTE_M);
         fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
-        pool->frame_table.frames[page_idx] =
+        pool->frame_table.frames[page_idx].frame =
             (uint32_t *) ((uint8_t *)fte - (unsigned) PHYS_BASE);
       }
       else
@@ -163,17 +162,6 @@ pool_increase_clock (struct pool *pool)
                                 % pool->frame_table.page_cnt;
 }
 
-// TODO: remove before submit
-void print_user_frame_table (void)
-{
-  uint32_t i;
-  for (i = 0; i < user_pool.frame_table.page_cnt; i++)
-  {
-    uint32_t *fte = user_pool.frame_table.frames[i];
-    printf ("fte[%d] = %p\n", i, fte);
-  }
-}
-
 /* Page out a page from the frame table in POOL and then return the page's
    virtual kernel address.
    FLAGS carries the allocation specification.
@@ -191,9 +179,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     pte_new = lookup_page (cur->pagedir, upage, true);
     ASSERT ((void *) pte_new > PHYS_BASE);
 
-    lock_acquire (&pin_lock);
     *pte_new |= PTE_I;
-    lock_release (&pin_lock);
 
     if (*pte_new & PTE_M)
     {
@@ -215,14 +201,14 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
   while (1)
   {
     size_t clock_cur = pool->frame_table.clock_cur;
-    uint32_t *fte_old = pool->frame_table.frames[clock_cur];
+    uint32_t *fte_old = pool->frame_table.frames[clock_cur].frame;
     uint8_t *page = pool->base + clock_cur * PGSIZE;
 
     if (fte_old == NULL)
     {
       // TODO
       printf ("page out found empty page %p\n", page);
-      pool->frame_table.frames[clock_cur] = fte_new;
+      pool->frame_table.frames[clock_cur].frame = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
       if (flags & PAL_ZERO)
@@ -241,9 +227,9 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       ASSERT(*pte_old & PTE_M);
     }
 
-    lock_acquire (&pin_lock);
+    lock_acquire (&pool->frame_table.frames[clock_cur].pin_lock);
     bool pinned = *pte_old & PTE_I;
-    lock_release (&pin_lock);
+    lock_release (&pool->frame_table.frames[clock_cur].pin_lock);
 
     /* If the page is pinned, skip this frame table entry */
     if (pinned)
@@ -277,7 +263,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       *pte_old &= ~PTE_P;
       invalidate_pagedir (thread_current ()->pagedir);
 
-      pool->frame_table.frames[clock_cur] = fte_new;
+      pool->frame_table.frames[clock_cur].frame = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
       if (*pte_old & PTE_M)
@@ -371,19 +357,21 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
     pool = &user_pool;
   else
     NOT_REACHED ();
+
   page_idx = pg_no (kpage) - pg_no (pool->base);
 
 #ifndef NDEBUG
-  // TODO
-  memset (kpage, 0xdd, PGSIZE * page_cnt);
+  memset (kpage, 0xcc, PGSIZE * page_cnt);
 #endif
 
   lock_acquire(&pool->lock);
   size_t i;
   for (i = 0; i < page_cnt; i++)
   {
-      ASSERT (pool->frame_table.frames[page_idx + i] != NULL)
-      pool->frame_table.frames[page_idx + i] = NULL;
+      ASSERT (pool->frame_table.frames[page_idx + i].frame != NULL);
+      ASSERT (ptov (*pool->frame_table.frames[page_idx + i].frame & PTE_ADDR)
+              == kpage);
+      pool->frame_table.frames[page_idx + i].frame = NULL;
   }
   lock_release(&pool->lock);
 }
@@ -423,6 +411,19 @@ page_from_pool (const struct pool *pool, void *page)
   size_t end_page = start_page + pool->frame_table.page_cnt;
 
   return page_no >= start_page && page_no < end_page;
+}
+
+struct lock *
+pool_get_pin_lock (struct pool *pool, uint32_t *pte)
+{
+  if ((*pte & PTE_ADDR) == 0 || !(*pte & PTE_P))
+    return NULL;
+  void *kpage = ptov (*pte & PTE_ADDR);
+  size_t page_idx = pg_no (kpage) - pg_no (pool->base);
+  // TODO
+  printf ("pte = %p, *pte = %#x, pool->base = %p, page_idx = %d\n",
+      pte, *pte, pool->base, (int) page_idx);
+  return &pool->frame_table.frames[page_idx].pin_lock;
 }
 
 /* Update the frame table entries in the kernel pool according to the new

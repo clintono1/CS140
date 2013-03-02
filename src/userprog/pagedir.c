@@ -8,10 +8,13 @@
 #include "threads/thread.h"
 #include "userprog/exception.h"
 #include "vm/swap.h"
+#include "vm/frame.h"
 
 static uint32_t *active_pd (void);
 extern struct swap_table swap_table;
-extern struct lock pin_lock;
+extern struct pool user_pool;
+extern struct lock flush_lock;
+extern struct condition flush_cond;
 
 /* Creates a new page directory that has mappings for kernel
    virtual addresses, but none for user virtual addresses.
@@ -44,22 +47,41 @@ pagedir_destroy (uint32_t *pd)
       uint32_t *pte;
       for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
       {
-        lock_acquire (&pin_lock);
-        if (*pte & PTE_P)
+        struct lock *pin_lock = pool_get_pin_lock (&user_pool, pte);
+        if (!(*pte & PTE_P))
         {
-          *pte |= PTE_I;
-          lock_release (&pin_lock);
-          palloc_free_page (pte_get_page (*pte));
-        }
-        else if  (*pte & PTE_ADDR ) /* not present, but in swap*/
-        {
-          lock_release (&pin_lock);
-          size_t swap_frame_no = (*pte & PTE_ADDR) >> PGBITS;
-          swap_free ( &swap_table, swap_frame_no);
+          if (*pte & PTE_ADDR)
+          {
+            size_t swap_frame_no = (*pte >> PGBITS);
+            swap_free ( &swap_table, swap_frame_no);
+          }
         }
         else
         {
-          lock_release (&pin_lock);
+          bool to_be_released = false;
+          lock_acquire (pin_lock);
+          *pte |= PTE_I;
+          if (*pte & PTE_P)
+            to_be_released = true;
+          lock_release (pin_lock);
+
+          if (to_be_released)
+          {
+            palloc_free_page (pte_get_page (*pte));
+          }
+          else
+          {
+            lock_acquire (&flush_lock);
+            while (*pte & PTE_F)
+            {
+              cond_wait (&flush_cond, &flush_lock);
+            }
+            lock_release (&flush_lock);
+
+            ASSERT (*pte & PTE_ADDR);
+            size_t swap_frame_no = (*pte >> PGBITS);
+            swap_free ( &swap_table, swap_frame_no);
+          }
         }
       }
       palloc_free_page (pt);
@@ -113,10 +135,14 @@ pin_pte (uint32_t *pte, void *page)
 {
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
-  // TODO potential race with pinning this page elsewhere
-  lock_acquire (&pin_lock);
+
+  struct lock *pin_lock = pool_get_pin_lock (&user_pool, pte);
+
+  if (pin_lock != NULL)
+    lock_acquire (pin_lock);
   *pte |= PTE_I;
-  lock_release (&pin_lock);
+  if (pin_lock != NULL)
+    lock_release (pin_lock);
 
   /* If the page is not in memory, load it. */
   if ((*pte & PTE_P) == 0)
@@ -157,11 +183,14 @@ unpin_pte (uint32_t *pte)
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
 
-  lock_acquire (&pin_lock);
+  struct lock *pin_lock = pool_get_pin_lock (&user_pool, pte);
+
+  if (pin_lock != NULL)
+    lock_acquire (pin_lock);
   ASSERT (*pte & PTE_I);
-  // TODO potential race with pinning this page elsewhere
   *pte &= ~PTE_I;
-  lock_release (&pin_lock);
+  if (pin_lock != NULL)
+    lock_release (pin_lock);
 
   return true;
 }
@@ -193,8 +222,7 @@ unpin_page (uint32_t *pd, const void *page)
 bool
 pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
 {
-  // TODO
-  volatile uint32_t *pte;
+  uint32_t *pte;
 
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (pg_ofs (kpage) == 0);
@@ -207,11 +235,16 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
   if (pte != NULL) 
     {
       ASSERT ((*pte & PTE_P) == 0);
-      // TODO potential race with pinning this page elsewhere
-      lock_acquire (&pin_lock);
+
+      struct lock *pin_lock = pool_get_pin_lock (&user_pool, pte);
+
+      if (pin_lock != NULL)
+        lock_acquire (pin_lock);
       bool pin = (*pte & PTE_I) != 0;
       *pte = pte_create_user (kpage, writable) | (pin ? PTE_I : 0);
-      lock_release (&pin_lock);
+      if (pin_lock != NULL)
+        lock_release (pin_lock);
+
       return true;
     }
   else

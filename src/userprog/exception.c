@@ -204,7 +204,7 @@ load_page_from_swap (uint32_t *pte, void *page)
   }
   lock_release (&flush_lock);
 
-  size_t swap_frame_no = (*pte & PTE_ADDR) >> PGBITS;
+  size_t swap_frame_no = (*pte >> PGBITS);
 
   if (swap_frame_no == 0 )
     _exit (-1);
