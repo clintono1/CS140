@@ -17,6 +17,12 @@ Bo Wang <bowang@stanford.edu>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+Our design use a novel ultra-space saving method for frame table, only 
+occupying 4B(TODO) for each frame, and completely removed bitmap pool, which 
+turned out works very well. Please contact us if you don't understand our
+method and don't make hasty judgtments.
+
+
 >> Describe briefly which parts of the assignment were implemented by
 >> each member of your team. If some team members contributed significantly
 >> more or less than others (e.g. 2x), indicate that here.
@@ -71,9 +77,7 @@ struct thread
   ...
 }
 
-#define PTE_FLAGS 0x00000fff    /* Flag bits. */
-#define PTE_ADDR  0xfffff000    /* Address bits. */
-#define PTE_AVL   0x00000e00    /* Bits available for OS use. */
+
 #define PTE_P 0x1               /* 1=present, 0=not present. */
 #define PTE_W 0x2               /* 1=read/write, 0=read-only. */
 #define PTE_U 0x4               /* 1=user/kernel, 0=kernel only. */
@@ -173,14 +177,19 @@ efficiently.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-/* global frame table, frames stores pointers to PTE or SPTE, clock_cur is used
-   in clock algorithm */
+/* global frame table as a member of pool */
+   
 struct frame_table
 {
-  size_t page_cnt;
-  uint32_t **frames;
-  size_t clock_cur;
+  size_t page_cnt;    /* total pages in user/kernel pool */
+  uint32_t **frames;  /* frames stores pointers to PTE or SPTE */
+  size_t clock_cur;   /* used for clock algorithm */
 };
+
+Here the **frames pointer is stored below the userpool, occupying 4 Byte
+for each frame. It replaces the previous pool bit map since bitmap is 
+redundant with the existance of frame table.
+
 
 /* global swap table to track the usage of each sector in swap */
 struct swap_table
@@ -288,10 +297,38 @@ should cause the stack to be extended into the page that faulted.
 >> textbook for an explanation of the necessary conditions for
 >> deadlock.)
 
+
+
+
 >> B6: A page fault in process P can cause another process Q's frame
 >> to be evicted.  How do you ensure that Q cannot access or modify
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
+
+Monitor is used to avoid race, letting Q wait until P fully evicts Q's
+frame to swap or file. The monitor consists of flush_lock and cond_flush.
+The shared variable is the PTE_F bit. The mechanism is as follows:
+
+In the clock algorithm, if P find Q's page X as a victim to be evicted,
+it acquires the flush_lock, set the PTE_F bit on the pte of X, and then
+release the lock. With the PTE_F bit set, it can safely carry on a series 
+of tasks: including set the non-present bit, writing the frame to swap or
+file. Upon finishing the eviction, P will acquire the flush_lock again, 
+unset the PTE_F bit, and broadcast all the waiters for the condition 
+variable. Finally P releases the lock. This is coded in palloc.c, function
+page_out_then_get_page(). Since P doesn't hold the lock while doing I/O, it
+does not hurt concurrency. 
+
+If process Q is faulting on the same page of X, it first palloc a frame. 
+Then while the PTE_F bit is set, Q has to wait for the cond_flush before 
+swapping in or read in its content. When P has already finished the 
+eviction of Q's frame, Q will get signaled and finish waiting. Then Q could 
+continue to handle its page fault, either swapping in or reading from file. 
+
+Here we used broadcast to give every waiting process a chance to wake up on
+any process's eviction finishes, although it might not be paired. However, 
+the while loop that checks the PTE_F bit outside the cond_wait() will finally gurantee the pairing of evicting and faulting back in the same page.
+
 
 
 
