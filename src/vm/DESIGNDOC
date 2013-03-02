@@ -300,6 +300,17 @@ should cause the stack to be extended into the page that faulted.
 >> cannot interfere by e.g. attempting to evict the frame while it is
 >> still being read in?
 
+While in process P a page is being read from the file system or swap, the PTE_I 
+bit (pin bit) of the PTE corresponding to this page is set to 1. Whenever a 
+second process Q wants to access the corresponding frame, e.g., evicting it, 
+it will check the PTE_I bit of the PTE the frame table entry points to. If it 
+is set to 1, Q will not be able to modify it. In clock algorithm, Q will skip
+this frame since there's page being read from file or swap to this frame. Q will
+continue to search following frames table entries to find a frame to evict.
+
+Once the page if fully loaded into the frame, the PTE_I bit of the P's PTE will
+then be set to 0 and now a second process can evict this frame. 
+
 >> B8: Explain how you handle access to paged-out pages that occur
 >> during system calls.  Do you use page faults to bring in pages (as
 >> in user programs), or do you have a mechanism for "locking" frames
