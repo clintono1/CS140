@@ -293,6 +293,8 @@ should cause the stack to be extended into the page that faulted.
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
 
+
+
 >> B7: Suppose a page fault in process P causes a page to be read from
 >> the file system or swap.  How do you ensure that a second process Q
 >> cannot interfere by e.g. attempting to evict the frame while it is
@@ -303,6 +305,33 @@ should cause the stack to be extended into the page that faulted.
 >> in user programs), or do you have a mechanism for "locking" frames
 >> into physical memory, or do you use some other design?  How do you
 >> gracefully handle attempted accesses to invalid virtual addresses?
+
+For file system syscals such as read() and write(), we pin the pages of
+the buffer that we are going to read or write, and the file name
+char buffer. This is because we have to acquire the global file system 
+lock when doing the file reading or writing, and we can not try to 
+acquire the same lock for a second time when handling page fault (for 
+example, read from mmap files). So we make sure that page fault wouldn't
+happen during file syscals, which is done by preload_user_memory(). We 
+first check if all the pages has been allocated, if not, we allocated
+them as needed. We also check if the frame is loaded in memory, if not,
+those frames are loaded into memory one by one. Then we pin those pages 
+before acquiring the global filesys lock. After releasing the filesys lock
+we unpin the pages.
+
+To handle invalid virtual address happening in kernel, we added in_syscall
+flag in thread struct. This flag is set on entering the syscall handler.
+If page fault happened in kernel mode but in_syscall has been set, then 
+it means this page fault happened during syscall and we don't kill the 
+kernel. Only when the page fault happened in kernel mode but not in syscall
+do we kill the kernel.
+
+False address access was detected at the beginning of each syscall handler.
+We have checked NULL pointer, above PHY_BASE pointer for the whole buffer.
+Inside preload_user_memory(), an unallocated page was below the stack
+pointer is also detected as unlegal. These false attempts won't kill the 
+kernel. 
+
 
 ---- RATIONALE ----
 
