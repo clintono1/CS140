@@ -18,6 +18,7 @@ extern struct swap_table swap_table;
 extern struct lock pin_lock;
 extern struct lock flush_lock;
 extern struct condition flush_cond;
+extern struct lock global_lock_filesys;
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -289,7 +290,9 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
         if ((spte->flags & SPTE_M) && (*pte_old & PTE_D))
         {
           ASSERT ((spte->flags & ~SPTE_M) == 0);
+          lock_acquire (&global_lock_filesys);
           file_write_at (spte->file, page, spte->bytes_read, spte->offset);
+          lock_release (&global_lock_filesys);
         }
       }
       else
