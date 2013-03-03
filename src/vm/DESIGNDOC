@@ -20,7 +20,7 @@ Bo Wang <bowang@stanford.edu>
 Our design use a novel ultra-space saving method for frame table, only 
 occupying 4B(TODO) for each frame, and completely removed bitmap pool, which 
 turned out works very well. Please contact us if you don't understand our
-method and don't make hasty judgtments.
+method and don't make hasty judgment.
 
 
 >> Describe briefly which parts of the assignment were implemented by
@@ -191,7 +191,7 @@ struct frame_table
 
 Here the **frames pointer is stored below the userpool, occupying 4 Byte
 for each frame. It replaces the previous pool bit map since bitmap is 
-redundant with the existance of frame table.
+redundant with the existence of frame table.
 
 
 /* global swap table to track the usage of each sector in swap */
@@ -244,7 +244,7 @@ In our design, a frame table entry stores pointer to
 or  
 2)  corresponding supplementary page table entry if the frame is in file
 
-WHen a process P obatains a frame that was previously used by a process Q, it 
+When a process P obtains a frame that was previously used by a process Q, it 
 will first clear the PTE_P bit in the Q's PTE corresponding to the frame, write
 it to swap or file. If it is write to swap, the swap_frame_no is stored in the 
 top 20 bits in the PTE. If it is write to file, then find the position according
@@ -254,7 +254,7 @@ The frame table entry originally pointed to Q's PTE (if the old page was not
 memory mapped file) or SPTE (if the old page was memory mapped file). We then 
 make the frame table entry point to P's corresponding PTE (if the new page is 
 not memory mapped file) or SPTE (if the new page is memory mapped file). By 
-changing the content of the frame table entry, we refect Q no longer has the 
+changing the content of the frame table entry, we reflect Q no longer has the 
 frame and P has it.
 
 >> B4: Explain your heuristic for deciding whether a page fault for an
@@ -303,11 +303,11 @@ should cause the stack to be extended into the page that faulted.
 The following data structures has lock: 
 1. Supplementary page table: per-process lock. Process B will never try to
    acquire process A's lock so it won't form loop.
-2. Pool lock: entire pool uses ths same lock, only one process can acquire 
+2. Pool lock: entire pool uses the same lock, only one process can acquire 
    this lock. Each thread must first acquire this lock and then sweep the 
    frames with clock algorithm. 
 3. Pin-lock: per-frame lock TODO. Each process must first hold the pool lock
-   and then acquire the pin-lock. This hierachy structure prevented deadlock.
+   and then acquire the pin-lock. This hierarchy structure prevented deadlock.
    Process should acquire this lock before setting or unsetting the page 
    table entry.
 4. Global File System Lock: only held during file operation. Won't try to
@@ -325,7 +325,7 @@ No preemption.
 Multiple independent requests. 
 Circularity in the graph of requests and ownership.
 
-Here we prevented the fourth condition by hierachial lock acquire
+Here we prevented the fourth condition by hierarchical lock acquire
 
 
 >> B6: A page fault in process P can cause another process Q's frame
@@ -356,7 +356,7 @@ continue to handle its page fault, either swapping in or reading from file.
 Here we used broadcast to give every waiting process a chance to wake up on
 any process's eviction finishes, although it might not be paired. However, 
 the while loop that checks the PTE_F bit outside the cond_wait() will finally 
-gurantee the pairing of evicting and faulting back in the same page.
+guarantee the pairing of evicting and faulting back in the same page.
 
 
 >> B7: Suppose a page fault in process P causes a page to be read from
@@ -381,13 +381,13 @@ then be set to 0 and now a second process can evict this frame.
 >> into physical memory, or do you use some other design?  How do you
 >> gracefully handle attempted accesses to invalid virtual addresses?
 
-For file system syscals such as read() and write(), we pin the pages of
+For file system system calls such as read() and write(), we pin the pages of
 the buffer that we are going to read or write, and the file name
 char buffer. This is because we have to acquire the global file system 
 lock when doing the file reading or writing, and we can not try to 
 acquire the same lock for a second time when handling page fault (for 
 example, read from mmap files). So we make sure that page fault wouldn't
-happen during file syscals, which is done by preload_user_memory(). We 
+happen during file system calls, which is done by preload_user_memory(). We 
 first check if all the pages has been allocated, if not, we allocated
 them as needed. We also check if the frame is loaded in memory, if not,
 those frames are loaded into memory one by one. Then we pin those pages 
@@ -404,7 +404,7 @@ do we kill the kernel.
 False address access was detected at the beginning of each syscall handler.
 We have checked NULL pointer, above PHY_BASE pointer for the whole buffer.
 Inside preload_user_memory(), an unallocated page was below the stack
-pointer is also detected as unlegal. These false attempts won't kill the 
+pointer is also detected as illegal. These false attempts won't kill the 
 kernel. 
 
 
@@ -436,7 +436,7 @@ struct thread
   ...
 }
 We store information about memory mapped files as a hashtable "mmap_files" in 
-each thread. "mmap_files_num_ever" is used as a key inthis hashtable.
+each thread. "mmap_files_num_ever" is used as a key in this hashtable.
 
 /* Memory mapped file */
 struct mmap_file
