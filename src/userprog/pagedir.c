@@ -46,7 +46,6 @@ pagedir_destroy (uint32_t *pd)
       uint32_t *pte;
       for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
       {
-        struct lock *pin_lock = pool_get_pin_lock (pte);
         if (!(*pte & PTE_P))
         {
           if (*pte & PTE_ADDR)
@@ -58,11 +57,11 @@ pagedir_destroy (uint32_t *pd)
         else
         {
           bool to_be_released = false;
-          lock_acquire (pin_lock);
+          acquire_user_pool_lock ();
           *pte |= PTE_I;
           if (*pte & PTE_P)
             to_be_released = true;
-          lock_release (pin_lock);
+          release_user_pool_lock ();
 
           if (to_be_released)
           {
@@ -126,55 +125,6 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
   return &pt[pt_no (vaddr)];
 }
 
-/* Pins a PAGE pointed by PTE.
-   If the page is not in memory, page it in first.
-   Returns true if the page is successfully pinned. */
-bool
-pin_pte (uint32_t *pte, void *page)
-{
-  if (pte == NULL || (*pte & PTE_ADDR) == 0)
-    return false;
-
-  struct lock *pin_lock = pool_get_pin_lock (pte);
-
-  if (pin_lock != NULL)
-    lock_acquire (pin_lock);
-  *pte |= PTE_I;
-  if (pin_lock != NULL)
-    lock_release (pin_lock);
-
-  /* If the page is not in memory, load it. */
-  if ((*pte & PTE_P) == 0)
-  {
-    if ((*pte & PTE_M) == 0)
-    {
-      load_page_from_swap (pte, page, true);
-    }
-    else
-    {
-      struct suppl_pte *spte;
-      spte = suppl_pt_get_spte (&thread_current ()->suppl_pt, pte);
-      load_page_from_file (spte, page, true);
-    }
-  }
-  return true;
-}
-
-/* Pins a PAGE in the page directory PD to prevent it being paged out.
-   If the page is not in memory, page it in first.
-   Returns true if the page is successfully pinned. */
-bool
-pin_page (uint32_t *pd, void *page)
-{
-  /* Note: currently only support pinning user pages
-     since no page out in kernel memory */
-  if (page > PHYS_BASE)
-    return false;
-
-  uint32_t *pte = lookup_page (pd, page, false);
-  return pin_pte (pte, page);
-}
-
 /* Unpins a page pointed by PTE. */
 bool
 unpin_pte (uint32_t *pte)
@@ -182,14 +132,8 @@ unpin_pte (uint32_t *pte)
   if (pte == NULL || (*pte & PTE_ADDR) == 0)
     return false;
 
-  struct lock *pin_lock = pool_get_pin_lock (pte);
-
-  if (pin_lock != NULL)
-    lock_acquire (pin_lock);
   ASSERT (*pte & PTE_I);
   *pte &= ~PTE_I;
-  if (pin_lock != NULL)
-    lock_release (pin_lock);
 
   return true;
 }
@@ -221,7 +165,7 @@ unpin_page (uint32_t *pd, const void *page)
 bool
 pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
 {
-  uint32_t *pte;
+  volatile uint32_t *pte;
 
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (pg_ofs (kpage) == 0);
@@ -234,16 +178,8 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
   if (pte != NULL) 
     {
       ASSERT ((*pte & PTE_P) == 0);
-
-      struct lock *pin_lock = pool_get_pin_lock (pte);
-
-      if (pin_lock != NULL)
-        lock_acquire (pin_lock);
       bool pin = (*pte & PTE_I) != 0;
       *pte = pte_create_user (kpage, writable) | (pin ? PTE_I : 0);
-      if (pin_lock != NULL)
-        lock_release (pin_lock);
-
       return true;
     }
   else

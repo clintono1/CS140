@@ -51,16 +51,14 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
     struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte);
     bool writable = !file_is_writable(spte->file);
     void * kpage = pte_get_page (*pte);
-    struct lock *pin_lock = pool_get_pin_lock (pte);
     if (*pte & PTE_P)
     {
-      ASSERT (pin_lock != NULL);
       bool to_be_released = false;
-      lock_acquire (pin_lock);
+      acquire_user_pool_lock ();
       *pte |= PTE_I;
       if (*pte & PTE_P)
         to_be_released = true;
-      lock_release (pin_lock);
+      release_user_pool_lock ();
 
       if ((*pte & PTE_P) && (*pte & PTE_D))
       {

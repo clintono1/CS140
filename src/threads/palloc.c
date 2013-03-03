@@ -50,6 +50,16 @@ static void init_pool (struct pool *, void *base, size_t page_cnt,
                        const char *name);
 static bool page_from_pool (const struct pool *, void *page);
 
+void acquire_user_pool_lock ()
+{
+  lock_acquire (&user_pool.lock);
+}
+
+void release_user_pool_lock ()
+{
+  lock_release (&user_pool.lock);
+}
+
 
 /* Initializes the page allocator.  At most USER_PAGE_LIMIT
    pages are put into the user pool. */
@@ -109,13 +119,9 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         ASSERT (page_cnt == 1);
         uint32_t *pte, *fte;
         pte = lookup_page (cur->pagedir, page, false);
-
-        lock_acquire (&pool->frame_table.frames[page_idx].pin_lock);
-        *pte |= PTE_I;
-        lock_release (&pool->frame_table.frames[page_idx].pin_lock);
-
         ASSERT (pte != NULL);
         ASSERT (*pte & PTE_M);
+        *pte |= PTE_I;
         fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
         pool->frame_table.frames[page_idx].frame =
             (uint32_t *) ((uint8_t *)fte - (unsigned) PHYS_BASE);
@@ -184,6 +190,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     pte_new = lookup_page (cur->pagedir, upage, true);
     ASSERT ((void *) pte_new > PHYS_BASE);
 
+    /* No need to lock here since pte_new is not visible to other process yet */
     *pte_new |= PTE_I;
 
     if (*pte_new & PTE_M)
@@ -237,13 +244,8 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       ASSERT(*pte_old & PTE_M);
     }
 
-    lock_acquire (&pool->frame_table.frames[clock_cur].pin_lock);
-    bool pinned = *pte_old & PTE_I;
-    // TODO: suspicious lock release! if we released the lock here, it's no longer guranteed PTE_I is unchanged when we use it.
-    lock_release (&pool->frame_table.frames[clock_cur].pin_lock);
-
     /* If the page is pinned, skip this frame table entry */
-    if (pinned)
+    if (*pte_old & PTE_I)
     {
       // TODO
       printf ("(tid=%d) page out skip pinned %p\n", thread_current()->tid, page);
@@ -439,20 +441,6 @@ page_from_pool (const struct pool *pool, void *page)
   size_t end_page = start_page + pool->frame_table.page_cnt;
 
   return page_no >= start_page && page_no < end_page;
-}
-
-struct lock *
-pool_get_pin_lock (uint32_t *pte)
-{
-  if ((*pte & PTE_ADDR) == 0 || !(*pte & PTE_P))
-    return NULL;
-  void *kpage = ptov (*pte & PTE_ADDR);
-  int page_idx = pg_no (kpage) - pg_no (user_pool.base);
-  ASSERT (page_idx >= 0);
-  // TODO
-  printf ("(tid=%d) pool_get_pin_lock pte = %p, *pte = %#x, pool->base = %p, page_idx = %d\n",
-          thread_current()->tid, pte, *pte, user_pool.base, page_idx);
-  return &user_pool.frame_table.frames[page_idx].pin_lock;
 }
 
 /* Update the frame table entries in the kernel pool according to the new

@@ -16,7 +16,6 @@
 struct fte
 {
   uint32_t *frame;              /* PTE address or suppl PTE address */
-  struct lock pin_lock;         /* Lock for PTE_I bit in PTE */
 };
 
 /* Frame table */

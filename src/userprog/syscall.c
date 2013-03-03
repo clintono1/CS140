@@ -561,10 +561,9 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
     }
     else
     {
-      struct lock *pin_lock = pool_get_pin_lock (pte);
-      lock_acquire (pin_lock);
+      acquire_user_pool_lock ();
       *pte |= PTE_I;
-      lock_release (pin_lock);
+      release_user_pool_lock ();
     }
     upage += PGSIZE;
   }
