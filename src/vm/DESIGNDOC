@@ -17,6 +17,12 @@ Bo Wang <bowang@stanford.edu>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+Our design use a novel ultra-space saving method for frame table, only 
+occupying 4B(TODO) for each frame, and completely removed bitmap pool, which 
+turned out works very well. Please contact us if you don't understand our
+method and don't make hasty judgtments.
+
+
 >> Describe briefly which parts of the assignment were implemented by
 >> each member of your team. If some team members contributed significantly
 >> more or less than others (e.g. 2x), indicate that here.
@@ -74,6 +80,7 @@ struct thread
 #define PTE_FLAGS 0x00000fff    /* Flag bits. */
 #define PTE_ADDR  0xfffff000    /* Address bits. */
 #define PTE_AVL   0x00000e00    /* Bits available for OS use. */
+
 #define PTE_P 0x1               /* 1=present, 0=not present. */
 #define PTE_W 0x2               /* 1=read/write, 0=read-only. */
 #define PTE_U 0x4               /* 1=user/kernel, 0=kernel only. */
@@ -173,14 +180,19 @@ efficiently.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-/* global frame table, frames stores pointers to PTE or SPTE, clock_cur is used
-   in clock algorithm */
+/* global frame table as a member of pool */
+   
 struct frame_table
 {
-  size_t page_cnt;
-  uint32_t **frames;
-  size_t clock_cur;
+  size_t page_cnt;    /* total pages in user/kernel pool */
+  uint32_t **frames;  /* frames stores pointers to PTE or SPTE */
+  size_t clock_cur;   /* used for clock algorithm */
 };
+
+Here the **frames pointer is stored below the userpool, occupying 4 Byte
+for each frame. It replaces the previous pool bit map since bitmap is 
+redundant with the existance of frame table.
+
 
 /* global swap table to track the usage of each sector in swap */
 struct swap_table
@@ -190,18 +202,96 @@ struct swap_table
     struct lock lock;          /* Lock to synchronize access to swap table */
   };
 
+struct thread
+{
+  ...
+  void *esp;                          /* Saved stack pointer for interrupt
+                                         in the kernel */
+  bool in_syscall;                    /* True if thread is in system call */
+  ... 
+}
+
 ---- ALGORITHMS ----
 
 >> B2: When a frame is required but none is free, some frame must be
 >> evicted.  Describe your code for choosing a frame to evict.
 
+We use clock algorithm to choose a frame to evict. As shown in B1, we have a 
+clock "hand" clock_cur defined in the struct frame_table. Whenever we need to 
+choose a frame to evict, the "hand" clock_cur scans through the frames in the 
+frame_table. Since we don't implement sharing, there is only 1 corresponding PTE
+in user memory for each frame. In our design, frames store the pointers to PTEs
+or SPTEs, and each SPTE also has a PTE pointer in it. Therefore, we can access
+each frame's corresponding PTE. 
+
+We first check PTE_I bit of the corresponding PTE. If it is 1, then it means
+that the corresponding frame is being swapped out or written to file. Therefore
+we increment the "hand" clock_cur and continue to search.
+
+Else if the PTE_A bit of the corresponding PTE is 1, it means that this frame 
+has recently been visited recently. In this case, we reset the PTE_A bit, flush 
+TLB, increment the "hand" clock_cur and continue to search.
+
+Else then the PTE_A bit of the corresponding PTE is 0, it means that this frame
+hasn't been visited in the last cycle. We then will choose this frame to evict!
+
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
 
+In our design, a frame table entry stores pointer to
+1)  corresponding page table entry if the page is present or in swap
+or  
+2)  corresponding supplementary page table entry if the frame is in file
+
+WHen a process P obatains a frame that was previously used by a process Q, it 
+will first clear the PTE_P bit in the Q's PTE corresponding to the frame, write
+it to swap or file. If it is write to swap, the swap_frame_no is stored in the 
+top 20 bits in the PTE. If it is write to file, then find the position according
+to the file pointer and offset in the corresponding SPTE. 
+
+The frame table entry originally pointed to Q's PTE (if the old page was not 
+memory mapped file) or SPTE (if the old page was memory mapped file). We then 
+make the frame table entry point to P's corresponding PTE (if the new page is 
+not memory mapped file) or SPTE (if the new page is memory mapped file). By 
+changing the content of the frame table entry, we refect Q no longer has the 
+frame and P has it.
+
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
 >> the page that faulted.
+
+struct thread
+{
+  ...
+  void *esp;                          /* Saved stack pointer for interrupt
+                                         in the kernel */
+  ... 
+}
+
+First of all, we need to obtain the current value of the user program's stack 
+pointer. Whenever we enter a system call, we save user program's stack pointer 
+as esp in the struct thread. Whenever a page fault occurs, we can check whether
+it is caused by kernel or a user process by checking the f->error_code.
+
+If the page fault is caused by kernel, then we retrieve user program's stack 
+pointer through thread_current()->esp. If the page fault is caused by user 
+program, then the f->esp, i.e. esp in the interrupt frame, is the user 
+program's stack pointer.
+
+Once we get the user program's stack pointer, we check whether all the following
+conditions are met:
+1) fault_addr == user_esp - 4      /* PUSH  */
+   or fault_addr == user_esp - 32  /* PUSHA */
+   or fault_addr >= user_esp       /* SUB $n, %esp; MOV ..., m(%esp) */
+2) fault_addr >= STACK_BASE        /* Stack limit 8MB, cannot extend below
+                                      STACK_BASE */
+3) (pte == NULL) ||                /* Stack growth */
+   (*pte & PTE_ADDR) == 0))        /* Lazily load, only PTE has been 
+                                      generated, no frame allocated yet */
+
+If all of the above three conditions are met, then our heuristic says this 
+should cause the stack to be extended into the page that faulted.
 
 ---- SYNCHRONIZATION ----
 
@@ -210,21 +300,113 @@ struct swap_table
 >> textbook for an explanation of the necessary conditions for
 >> deadlock.)
 
+The following data structures has lock: 
+1. Supplementary page table: per-process lock. Process B will never try to
+   acquire process A's lock so it won't form loop.
+2. Pool lock: entire pool uses ths same lock, only one process can acquire 
+   this lock. Each thread must first acquire this lock and then sweep the 
+   frames with clock algorithm. 
+3. Pin-lock: per-frame lock TODO. Each process must first hold the pool lock
+   and then acquire the pin-lock. This hierachy structure prevented deadlock.
+   Process should acquire this lock before setting or unsetting the page 
+   table entry.
+4. Global File System Lock: only held during file operation. Won't try to
+   acquire other locks when doing file reading/writing since we have already
+   pre-loaded an pinned the buffer pages so it won't cause page faults during
+   file reading/writing.
+5. Flush lock inside the condition variable to let Q wait for P fully evicts 
+   its page to swap or filesys. This lock is at the bottom of the key chain.
+   Must first hold pool lock. Process won't try to acquire other locks when
+   holding this lock. So it won't cause deadlock.Four conditions for deadlock:
+
+Four conditions for deadlock:
+Limited access. 
+No preemption. 
+Multiple independent requests. 
+Circularity in the graph of requests and ownership.
+
+Here we prevented the fourth condition by hierachial lock acquire
+
+
 >> B6: A page fault in process P can cause another process Q's frame
 >> to be evicted.  How do you ensure that Q cannot access or modify
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
+
+Monitor is used to avoid race, letting Q wait until P fully evicts Q's
+frame to swap or file. The monitor consists of flush_lock and cond_flush.
+The shared variable is the PTE_F bit. The mechanism is as follows:
+
+In the clock algorithm, if P find Q's page X as a victim to be evicted,
+it acquires the flush_lock, set the PTE_F bit on the pte of X, and then
+release the lock. With the PTE_F bit set, it can safely carry on a series 
+of tasks: including set the non-present bit, writing the frame to swap or
+file. Upon finishing the eviction, P will acquire the flush_lock again, 
+unset the PTE_F bit, and broadcast all the waiters for the condition 
+variable. Finally P releases the lock. This is coded in palloc.c, function
+page_out_then_get_page(). Since P doesn't hold the lock while doing I/O, it
+does not hurt concurrency. 
+
+If process Q is faulting on the same page of X, it first palloc a frame. 
+Then while the PTE_F bit is set, Q has to wait for the cond_flush before 
+swapping in or read in its content. When P has already finished the 
+eviction of Q's frame, Q will get signaled and finish waiting. Then Q could 
+continue to handle its page fault, either swapping in or reading from file. 
+
+Here we used broadcast to give every waiting process a chance to wake up on
+any process's eviction finishes, although it might not be paired. However, 
+the while loop that checks the PTE_F bit outside the cond_wait() will finally 
+gurantee the pairing of evicting and faulting back in the same page.
+
 
 >> B7: Suppose a page fault in process P causes a page to be read from
 >> the file system or swap.  How do you ensure that a second process Q
 >> cannot interfere by e.g. attempting to evict the frame while it is
 >> still being read in?
 
+While in process P a page is being read from the file system or swap, the PTE_I 
+bit (pin bit) of the PTE corresponding to this page is set to 1. Whenever a 
+second process Q wants to access the corresponding frame, e.g., evicting it, 
+it will check the PTE_I bit of the PTE the frame table entry points to. If it 
+is set to 1, Q will not be able to modify it. In clock algorithm, Q will skip
+this frame since there's page being read from file or swap to this frame. Q will
+continue to search following frames table entries to find a frame to evict.
+
+Once the page if fully loaded into the frame, the PTE_I bit of the P's PTE will
+then be set to 0 and now a second process can evict this frame. 
+
 >> B8: Explain how you handle access to paged-out pages that occur
 >> during system calls.  Do you use page faults to bring in pages (as
 >> in user programs), or do you have a mechanism for "locking" frames
 >> into physical memory, or do you use some other design?  How do you
 >> gracefully handle attempted accesses to invalid virtual addresses?
+
+For file system syscals such as read() and write(), we pin the pages of
+the buffer that we are going to read or write, and the file name
+char buffer. This is because we have to acquire the global file system 
+lock when doing the file reading or writing, and we can not try to 
+acquire the same lock for a second time when handling page fault (for 
+example, read from mmap files). So we make sure that page fault wouldn't
+happen during file syscals, which is done by preload_user_memory(). We 
+first check if all the pages has been allocated, if not, we allocated
+them as needed. We also check if the frame is loaded in memory, if not,
+those frames are loaded into memory one by one. Then we pin those pages 
+before acquiring the global filesys lock. After releasing the filesys lock
+we unpin the pages.
+
+To handle invalid virtual address happening in kernel, we added in_syscall
+flag in thread struct. This flag is set on entering the syscall handler.
+If page fault happened in kernel mode but in_syscall has been set, then 
+it means this page fault happened during syscall and we don't kill the 
+kernel. Only when the page fault happened in kernel mode but not in syscall
+do we kill the kernel.
+
+False address access was detected at the beginning of each syscall handler.
+We have checked NULL pointer, above PHY_BASE pointer for the whole buffer.
+Inside preload_user_memory(), an unallocated page was below the stack
+pointer is also detected as unlegal. These false attempts won't kill the 
+kernel. 
+
 
 ---- RATIONALE ----
 
@@ -234,6 +416,8 @@ struct swap_table
 >> possibility for deadlock but allows for high parallelism.  Explain
 >> where your design falls along this continuum and why you chose to
 >> design it this way.
+
+
 
        MEMORY MAPPED FILES
        ===================
