@@ -278,9 +278,7 @@ process_exit (void)
   if (cur->file_handlers != NULL)
   {
     int fd;
-    // TODO: previouly fd start from 2, need check 2 is for executable, which 
-    // has already been closed in mmap_free
-    for (fd = 3; fd < cur->file_handlers_size; fd++)
+    for (fd = 2; fd < cur->file_handlers_size; fd++)
     {
       if (cur->file_handlers[fd] != NULL)
       {
@@ -603,11 +601,6 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
-
-  /* Add the executable file to the process file resource list */
-  int fd = thread_add_file_handler (thread_current (), file);
-  if(fd == -1)
-	goto fail;
 
   return success;
 
