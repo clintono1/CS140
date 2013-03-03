@@ -439,6 +439,7 @@ _close (int fd)
   thread_remove_file_handler (t, fd);
 }
 
+/* Map system call : map a file to memory */
 static mapid_t
 _mmap (int fd, void *addr)
 {
@@ -507,6 +508,7 @@ _mmap (int fd, void *addr)
   return mf->mid;
 }
 
+/* Unmap system call : unmap a file */
 static void
 _munmap(mapid_t mapping)
 {
