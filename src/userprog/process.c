@@ -602,11 +602,6 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
-  /* Add the executable file to the process file resource list */
-  int fd = thread_add_file_handler (thread_current (), file);
-  if(fd == -1)
-	goto fail;
-
   return success;
 
  fail:
@@ -684,8 +679,24 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
   file_seek (file, ofs);
-
   struct thread *cur = thread_current();
+  /* If not writable, then it's code page. Add this page to current thread's mmap hash */
+  if (writable==0)
+  {
+    struct mmap_file *mf;
+    mf = (struct mmap_file *)malloc(sizeof(struct mmap_file));
+    if(mf == NULL)
+      return false;
+    struct thread *t=thread_current();
+    mf->mid = t->mmap_files_num_ever;
+    t->mmap_files_num_ever++;
+    mf->file = file;
+    mf->upage = upage;
+    mf->num_pages = ROUND_UP(read_bytes, PGSIZE)/PGSIZE;
+    if( hash_insert (&t->mmap_files, &mf->elem) != NULL)
+      return false;
+  }
+  
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -715,7 +726,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       ofs = ofs + (uint32_t) PGSIZE;
       s_pte->bytes_read = page_read_bytes;
-
       hash_insert (&cur->suppl_pt, &s_pte->elem_hash);
 
       /* Advance. */

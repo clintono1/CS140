@@ -10,7 +10,7 @@
 #include "lib/kernel/hash.h"
 #include "vm/page.h"
 
-// TODO: Remove before submit
+/* Hack to suppress warnings and errors in IDE */
 #ifndef USERPROG
 #define USERPROG
 #endif

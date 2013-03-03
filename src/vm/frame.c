@@ -3,8 +3,6 @@
 #include <string.h>
 #include "stdio.h"
 
-extern struct lock pin_lock;
-
 /* Finds and returns the starting index of the first group of CNT
    consecutive empty frame table entries in FT at or after START.
    If there is no such group, returns FRAME_TABLE_ERROR */
@@ -54,11 +52,7 @@ frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
     uint32_t *pte = lookup_page (pd, page + i * PGSIZE, create);
     ASSERT ((void *) pte > PHYS_BASE);
     if ((void *) page < PHYS_BASE)
-    {
-      lock_acquire (&pin_lock);
       *pte |= PTE_I;
-      lock_release (&pin_lock);
-    }
     ft->frames[start + i] = pte;
   }
 }

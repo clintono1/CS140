@@ -8,16 +8,18 @@
 #include <stdio.h>
 #include <string.h>
 #include "threads/loader.h"
-#include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "vm/frame.h"
+#include "threads/synch.h"
 #include "vm/swap.h"
+#include "vm/frame.h"
 
 extern uint32_t *init_page_dir;
 extern struct swap_table swap_table;
-extern struct lock pin_lock;
-extern struct lock flush_lock;
-extern struct condition flush_cond;
+extern struct lock swap_flush_lock;
+extern struct condition swap_flush_cond;
+extern struct lock file_flush_lock;
+extern struct condition file_flush_cond;
+extern struct lock global_lock_filesys;
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -47,6 +49,16 @@ static struct pool kernel_pool, user_pool;
 static void init_pool (struct pool *, void *base, size_t page_cnt,
                        const char *name);
 static bool page_from_pool (const struct pool *, void *page);
+
+void acquire_user_pool_lock ()
+{
+  lock_acquire (&user_pool.lock);
+}
+
+void release_user_pool_lock ()
+{
+  lock_release (&user_pool.lock);
+}
 
 
 /* Initializes the page allocator.  At most USER_PAGE_LIMIT
@@ -105,13 +117,9 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         ASSERT (page_cnt == 1);
         uint32_t *pte, *fte;
         pte = lookup_page (cur->pagedir, page, false);
-
-        lock_acquire (&pin_lock);
-        *pte |= PTE_I;
-        lock_release (&pin_lock);
-
         ASSERT (pte != NULL);
         ASSERT (*pte & PTE_M);
+        *pte |= PTE_I;
         fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
         pool->frame_table.frames[page_idx] =
             (uint32_t *) ((uint8_t *)fte - (unsigned) PHYS_BASE);
@@ -177,16 +185,17 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     pte_new = lookup_page (cur->pagedir, upage, true);
     ASSERT ((void *) pte_new > PHYS_BASE);
 
-    lock_acquire (&pin_lock);
+    /* No need to lock here since pte_new is not visible to other process yet */
     *pte_new |= PTE_I;
-    lock_release (&pin_lock);
 
     if (*pte_new & PTE_M)
     {
       struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte_new);
       ASSERT ((void *) spte > PHYS_BASE);
       if (flags & PAL_MMAP)
+      {
         fte_new = (uint32_t *) ((uint8_t *) spte - (unsigned) PHYS_BASE);
+      }
       else
         fte_new = pte_new;
     }
@@ -227,53 +236,65 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       ASSERT(*pte_old & PTE_M);
     }
 
-    lock_acquire (&pin_lock);
-    bool pinned = *pte_old & PTE_I;
-    lock_release (&pin_lock);
-
     /* If the page is pinned, skip this frame table entry */
-    if (pinned)
+    if (*pte_old & PTE_I)
     {
       pool_increase_clock (pool);
       continue;
     }
 
+    ASSERT (*pte_old & PTE_P);
     ASSERT (page == ptov (*pte_old & PTE_ADDR));
     if (!(*pte_old & PTE_A))
     {
-      lock_acquire (&flush_lock);
-      *pte_old |= PTE_F;
-      lock_release (&flush_lock);
-
-      *pte_old &= ~PTE_P;
-      invalidate_pagedir (thread_current ()->pagedir);
-
       pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
       if (*pte_old & PTE_M)
       {
+        lock_acquire (&file_flush_lock);
+        *pte_old |= PTE_F;
+        *pte_old |= PTE_A;
+        *pte_old &= ~PTE_P;
+        invalidate_pagedir (thread_current ()->pagedir);
+        lock_release (&file_flush_lock);
+
         /* Initialized/uninitialized data pages are changed to normal memory
            pages once loaded. Thus they should not reach here. */
         ASSERT ((spte->flags & SPTE_C) || (spte->flags & SPTE_M));
         if ((spte->flags & SPTE_M) && (*pte_old & PTE_D))
         {
           ASSERT ((spte->flags & ~SPTE_M) == 0);
+          lock_acquire (&global_lock_filesys);
           file_write_at (spte->file, page, spte->bytes_read, spte->offset);
+          lock_release (&global_lock_filesys);
         }
+
+        lock_acquire (&file_flush_lock);
+        *pte_old &= ~PTE_F;
+        cond_broadcast (&file_flush_cond, &file_flush_lock);
+        lock_release (&file_flush_lock);
       }
       else
       {
+        lock_acquire (&swap_flush_lock);
+        *pte_old |= PTE_F;
+        *pte_old |= PTE_A;
+        lock_release (&swap_flush_lock);
+
+        *pte_old &= ~PTE_P;
+        invalidate_pagedir (thread_current ()->pagedir);
+
         *pte_old &= PTE_FLAGS;
         size_t swap_frame_no = swap_allocate_page (&swap_table);
         *pte_old |= swap_frame_no << PGBITS;
         swap_write (&swap_table, swap_frame_no, page);
-      }
 
-      lock_acquire (&flush_lock);
-      *pte_old &= ~PTE_F;
-      cond_broadcast (&flush_cond, &flush_lock);
-      lock_release (&flush_lock);
+        lock_acquire (&swap_flush_lock);
+        *pte_old &= ~PTE_F;
+        cond_broadcast (&swap_flush_cond, &swap_flush_lock);
+        lock_release (&swap_flush_lock);
+      }
 
       if (flags & PAL_ZERO)
         memset ((void *) page, 0, PGSIZE);
@@ -282,7 +303,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     else  /* If accessed */
     {
       *pte_old &= ~PTE_A;
-      // TODO
       invalidate_pagedir (thread_current()->pagedir);
       pool_increase_clock (pool);
     }
@@ -309,7 +329,6 @@ palloc_get_page (enum palloc_flags flags, uint8_t *page)
     else
       PANIC ("Running out of kernel memory pages... Kill the kernel :-(");
   }
-
   return frame;
 }
 
@@ -330,6 +349,7 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
     pool = &user_pool;
   else
     NOT_REACHED ();
+
   page_idx = pg_no (kpage) - pg_no (pool->base);
 
 #ifndef NDEBUG
@@ -340,7 +360,7 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
   size_t i;
   for (i = 0; i < page_cnt; i++)
   {
-      ASSERT (pool->frame_table.frames[page_idx + i] != NULL)
+      ASSERT (pool->frame_table.frames[page_idx + i] != NULL);
       pool->frame_table.frames[page_idx + i] = NULL;
   }
   lock_release(&pool->lock);

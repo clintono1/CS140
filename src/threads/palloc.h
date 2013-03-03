@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct pool;
+
 /* How to allocate pages. */
 enum palloc_flags
   {
@@ -19,5 +21,7 @@ void *palloc_get_multiple (enum palloc_flags, size_t page_cnt, uint8_t *page);
 void palloc_free_page (void *);
 void palloc_free_multiple (void *, size_t page_cnt);
 void palloc_kernel_pool_change_pd (uint32_t *pd);
+void acquire_user_pool_lock (void);
+void release_user_pool_lock (void);
 
 #endif /* threads/palloc.h */

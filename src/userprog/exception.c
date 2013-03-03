@@ -16,9 +16,11 @@
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 extern struct swap_table swap_table;
-extern struct lock pin_lock;
-extern struct lock flush_lock;
-extern struct condition flush_cond;
+extern struct lock swap_flush_lock;
+extern struct condition swap_flush_cond;
+extern struct lock file_flush_lock;
+extern struct condition file_flush_cond;
+extern struct lock global_lock_filesys;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
@@ -80,10 +82,9 @@ exception_print_stats (void)
   printf ("Exception: %lld page faults\n", page_fault_cnt);
 }
 
-// TODO: clean or simplify
 /* Handler for an exception (probably) caused by a user process. */
 static void
-kill (struct intr_frame *f) 
+kill (struct intr_frame *f)
 {
   /* This interrupt is one (probably) caused by a user process.
      For example, the process might have tried to access unmapped
@@ -92,7 +93,7 @@ kill (struct intr_frame *f)
      the kernel.  Real Unix-like operating systems pass most
      exceptions back to the process via signals, but we don't
      implement them. */
-     
+
   /* The interrupt frame's code segment value tells us where the
      exception originated. */
   switch (f->cs)
@@ -103,7 +104,7 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n",
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      thread_exit (); 
+      thread_exit ();
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
@@ -111,7 +112,7 @@ kill (struct intr_frame *f)
        * may cause kernel exceptions--but they shouldn't arrive
        * here.)  Panic the kernel to make the point.  */
       intr_dump_frame (f);
-      PANIC ("Kernel bug - unexpected interrupt in kernel"); 
+      PANIC ("Kernel bug - unexpected interrupt in kernel");
 
     default:
       /* Some other code segment?  Shouldn't happen.  Panic the
@@ -123,9 +124,10 @@ kill (struct intr_frame *f)
 }
 
 /* Load data from file into a page according to the supplemental page table
-   entry SPTE and the virtual user address UPAGE */
+   entry SPTE and the virtual user address UPAGE.
+   Pin the loaded page if PIN is true. */
 void
-load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
+load_page_from_file (struct suppl_pte *spte, uint8_t *upage, bool pin)
 {
   bool mmap = (spte->flags & SPTE_M) || (spte->flags & SPTE_C);
   enum palloc_flags flags = PAL_USER | (mmap ? PAL_MMAP : 0);
@@ -135,19 +137,24 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
 
   uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
   ASSERT (pte != NULL);
+  ASSERT (*pte & PTE_I);
 
-  lock_acquire (&flush_lock);
+  lock_acquire (&file_flush_lock);
   while (*pte & PTE_F)
   {
-    cond_wait (&flush_cond, &flush_lock);
+    cond_wait (&file_flush_cond, &file_flush_lock);
   }
-  lock_release (&flush_lock);
+  lock_release (&file_flush_lock);
 
   /* If MMF or code or initialized data, Load this page.
      If uninitialized data, load zero page 
      This is self-explanatory by s_pte->bytes_read and memset zeros*/
-  if ( file_read_at ( spte->file, kpage, spte->bytes_read, spte->offset)
-      != (int) spte->bytes_read)
+  off_t bytes_read;
+  lock_acquire (&global_lock_filesys);
+  bytes_read = file_read_at ( spte->file, kpage, spte->bytes_read, spte->offset);
+  lock_release (&global_lock_filesys);
+
+  if ( bytes_read != (int) spte->bytes_read)
   {
     palloc_free_page (kpage);
     _exit(-1);
@@ -176,28 +183,31 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage)
     free (spte);
   }
 
-  unpin_pte (pte);
+  if (!pin)
+    unpin_pte (pte);
 }
 
 /* Load the page pointed by PTE and install the page with the virtual
-   address UPAGE */
+   address UPAGE.
+   Pin the loaded page if PIN is true. */
 void
-load_page_from_swap (uint32_t *pte, void *page)
+load_page_from_swap (uint32_t *pte, void *page, bool pin)
 {
   ASSERT (pte != NULL);
 
   uint8_t *kpage = palloc_get_page (PAL_USER, page);
   if (kpage == NULL)
     _exit (-1);
+  ASSERT (*pte & PTE_I);
 
-  lock_acquire (&flush_lock);
+  lock_acquire (&swap_flush_lock);
   while (*pte & PTE_F)
   {
-    cond_wait (&flush_cond, &flush_lock);
+    cond_wait (&swap_flush_cond, &swap_flush_lock);
   }
-  lock_release (&flush_lock);
+  lock_release (&swap_flush_lock);
 
-  size_t swap_frame_no = (*pte & PTE_ADDR) >> PGBITS;
+  size_t swap_frame_no = (*pte >> PGBITS);
 
   if (swap_frame_no == 0 )
     _exit (-1);
@@ -212,7 +222,8 @@ load_page_from_swap (uint32_t *pte, void *page)
     _exit (-1);
   }
 
-  unpin_pte (pte);
+  if (!pin)
+    unpin_pte (pte);
 }
 
 /* Grow the stack at the page with user virtual address UPAGE */
@@ -287,7 +298,6 @@ page_fault (struct intr_frame *f)
     kill (f);
   }
   else 
-  /* TODO: update comments: If fault in the user program or syscall, should get the info about where to get the page */
   {
      if (fault_addr > PHYS_BASE)
        debug_backtrace ();
@@ -326,7 +336,7 @@ page_fault (struct intr_frame *f)
      /* Case 2. In the swap block*/
      if ((pte != NULL) && not_present && !(*pte & PTE_M) && (*pte & PTE_ADDR))
      {
-       load_page_from_swap (pte, fault_page);
+       load_page_from_swap (pte, fault_page, false);
        goto success;
      }
 
@@ -334,7 +344,7 @@ page_fault (struct intr_frame *f)
      if ((pte != NULL) && not_present && (*pte & PTE_M))
      {
        struct suppl_pte *s_pte = suppl_pt_get_spte (&cur->suppl_pt, pte);
-       load_page_from_file (s_pte, fault_page);
+       load_page_from_file (s_pte, fault_page, false);
        goto success;
      }
 

@@ -1,10 +1,6 @@
 #include "vm/swap.h"
-// TODO
-#include "threads/thread.h"
 
 struct swap_table swap_table;
-
-extern struct lock global_lock_filesys;
 
 /* Initialize the swap_table */
 void swap_table_init (struct swap_table *swap_table)

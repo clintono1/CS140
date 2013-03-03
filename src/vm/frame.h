@@ -15,9 +15,9 @@
 /* Frame table */
 struct frame_table
 {
-  size_t page_cnt;
-  uint32_t **frames;
-  size_t clock_cur;
+  size_t page_cnt;              /* Total number of pages in this frame table */
+  uint32_t **frames;            /* Memory frames in the table */
+  size_t clock_cur;             /* Current clock hand */
 };
 
 size_t frame_table_size (size_t page_cnt);
