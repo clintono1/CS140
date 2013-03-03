@@ -18,18 +18,19 @@ Bo Wang <bowang@stanford.edu>
 >> TAs, or extra credit, please give them here.
 
 Our design use a novel ultra-space saving method for frame table, only 
-occupying 4B(TODO) for each frame, and completely removed bitmap pool, which 
-turned out works very well. Please contact us if you don't understand our
-method and don't make hasty judgtments.
+occupying 4 bytes for each frame table entry. The bitmap for user pool is 
+completely removed which is redundant together with frame table.
+The solution turned out working very well. Please contact us if you are
+confused with our method and don't make hasty judgtments.
 
 
 >> Describe briefly which parts of the assignment were implemented by
 >> each member of your team. If some team members contributed significantly
 >> more or less than others (e.g. 2x), indicate that here.
 
-FirstName LastName: contribution
-FirstName LastName: contribution
-FirstName LastName: contribution
+Song Han: supplementary page table, swap table 
+Jinchao Ye: memory mapped file, design doc 
+Bo Wang: frame table, stack growth, clock algorithm 
 
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
@@ -44,7 +45,8 @@ FirstName LastName: contribution
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-/* spte_flags is used to denote the kind of a page, memory mapped file, code, 
+<page.h>
+/* spte_flags is used to denote the kind of a page: memory mapped file, code, 
    initialized data or uninitialized data */
 enum spte_flags
 {
@@ -58,29 +60,27 @@ enum spte_flags
    and code, also data before it has ever been loaded */
 struct suppl_pte
 {
-  uint32_t *pte;                  /* Kernel virtual address to 
-                                     the page table entry */
-  struct file *file;              /* File this page is mapped to */
-  enum spte_flags flags;          /* Types of the page */
-  bool writable;                  /* Whether this page is writable */
-  off_t offset;                   /* Offset in the file the page is mapped to */
-  size_t bytes_read;              /* Number of bytes read from the file */
-  struct hash_elem elem_hash;     /* Element for supplemental page table */
+  uint32_t *pte;                 /* Kernel virtual address to 
+                                    the page table entry */
+  struct file *file;             /* File this page is mapped to */
+  enum spte_flags flags;         /* Types of the page */
+  bool writable;                 /* Whether this page is writable */
+  off_t offset;                  /* Offset in the file the page is mapped to */
+  size_t bytes_read;             /* Number of bytes read from the file */
+  struct hash_elem elem_hash;    /* Element for supplemental page table */
 };
 
+<thread.h>
 /* each thread has a supplementary page table with a lock */
 struct thread
 {
   ...
-  struct hash suppl_pt;              /* Supplemental page table */
-  struct lock spt_lock;              /* Supplemental page table lock */
+  struct hash suppl_pt;         /* Supplemental page table */
+  struct lock spt_lock;         /* Supplemental page table lock */
   ...
 }
 
-#define PTE_FLAGS 0x00000fff    /* Flag bits. */
-#define PTE_ADDR  0xfffff000    /* Address bits. */
-#define PTE_AVL   0x00000e00    /* Bits available for OS use. */
-
+<pte.h>
 #define PTE_P 0x1               /* 1=present, 0=not present. */
 #define PTE_W 0x2               /* 1=read/write, 0=read-only. */
 #define PTE_U 0x4               /* 1=user/kernel, 0=kernel only. */
@@ -96,58 +96,58 @@ struct thread
 >> A2: In a few paragraphs, describe your code for locating the frame,
 >> if any, that contains the data of a given page.
 
-Given the user virtual address of a page, we first look up the page in the 
-page directory of current thread. No matter what kind a page is, there is always
-a corresponding page table entry unless we are referring to an nonexistent page.
+Case 0: The present bit of the pte is set to one. This is the simplest case 
+that won't cause page fault and is handled by hardware translation via MMU.
 
-Once we get the page table entry (PTE for short), we check whether it is present
-by the PTE_P bit. If it is present, then it is in memory and we can get the 
-physical address of the frame by the top 20 bits in the PTE (the low 12 bits of
-a frame address are always 0). 
-If it is not present and PTE_M bit is 1, then it is in memory mapped file. We 
+Case 1: Stack growth. We use heruistic method to detect whether this page
+fault is caused by stack growth. If so, we allocated a zero page from the user
+pool and install the page. This is implemented in exceptino.c: stack_growth()
+
+Case 2: Load from file system. If the page is not present and PTE_M bit of the
+page table entry is set, then the page should be loaded from file sytem. We 
 use the pointer to PTE as the key to look up the corresponding supplementary 
-page table entry (SPTE for short). We can locate the frame via the file pointer 
-and offset.
-If it is not present and PTE_M bit is 0 and the top 20 bits of PTE is not 0,
-then it is in swap. We can get the swap frame number from the top 20 bits of
-PTE (a frame is 8 sectors here). Then we can easily locate the frame in the swap
-using this swap frame number.
-If it is not present and PTE_M is 0 and the top 20 bits of PTE is also 0, this 
-means such page doens't exist. In this case, just exit(-1). 
+page table entry (SPTE). We can locate the frame via the file pointer and 
+offset. This is implemented in exception.c: load_page_from_file().
+
+Case 3: Load from swap. If the page is not present and PTE_M bit is 0, and the
+top 20 bits of PTE is not empty, then it is in swap. The swap frame number is 
+obtained from the top 20 bits of PTE (a frame is 8 sectors). Then we can easily
+locate the frame in the swap using this swap frame number and swap in the data.
+This is inplemened in exception.c: load_page_from_swap().
+
+Case 4: If it is not present and PTE_M is 0 and the top 20 bits of PTE is also
+0, this means such page doens't exist. In this case, just exit(-1).
 
 >> A3: How does your code coordinate accessed and dirty bits between
 >> kernel and user virtual addresses that alias a single frame, or
 >> alternatively how do you avoid the issue?
 
-We avoid this issue by only accessing user data through user virtual addresses 
-(only through user threads' page table entries). Also, whenever we changes a
-PTE, we flush the TLB to ensure consistency.
+We avoid this issue by accessing user data only through user virtual addresses 
+(only through the user program's page table). 
 
 ---- SYNCHRONIZATION ----
 
 >> A4: When two user processes both need a new frame at the same time,
 >> how are races avoided?
 
-We change the original bitmap to our frame table.
-
-struct frame_table
-{
-  size_t page_cnt;
-  uint32_t **frames;
-  size_t clock_cur;
-};
-
-Here each frame table entry stores a pointer to
+For the memory pool, the original bitmap is replaced with frame table entry. The
+frame table entry is mapped one-to-one to the frame in user pool. Each entry
+is 4 bytes. If the entry is zero, it means that the frame is empty. Otherwise, 
+each frame table entry stores a pointer to either
 1)  page table entry if the page is present or in swap
-or  
+ or  
 2)  supplementary page table entry if the page is in file
 
-When we allocate a page, we will scan the frame table to get a new frame. We 
-will call palloc_get_page(). It will then call palloc_get_multiple() if there 
-are free frames, or page_out_then_get_page() if there is no free frame. Both 
-functions have to acquire pool->lock before they can scan the frames or do clock
-algorithm to get a frame. Therefore one process have to wait till the other 
-process get a frame before it can search for a new frame.
+Any process that need a new frame need to first acquire the memory pool's lock 
+before scanning the frame table for an empty frame (previously scan the bitmap).
+This eliminates race condition. The steps are: 	
+
+When we allocate a page, we will call palloc_get_page(), which then calls 
+palloc_get_multiple(). If there are free frames, then it'll be returned. 
+Otherwise, page_out_then_get_page() will be called. Both functions have to 
+acquire pool->lock before they can scan the frames or do clock algorithm to 
+get a frame. Therefore one process have to wait till the other process get a 
+frame before it can search for a new frame.
 
 ---- RATIONALE ----
 
@@ -180,8 +180,8 @@ efficiently.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-/* global frame table as a member of pool */
-   
+<frame.h>
+/* global frame table as a member of pool */   
 struct frame_table
 {
   size_t page_cnt;    /* total pages in user/kernel pool */
@@ -193,7 +193,16 @@ Here the **frames pointer is stored below the userpool, occupying 4 Byte
 for each frame. It replaces the previous pool bit map since bitmap is 
 redundant with the existance of frame table.
 
+<palloc.c>
+/* Replaced the pool's bitmap with frame table*/
+struct pool
+{
+  struct lock lock;                   /* Mutual exclusion. */
+  struct frame_table frame_table;     /* Raplaced bitmap with framb_table/
+  uint8_t *base;                      /* Base of pool. */
+};
 
+<swap.h>
 /* global swap table to track the usage of each sector in swap */
 struct swap_table
   {
