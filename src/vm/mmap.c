@@ -46,7 +46,7 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
                                  pg_cnt * PGSIZE, false);
     ASSERT (*pte & PTE_M);
     struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte);
-    bool writable = !file_is_writable(spte->file);
+    bool writable = file_is_writable(spte->file);
     void * kpage = pte_get_page (*pte);
     if (*pte & PTE_P)
     {
