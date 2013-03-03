@@ -312,18 +312,17 @@ The following data structures has lock:
 1. Pool lock: entire pool uses the same lock, only one process can acquire 
    this lock. Each thread must first acquire this lock and then sweep the 
    frames with clock algorithm. 
-2. Pin-lock: per-frame lock TODO. Each process must first hold the pool lock
-   and then acquire the pin-lock. This hierarchy structure prevented deadlock.
-   Process should acquire this lock before setting or unsetting the page 
-   table entry.
+2. Pin-lock: Each process must first hold the pool lock and then acquire the
+   pin-lock. This hierarchy structure prevented deadlock. Process should acquire
+   this lock before setting or unsetting the page table entry.
 3. Global File System Lock: only held during file operation. Won't try to
    acquire other locks when doing file reading/writing since we have already
    pre-loaded an pinned the buffer pages so it won't cause page faults during
    file reading/writing.
-4. Flush lock inside the condition variable to let Q wait for P fully evicts 
+4. Flush lock: inside the condition variable to let Q wait for P fully evicts 
    its page to swap or filesys. This lock is at the bottom of the key chain.
    Must first hold pool lock. Process won't try to acquire other locks when
-   holding this lock. So it won't cause deadlock.Four conditions for deadlock:
+   holding this lock. So it won't cause deadlock.
 
 Four conditions for deadlock:
 Limited access. 
@@ -331,7 +330,7 @@ No preemption.
 Multiple independent requests. 
 Circularity in the graph of requests and ownership.
 
-Here we prevented the fourth condition by hierarchical lock acquire
+Here we prevented the fourth condition by hierarchical lock acquire.
 
 
 >> B6: A page fault in process P can cause another process Q's frame
@@ -340,28 +339,28 @@ Here we prevented the fourth condition by hierarchical lock acquire
 >> between P evicting Q's frame and Q faulting the page back in?
 
 Monitor is used to avoid race, letting Q wait until P fully evicts Q's
-frame to swap or file. The monitor consists of flush_lock and cond_flush.
-The shared variable is the PTE_F bit. The mechanism is as follows:
+frame to swap or file. The shared variable is the PTE_F bit. The mechanism
+is as follows:
 
 In the clock algorithm, if P find Q's page X as a victim to be evicted,
-it acquires the flush_lock, set the PTE_F bit on the pte of X, and then
+it acquires the flush lock, set the PTE_F bit on the pte of X, and then
 release the lock. With the PTE_F bit set, it can safely carry on a series 
 of tasks: including set the non-present bit, writing the frame to swap or
-file. Upon finishing the eviction, P will acquire the flush_lock again, 
+file. Upon finishing the eviction, P will acquire the flush lock again, 
 unset the PTE_F bit, and broadcast all the waiters for the condition 
 variable. Finally P releases the lock. This is coded in palloc.c, function
 page_out_then_get_page(). Since P doesn't hold the lock while doing I/O, it
 does not hurt concurrency. 
 
 If process Q is faulting on the same page of X, it first palloc a frame. 
-Then while the PTE_F bit is set, Q has to wait for the cond_flush before 
-swapping in or read in its content. When P has already finished the 
+Then while the PTE_F bit is set, Q has to wait for the flush condition variable
+before swapping in or read in its content. When P has already finished the 
 eviction of Q's frame, Q will get signaled and finish waiting. Then Q could 
 continue to handle its page fault, either swapping in or reading from file. 
 
 Here we used broadcast to give every waiting process a chance to wake up on
-any process's eviction finishes, although it might not be paired. However, 
-the while loop that checks the PTE_F bit outside the cond_wait() will finally 
+any process's eviction finishes, although it seems not paired. However, the
+while loop that checks the PTE_F bit outside the cond_wait() will finally 
 guarantee the pairing of evicting and faulting back in the same page.
 
 
@@ -423,21 +422,26 @@ kernel.
 >> where your design falls along this continuum and why you chose to
 >> design it this way.
 
-We are trying hard to balance parallelism and synchronization.
+We are trying to minimize the synchronization's impact on parallelism. We
+guranteed when one process is doing I/O on page fault, other process don't
+have to wait for this I/O to finish and they can start to handle their page 
+fault concurrently. Although we use global pool lock to make sure only one
+process can access the pool at a time, we released this lock before it start
+doing I/O, either writing to swap or writing to file system. This result in
+better concurrency.
 
-We use a lock and a conditional variable for writing page to swap and another 
-lock and conditional variable for writing page to file. In this way, we avoid
-race conditions while a process is evicting a frame to swap/file while another
-process is trying to page in this frame (but is hasn't been fully written to
-swap/file yet). We avoid this by acquiring the corresponding lock and setting 
-the PTE_F bit in PTE while writing it to swap/file, clearing the PTE_F bit,
-conditional broadcasting, and releasing the lock after the frame is fully 
-written out. On the other hand, if a page needs to be paged in from swap/file,
-it will needs to first acquire corresponding lock, wait on the conditional 
-variable and check whether PTE_F bit is cleared, and then release the lock if it
-is cleared.
+We used monitor for writing page to swap and another monitor for writing page
+to file sytem. In this way, we avoid race conditions while a process is evicting
+a frame to swap/file while another process is trying to page in this frame (but 
+hasn't been fully written to swap/file yet). We avoid this by acquiring the 
+corresponding lock and setting the PTE_F bit in PTE while writing it to 
+swap/file, clearing the PTE_F bit, broadcasting, and releasing the lock after 
+the frame is fully written out. On the other hand, if a page needs to be paged
+in from swap/file, it will needs to first acquire corresponding lock, wait on 
+the conditional variable and check whether PTE_F bit is cleared, and then 
+release the lock if it is cleared.
 
-Moreover, this design enables pintos to evict a frame to swap while paging in a
+This design enables pintos to evict a frame to swap while paging in a
 second frame from file, or vice versa. This is because we use separate locks and 
 conditional variables for swap and file.
 
