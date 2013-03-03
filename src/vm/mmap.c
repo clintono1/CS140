@@ -9,6 +9,7 @@
 extern struct lock file_flush_lock;
 extern struct lock global_lock_filesys;
 
+/* Mmap_files hash function */
 static unsigned
 mmap_files_hash_func (const struct hash_elem *e, void *aux UNUSED)
 {
@@ -16,6 +17,7 @@ mmap_files_hash_func (const struct hash_elem *e, void *aux UNUSED)
   return hash_bytes (&mmf->mid, sizeof(mmf->mid));
 }
 
+/* Mmap_files hash_less function */
 static bool
 mmap_files_hash_less (const struct hash_elem *a,
     const struct hash_elem *b,
@@ -26,6 +28,7 @@ mmap_files_hash_less (const struct hash_elem *a,
   return ma->mid < mb->mid;
 }
 
+/* Mmap_files initialization function */
 void
 mmap_files_init (struct thread *t)
 {
@@ -33,6 +36,7 @@ mmap_files_init (struct thread *t)
   t->mmap_files_num_ever = 0;
 }
 
+/* Free a single memory mapped file */
 void
 mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
 {
@@ -97,6 +101,7 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
   free (mmf_ptr);
 }
 
+/* Free all memory mapped files in current process */
 void
 mmap_free_files(struct hash *mmfs)
 {
