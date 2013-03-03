@@ -123,11 +123,11 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         ASSERT (*pte & PTE_M);
         *pte |= PTE_I;
         fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
-        pool->frame_table.frames[page_idx].frame =
+        pool->frame_table.frames[page_idx] =
             (uint32_t *) ((uint8_t *)fte - (unsigned) PHYS_BASE);
         // TODO
-        printf ("(tid=%d) palloc_get_multiple frames[%d].frame = %p\n",
-            thread_current()->tid, (int) page_idx, pool->frame_table.frames[page_idx].frame);
+        printf ("(tid=%d) palloc_get_multiple frames[%d] = %p\n",
+            thread_current()->tid, (int) page_idx, pool->frame_table.frames[page_idx]);
       }
       else
       {
@@ -201,7 +201,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       {
         fte_new = (uint32_t *) ((uint8_t *) spte - (unsigned) PHYS_BASE);
         // TODO
-        printf ("(tid=%d) palloc_get_multiple frames[?].frame = %p\n",
+        printf ("(tid=%d) palloc_get_multiple frames[?] = %p\n",
             thread_current()->tid, fte_new);
       }
       else
@@ -218,14 +218,14 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
   while (1)
   {
     size_t clock_cur = pool->frame_table.clock_cur;
-    uint32_t *fte_old = pool->frame_table.frames[clock_cur].frame;
+    uint32_t *fte_old = pool->frame_table.frames[clock_cur];
     uint8_t *page = pool->base + clock_cur * PGSIZE;
 
     if (fte_old == NULL)
     {
       // TODO
       printf ("page out found empty page %p\n", page);
-      pool->frame_table.frames[clock_cur].frame = fte_new;
+      pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
       if (flags & PAL_ZERO)
@@ -268,7 +268,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       // TODO
       printf ("(tid=%d) page out replace %p\n", thread_current()->tid, page);
 
-      pool->frame_table.frames[clock_cur].frame = fte_new;
+      pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
       if (*pte_old & PTE_M)
@@ -395,13 +395,13 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
   size_t i;
   for (i = 0; i < page_cnt; i++)
   {
-      ASSERT (pool->frame_table.frames[page_idx + i].frame != NULL);
+      ASSERT (pool->frame_table.frames[page_idx + i] != NULL);
       // TODO
-      printf ("(tid=%d) palloc_free_multiple frames[%d].frame = %p\n",
+      printf ("(tid=%d) palloc_free_multiple frames[%d] = %p\n",
               thread_current()->tid, (int) (page_idx + i),
-              pool->frame_table.frames[page_idx + i].frame);
+              pool->frame_table.frames[page_idx + i]);
       // TODO should only check the equality below when *frame > PHYS_BASE
-      pool->frame_table.frames[page_idx + i].frame = NULL;
+      pool->frame_table.frames[page_idx + i] = NULL;
   }
   lock_release(&pool->lock);
 }

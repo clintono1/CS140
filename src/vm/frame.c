@@ -17,11 +17,11 @@ frame_table_scan (struct frame_table *ft, size_t start, size_t cnt)
     size_t i;
     for (i = start; i < ft->page_cnt - cnt + 1; i++)
     {
-      if (ft->frames[i].frame == NULL)
+      if (ft->frames[i] == NULL)
       {
         size_t j;
         for (j = 1; j < cnt; j++)
-          if (ft->frames[i + j].frame != NULL)
+          if (ft->frames[i + j] != NULL)
             break;
         if (j == cnt)
           return i;
@@ -53,7 +53,7 @@ frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
     ASSERT ((void *) pte > PHYS_BASE);
     if ((void *) page < PHYS_BASE)
       *pte |= PTE_I;
-    ft->frames[start + i].frame = pte;
+    ft->frames[start + i] = pte;
   }
 }
 
@@ -61,7 +61,7 @@ frame_table_set_multiple (struct frame_table *ft, size_t start, size_t cnt,
 inline size_t
 frame_table_size (size_t page_cnt)
 {
-  return page_cnt * sizeof (struct fte);
+  return page_cnt * sizeof (uint32_t *);
 }
 
 /* Create a frame table with PAGE_CNT pages, using BLOCK as the base for
@@ -74,12 +74,8 @@ frame_table_create (struct frame_table *ft, size_t page_cnt, void *block,
   ASSERT (block_size >= frame_table_size (page_cnt));
 
   ft->page_cnt = page_cnt;
-  ft->frames = (struct fte*) block;
-  size_t i;
-  for (i = 0; i < page_cnt; i++)
-  {
-    ft->frames[i].frame = NULL;
-  }
+  ft->frames = (uint32_t **) block;
+  memset ((void *) ft->frames, 0, page_cnt * sizeof(uint32_t*));
   ft->clock_cur = 0;
 }
 
@@ -94,7 +90,7 @@ frame_table_all (const struct frame_table *ft, size_t start, size_t cnt)
   ASSERT (start + cnt <= ft->page_cnt);
 
   for (i = start; i < start + cnt; i++)
-    if (ft->frames[i].frame == NULL)
+    if (ft->frames[i] == NULL)
       return false;
   return true;
 }
@@ -110,13 +106,13 @@ frame_table_change_pagedir (struct frame_table *ft, uint32_t *pd)
   size_t i;
   for (i = 0; i < ft->page_cnt; i++)
   {
-    if (ft->frames[i].frame != NULL)
+    if (ft->frames[i] != NULL)
     {
-      uint32_t *old_pte = ft->frames[i].frame;
+      uint32_t *old_pte = ft->frames[i];
       uint32_t paddr = *old_pte & ~PGMASK;
       uint32_t *new_pte = lookup_page (pd, ptov(paddr), false);
       ASSERT ((*old_pte & ~PGMASK) == (*new_pte & ~PGMASK));
-      ft->frames[i].frame = new_pte;
+      ft->frames[i] = new_pte;
     }
   }
 }

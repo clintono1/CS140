@@ -12,17 +12,11 @@
 #define KERNEL_PAGE_DIR   0xc000f000
 #define KERNEL_PAGE_TABLE 0xc0010000
 
-/* Frame table entry */
-struct fte
-{
-  uint32_t *frame;              /* PTE address or suppl PTE address */
-};
-
 /* Frame table */
 struct frame_table
 {
   size_t page_cnt;              /* Total number of pages in this frame table */
-  struct fte *frames;           /* Memory frames in the table */
+  uint32_t **frames;            /* Memory frames in the table */
   size_t clock_cur;             /* Current clock hand */
 };
 
