@@ -88,6 +88,7 @@ struct thread
 #define PTE_A 0x20              /* 1=accessed, 0=not acccessed. */
 #define PTE_D 0x40              /* 1=dirty, 0=not dirty (PTEs only). */
 #define PTE_I 0x80              /* 1=pinned, 0=not pinned */
+#define PTE_F 0x100             /* 1=being flushed, 0=not being flushed */  
 #define MAX_SWAP_PAGE_NO 0xfffff
 
 ---- ALGORITHMS ----
@@ -184,11 +185,11 @@ efficiently.
 struct frame_table
 {
   size_t page_cnt;    /* total pages in user/kernel pool */
-  uint32_t **frames;  /* frames stores pointers to PTE or SPTE */
+  uint32_t **frames;  /* pointers to PTE or SPTE */
   size_t clock_cur;   /* used for clock algorithm */
 };
 
-Here the **frames pointer is stored below the userpool, occupying 4 Byte
+Here the pointer array is stored below the userpool, occupying 4 Byte
 for each frame. It replaces the previous pool bit map since bitmap is 
 redundant with the existence of frame table.
 
