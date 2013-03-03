@@ -90,6 +90,10 @@ struct thread
 #define PTE_I 0x80              /* 1=pinned, 0=not pinned */
 #define MAX_SWAP_PAGE_NO 0xfffff
 
+<vaddr.h>
+/* Stack limit (8MB) */
+#define STACK_BASE  (PHYS_BASE - 8*1024*1024)
+
 ---- ALGORITHMS ----
 
 >> A2: In a few paragraphs, describe your code for locating the frame,
