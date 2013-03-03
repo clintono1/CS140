@@ -184,9 +184,6 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage, bool pin)
     free (spte);
   }
 
-  // TODO
-  printf ("(tid=%d) load_page_from_file %p\n", thread_current ()->tid, upage);
-
   if (!pin)
     unpin_pte (pte);
 }
@@ -302,10 +299,7 @@ page_fault (struct intr_frame *f)
     kill (f);
   }
   else 
-  /* TODO: update comments: If fault in the user program or syscall, should get the info about where to get the page */
   {
-     // TODO
-     printf ("(tid=%d) page_fault = %p\n", thread_current()->tid, fault_addr);
      if (fault_addr > PHYS_BASE)
        debug_backtrace ();
 
@@ -336,7 +330,6 @@ page_fault (struct intr_frame *f)
          && ((pte == NULL) ||              /* Page is NOT allocated */
              (*pte & PTE_ADDR) == 0))      /* Page is NOT paged out*/
      {
-       printf ("(tid=%d) case 1: %p\n", thread_current()->tid, fault_page);
        stack_growth (fault_page);
        goto success;
      }
@@ -344,7 +337,6 @@ page_fault (struct intr_frame *f)
      /* Case 2. In the swap block*/
      if ((pte != NULL) && not_present && !(*pte & PTE_M) && (*pte & PTE_ADDR))
      {
-       printf ("(tid=%d) case 2: %p\n", thread_current()->tid, fault_page);
        load_page_from_swap (pte, fault_page, false);
        goto success;
      }
@@ -352,16 +344,12 @@ page_fault (struct intr_frame *f)
      /* Case 3. In the memory mapped file */
      if ((pte != NULL) && not_present && (*pte & PTE_M))
      {
-       printf ("(tid=%d) case 3: %p\n", thread_current()->tid, fault_page);
        struct suppl_pte *s_pte = suppl_pt_get_spte (&cur->suppl_pt, pte);
        load_page_from_file (s_pte, fault_page, false);
        goto success;
      }
 
      /* Case 4. Access to an invalid user address or a read-only page */
-     printf ("(tid=%d) case 4: fault_addr=%p pte=%p, *pte=%#x, not_present(%d) write(%d), user(%d)\n",
-         thread_current()->tid, fault_addr, pte, (pte != NULL) ? *pte : 0x0,  not_present, write, user);
-     debug_backtrace ();
      _exit (-1);
 
 success:

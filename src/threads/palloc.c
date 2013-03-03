@@ -109,8 +109,6 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
     {
       ASSERT (page != NULL);
       ASSERT ((void *) page < PHYS_BASE);
-      // TODO
-      printf ("(tid=%d) palloc_get_multiple %p\n", thread_current()->tid, page);
       struct thread *cur = thread_current ();
       if (flags & PAL_MMAP)
       {
@@ -125,9 +123,6 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         fte = (uint32_t *) suppl_pt_get_spte (&cur->suppl_pt, pte);
         pool->frame_table.frames[page_idx] =
             (uint32_t *) ((uint8_t *)fte - (unsigned) PHYS_BASE);
-        // TODO
-        printf ("(tid=%d) palloc_get_multiple frames[%d] = %p\n",
-            thread_current()->tid, (int) page_idx, pool->frame_table.frames[page_idx]);
       }
       else
       {
@@ -200,9 +195,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       if (flags & PAL_MMAP)
       {
         fte_new = (uint32_t *) ((uint8_t *) spte - (unsigned) PHYS_BASE);
-        // TODO
-        printf ("(tid=%d) palloc_get_multiple frames[?] = %p\n",
-            thread_current()->tid, fte_new);
       }
       else
         fte_new = pte_new;
@@ -223,8 +215,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
 
     if (fte_old == NULL)
     {
-      // TODO
-      printf ("page out found empty page %p\n", page);
       pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
@@ -247,35 +237,19 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     /* If the page is pinned, skip this frame table entry */
     if (*pte_old & PTE_I)
     {
-      // TODO
-      printf ("(tid=%d) page out skip pinned %p\n", thread_current()->tid, page);
       pool_increase_clock (pool);
       continue;
     }
 
-    /* If another process releases its pages from the frame table,
-       an unpresent PTE will show up here. */
-    // TODO This following situation is never true if locked in palloc_free_multiple
-    if (!(*pte_old & PTE_P))
-    {
-      // TODO
-      ASSERT (0);
-    }
-
+    ASSERT (*pte_old & PTE_P);
     ASSERT (page == ptov (*pte_old & PTE_ADDR));
     if (!(*pte_old & PTE_A))
     {
-      // TODO
-      printf ("(tid=%d) page out replace %p\n", thread_current()->tid, page);
-
       pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
       if (*pte_old & PTE_M)
       {
-        // TODO
-        printf ("(tid=%d) page out unmap %p\n", thread_current()->tid, page);
-
         lock_acquire (&file_flush_lock);
         *pte_old |= PTE_F;
         *pte_old |= PTE_A;
@@ -301,9 +275,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       }
       else
       {
-        // TODO
-        printf ("(tid=%d) page out swap %p\n", thread_current()->tid, page);
-
         lock_acquire (&swap_flush_lock);
         *pte_old |= PTE_F;
         *pte_old |= PTE_A;
@@ -329,10 +300,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     }
     else  /* If accessed */
     {
-      // TODO
-      printf ("(tid=%d) page out skip accessed %p\n", thread_current()->tid, page);
       *pte_old &= ~PTE_A;
-      // TODO
       invalidate_pagedir (thread_current()->pagedir);
       pool_increase_clock (pool);
     }
@@ -359,11 +327,6 @@ palloc_get_page (enum palloc_flags flags, uint8_t *page)
     else
       PANIC ("Running out of kernel memory pages... Kill the kernel :-(");
   }
-
-  // TODO
-  if (flags & PAL_USER)
-    printf ("(tid=%d) palloc_get_page %p for %p\n", thread_current()->tid, frame, page);
-
   return frame;
 }
 
@@ -396,11 +359,6 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
   for (i = 0; i < page_cnt; i++)
   {
       ASSERT (pool->frame_table.frames[page_idx + i] != NULL);
-      // TODO
-      printf ("(tid=%d) palloc_free_multiple frames[%d] = %p\n",
-              thread_current()->tid, (int) (page_idx + i),
-              pool->frame_table.frames[page_idx + i]);
-      // TODO should only check the equality below when *frame > PHYS_BASE
       pool->frame_table.frames[page_idx + i] = NULL;
   }
   lock_release(&pool->lock);
