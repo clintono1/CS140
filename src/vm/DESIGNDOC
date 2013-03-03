@@ -88,6 +88,7 @@ struct thread
 #define PTE_A 0x20              /* 1=accessed, 0=not acccessed. */
 #define PTE_D 0x40              /* 1=dirty, 0=not dirty (PTEs only). */
 #define PTE_I 0x80              /* 1=pinned, 0=not pinned */
+#define PTE_F 0x100             /* 1=being flushed, 0=not being flushed */
 #define MAX_SWAP_PAGE_NO 0xfffff
 
 ---- ALGORITHMS ----
@@ -98,7 +99,7 @@ struct thread
 Case 0: The present bit of the pte is set to one. This is the simplest case 
 that won't cause page fault and is handled by hardware translation via MMU.
 
-Case 1: Stack growth. We use heruistic method to detect whether this page
+Case 1: Stack growth. We use heuristic method to detect whether this page
 fault is caused by stack growth. If so, we allocated a zero page from the user
 pool and install the page. This is implemented in exceptino.c: stack_growth()
 
@@ -112,10 +113,10 @@ Case 3: Load from swap. If the page is not present and PTE_M bit is 0, and the
 top 20 bits of PTE is not empty, then it is in swap. The swap frame number is 
 obtained from the top 20 bits of PTE (a frame is 8 sectors). Then we can easily
 locate the frame in the swap using this swap frame number and swap in the data.
-This is inplemened in exception.c: load_page_from_swap().
+This is implemented in exception.c: load_page_from_swap().
 
 Case 4: If it is not present and PTE_M is 0 and the top 20 bits of PTE is also
-0, this means such page doens't exist. In this case, just exit(-1).
+0, this means such page doesn't exist. In this case, just exit(-1).
 
 >> A3: How does your code coordinate accessed and dirty bits between
 >> kernel and user virtual addresses that alias a single frame, or
@@ -165,9 +166,9 @@ Comparing with creating a supplementary page table entry for a swap page, this
 method saves both time and space.
 
 All pages that are in file (memory mapped file, code or data) can be located 
-by supplementary page table entries. We choose to use hashtable to implement our 
-supplementary page table because insertion, deletion and lookup only need O(1) 
-time in hashtable. Therefore, we can do virtual-to-physical mappings very 
+by supplementary page table entries. We choose to use hash table to implement
+our supplementary page table because insertion, deletion and lookup only need
+O(1) time in hash table. Therefore, we can do virtual-to-physical mappings very 
 efficiently.  
 
            PAGING TO AND FROM DISK
@@ -313,7 +314,7 @@ should cause the stack to be extended into the page that faulted.
 The following data structures has lock: 
 1. Pool lock: entire pool uses the same lock, only one process can acquire 
    this lock. Each thread must first acquire this lock and then sweep the 
-   frames with clock algorithm. This lock is releasd before doing I/O.
+   frames with clock algorithm. This lock is released before doing I/O.
 2. Pin-lock: Each process must first hold the pool lock and then acquire the
    pin-lock. This hierarchy structure prevented deadlock. Process should acquire
    this lock before setting or unsetting the page table entry.
@@ -322,7 +323,7 @@ The following data structures has lock:
    pre-loaded an pinned the buffer pages so it won't cause page faults during
    file reading/writing.
 4. Flush lock: inside the condition variable to let Q wait for P fully evicts 
-   its page to swap or filesys. This lock is at the bottom of the lock hierachy. 
+   its page to swap or filesys. This lock is at the bottom of the lock hierarchy. 
    Process won't try to acquire other locks when holding this lock. It won't
    cause deadlock.
 
@@ -425,7 +426,7 @@ kernel.
 >> design it this way.
 
 We are trying to minimize the synchronization's impact on parallelism. We
-guranteed when one process is doing I/O on page fault, other process don't
+guaranteed when one process is doing I/O on page fault, other process don't
 have to wait for this I/O to finish and they can start to handle their page 
 fault concurrently. Although we use global pool lock to make sure only one
 process can access the pool at a time, we released this lock before it start
@@ -466,12 +467,12 @@ help parallelism in this case.
 struct thread
 {
   ...
-  struct hash mmap_files;            /* Hashtable of memory mapped files */
+  struct hash mmap_files;            /* Hash table of memory mapped files */
   int mmap_files_num_ever;           /* # of files ever mapped, used as key */
   ...
 }
-We store information about memory mapped files as a hashtable "mmap_files" in 
-each thread. "mmap_files_num_ever" is used as a key in this hashtable.
+We store information about memory mapped files as a hash table "mmap_files" in 
+each thread. "mmap_files_num_ever" is used as a key in this hash table.
 
 <mmap.h>
 /* Memory mapped file */
@@ -493,7 +494,7 @@ this struct.
 >> memory subsystem.  Explain how the page fault and eviction
 >> processes differ between swap pages and other pages.
 
-The hashtable "mmap_files" is initialized when a process starts. Once a user
+The hash table "mmap_files" is initialized when a process starts. Once a user
 process maps a file to memory, pintos will populate page table and supplementary 
 page table according to the information of the file to be mapped. When some 
 process queries to the mapped data, it will cause a page fault and actually 
