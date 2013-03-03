@@ -251,6 +251,8 @@ In our design, a frame table entry stores pointer to
 1)  corresponding page table entry if the page is present or in swap
 or  
 2)  corresponding supplementary page table entry if the frame is in file
+These two cases are discriminated by manually decrease the stored user address
+of spte by PYS_BASE, and re-add it back when we use it. 
 
 When a process P obtains a frame that was previously used by a process Q, it 
 will first clear the PTE_P bit in the Q's PTE corresponding to the frame, write
@@ -311,7 +313,7 @@ should cause the stack to be extended into the page that faulted.
 The following data structures has lock: 
 1. Pool lock: entire pool uses the same lock, only one process can acquire 
    this lock. Each thread must first acquire this lock and then sweep the 
-   frames with clock algorithm. 
+   frames with clock algorithm. This lock is releasd before doing I/O.
 2. Pin-lock: Each process must first hold the pool lock and then acquire the
    pin-lock. This hierarchy structure prevented deadlock. Process should acquire
    this lock before setting or unsetting the page table entry.
@@ -320,9 +322,9 @@ The following data structures has lock:
    pre-loaded an pinned the buffer pages so it won't cause page faults during
    file reading/writing.
 4. Flush lock: inside the condition variable to let Q wait for P fully evicts 
-   its page to swap or filesys. This lock is at the bottom of the key chain.
-   Must first hold pool lock. Process won't try to acquire other locks when
-   holding this lock. So it won't cause deadlock.
+   its page to swap or filesys. This lock is at the bottom of the lock hierachy. 
+   Process won't try to acquire other locks when holding this lock. It won't
+   cause deadlock.
 
 Four conditions for deadlock:
 Limited access. 
@@ -460,6 +462,7 @@ help parallelism in this case.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+<thread.h>
 struct thread
 {
   ...
@@ -470,6 +473,7 @@ struct thread
 We store information about memory mapped files as a hashtable "mmap_files" in 
 each thread. "mmap_files_num_ever" is used as a key in this hashtable.
 
+<mmap.h>
 /* Memory mapped file */
 struct mmap_file
 {
