@@ -327,6 +327,17 @@ _read (int fd, void *buffer, unsigned size, uint8_t *esp)
   if (!preload_user_memory (buffer, size, true, esp))
     _exit (-1);
 
+  /* Verify whether the buffer to read data to is writable */
+  void *upage = pg_round_down (buffer);
+  while (upage < buffer + size)
+  {
+    uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
+    ASSERT (pte != NULL);
+    if (!(*pte & PTE_W))
+      _exit (-1);
+    upage += PGSIZE;
+  }
+
   int result = 0;
   struct thread *t = thread_current();
   if (fd == STDIN_FILENO)
