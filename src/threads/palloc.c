@@ -239,6 +239,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
 
     lock_acquire (&pool->frame_table.frames[clock_cur].pin_lock);
     bool pinned = *pte_old & PTE_I;
+    // TODO: suspicious lock release! if we released the lock here, it's no longer guranteed PTE_I is unchanged when we use it.
     lock_release (&pool->frame_table.frames[clock_cur].pin_lock);
 
     /* If the page is pinned, skip this frame table entry */
@@ -398,8 +399,6 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
               thread_current()->tid, (int) (page_idx + i),
               pool->frame_table.frames[page_idx + i].frame);
       // TODO should only check the equality below when *frame > PHYS_BASE
-      ASSERT (ptov (*pool->frame_table.frames[page_idx + i].frame & PTE_ADDR)
-              == kpage);
       pool->frame_table.frames[page_idx + i].frame = NULL;
   }
   lock_release(&pool->lock);

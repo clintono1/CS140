@@ -341,12 +341,6 @@ page_fault (struct intr_frame *f)
        goto success;
      }
 
-     // TODO
-     if ((unsigned)fault_page <= 0x804a000)
-     {
-       ASSERT (*pte & PTE_M);
-     }
-
      /* Case 2. In the swap block*/
      if ((pte != NULL) && not_present && !(*pte & PTE_M) && (*pte & PTE_ADDR))
      {
