@@ -247,27 +247,14 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     /* If the page is pinned, skip this frame table entry */
     if (*pte_old & PTE_I)
     {
-      // TODO
-      printf ("(tid=%d) page out skip pinned %p\n", thread_current()->tid, page);
       pool_increase_clock (pool);
       continue;
     }
 
-    /* If another process releases its pages from the frame table,
-       an unpresent PTE will show up here. */
-    // TODO This following situation is never true if locked in palloc_free_multiple
-    if (!(*pte_old & PTE_P))
-    {
-      // TODO
-      ASSERT (0);
-    }
-
+    ASSERT (*pte_old & PTE_P);
     ASSERT (page == ptov (*pte_old & PTE_ADDR));
     if (!(*pte_old & PTE_A))
     {
-      // TODO
-      printf ("(tid=%d) page out replace %p\n", thread_current()->tid, page);
-
       pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
@@ -329,8 +316,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     }
     else  /* If accessed */
     {
-      // TODO
-      printf ("(tid=%d) page out skip accessed %p\n", thread_current()->tid, page);
       *pte_old &= ~PTE_A;
       // TODO
       invalidate_pagedir (thread_current()->pagedir);
@@ -395,13 +380,12 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
   size_t i;
   for (i = 0; i < page_cnt; i++)
   {
-      ASSERT (pool->frame_table.frames[page_idx + i] != NULL);
-      // TODO
-      printf ("(tid=%d) palloc_free_multiple frames[%d] = %p\n",
-              thread_current()->tid, (int) (page_idx + i),
-              pool->frame_table.frames[page_idx + i]);
-      // TODO should only check the equality below when *frame > PHYS_BASE
-      pool->frame_table.frames[page_idx + i] = NULL;
+    // TODO
+    printf ("(tid=%d) palloc_free_multiple frames[%d] = %p\n",
+            thread_current()->tid, (int) (page_idx + i),
+            pool->frame_table.frames[page_idx + i]);
+    ASSERT (pool->frame_table.frames[page_idx + i] != NULL);
+    pool->frame_table.frames[page_idx + i] = NULL;
   }
   lock_release(&pool->lock);
 }

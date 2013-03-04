@@ -679,7 +679,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
   file_seek (file, ofs);
-  printf("load segment called!! writable(%d)\n", writable);
   struct thread *cur = thread_current();
   /* If not writable, then it's code page. Add this page to current thread's mmap hash */
   if (writable==0)  
@@ -694,8 +693,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
     mf->file = file;
     mf->upage = upage;
     mf->num_pages = ROUND_UP(read_bytes, PGSIZE)/PGSIZE;
-    //TODO
-    printf("mid=%d, upage=%p, num_pages=%d\n", (int)mf->mid, mf->upage, (int) mf->num_pages);
     if( hash_insert (&t->mmap_files, &mf->elem) != NULL)
       return false;
   }
@@ -729,8 +726,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       ofs = ofs + (uint32_t) PGSIZE;
       s_pte->bytes_read = page_read_bytes;
-      //TODO
-      printf(" upage=%p, writable=%d \n", upage, writable);
       hash_insert (&cur->suppl_pt, &s_pte->elem_hash);
 
       /* Advance. */

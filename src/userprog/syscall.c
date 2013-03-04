@@ -203,7 +203,7 @@ _exec (const char *cmd_line, uint8_t *esp)
   get_first_string (cmd_line, file_path);
 
   if (!preload_user_memory (cmd_line, strlen (cmd_line), false, esp))
-  {printf("wrong1\n");
+  {
     _exit (-1);
   }  
   /* Lock on process_execute since it needs to open the executable file */

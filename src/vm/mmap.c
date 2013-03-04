@@ -6,9 +6,6 @@
 #include "userprog/pagedir.h"
 #include "threads/palloc.h"
 
-// TODO
-#include <stdio.h>
-
 extern struct lock file_flush_lock;
 extern struct lock global_lock_filesys;
 
@@ -68,8 +65,6 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
         lock_release (&file_flush_lock);
 
         *pte &= ~PTE_P;
-        // TODO Remove due to duplicated a few lines below
-        // invalidate_pagedir (thread_current ()->pagedir);
 
         lock_acquire (&global_lock_filesys);
         off_t bytes_written;
@@ -86,11 +81,7 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
       }
 
       if (to_be_released)
-      {
-        // TODO
-        printf ("free kpage = %p\n", kpage);
         palloc_free_page (kpage);
-      }
     }
 
     struct hash_elem * spte_d = hash_delete (&cur->suppl_pt, &spte->elem_hash);
