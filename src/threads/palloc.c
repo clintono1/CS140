@@ -280,10 +280,11 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
         lock_acquire (&swap_flush_lock);
         *pte_old |= PTE_F;
         *pte_old |= PTE_A;
-        lock_release (&swap_flush_lock);
-
         *pte_old &= ~PTE_P;
         invalidate_pagedir (thread_current ()->pagedir);
+        lock_release (&swap_flush_lock);
+
+        
 
         *pte_old &= PTE_FLAGS;
         size_t swap_frame_no = swap_allocate_page (&swap_table);

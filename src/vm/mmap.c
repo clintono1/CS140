@@ -67,6 +67,7 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
         *pte |= PTE_F;
         *pte |= PTE_A;
         *pte &= ~PTE_P;
+        invalidate_pagedir (thread_current()->pagedir);
         lock_release (&file_flush_lock);
 
         lock_acquire (&global_lock_filesys);
