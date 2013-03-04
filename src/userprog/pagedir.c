@@ -71,6 +71,8 @@ pagedir_destroy (uint32_t *pd)
 
           if (to_be_released)
           {
+            PRINTF ("(tid=%d) pagedir destroy free pte = %p\n",
+                thread_current()->tid, (void *) pte);
             palloc_free_page (pte_get_page (*pte));
           }
           else
@@ -184,8 +186,10 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
   if (pte != NULL) 
     {
       ASSERT ((*pte & PTE_P) == 0);
+      acquire_user_pool_lock ();
       bool pin = (*pte & PTE_I) != 0;
       *pte = pte_create_user (kpage, writable) | (pin ? PTE_I : 0);
+      release_user_pool_lock ();
       return true;
     }
   else

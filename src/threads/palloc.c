@@ -110,7 +110,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
       ASSERT (page != NULL);
       ASSERT ((void *) page < PHYS_BASE);
       // TODO
-      printf ("(tid=%d) palloc_get_multiple %p\n", thread_current()->tid, page);
+      PRINTF ("(tid=%d) palloc_get_multiple %p\n", thread_current()->tid, page);
       struct thread *cur = thread_current ();
       if (flags & PAL_MMAP)
       {
@@ -126,7 +126,7 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         pool->frame_table.frames[page_idx] =
             (uint32_t *) ((uint8_t *)fte - (unsigned) PHYS_BASE);
         // TODO
-        printf ("(tid=%d) palloc_get_multiple frames[%d] = %p\n",
+        PRINTF ("(tid=%d) palloc_get_multiple frames[%d] = %p\n",
             thread_current()->tid, (int) page_idx, pool->frame_table.frames[page_idx]);
       }
       else
@@ -201,7 +201,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       {
         fte_new = (uint32_t *) ((uint8_t *) spte - (unsigned) PHYS_BASE);
         // TODO
-        printf ("(tid=%d) palloc_get_multiple frames[?] = %p\n",
+        PRINTF ("(tid=%d) page_out_then_get_page frames[?] = %p\n",
             thread_current()->tid, fte_new);
       }
       else
@@ -224,7 +224,8 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     if (fte_old == NULL)
     {
       // TODO
-      printf ("page out found empty page %p\n", page);
+      PRINTF ("(tid=%d) page out found empty frames[%d] page %p\n",
+          thread_current()->tid, (int)clock_cur, page);
       pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
@@ -255,13 +256,18 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     ASSERT (page == ptov (*pte_old & PTE_ADDR));
     if (!(*pte_old & PTE_A))
     {
+      // TODO
+      PRINTF ("(tid=%d) page out replace frames[%d] = %p --> %p\n",
+          thread_current()->tid, (int) clock_cur, pte_old, pte_new);
+
       pool->frame_table.frames[clock_cur] = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
       if (*pte_old & PTE_M)
       {
         // TODO
-        printf ("(tid=%d) page out unmap %p\n", thread_current()->tid, page);
+        PRINTF ("(tid=%d) page out unmap frames[%d] %p\n",
+            thread_current()->tid, (int) clock_cur, page);
 
         lock_acquire (&file_flush_lock);
         *pte_old |= PTE_F;
@@ -289,19 +295,19 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       else
       {
         // TODO
-        printf ("(tid=%d) page out swap %p\n", thread_current()->tid, page);
+        PRINTF ("(tid=%d) page out swap frames[%d] %p\n",
+            thread_current()->tid, (int) clock_cur, page);
 
         lock_acquire (&swap_flush_lock);
         *pte_old |= PTE_F;
         *pte_old |= PTE_A;
-        lock_release (&swap_flush_lock);
-
         *pte_old &= ~PTE_P;
         invalidate_pagedir (thread_current ()->pagedir);
-
         *pte_old &= PTE_FLAGS;
         size_t swap_frame_no = swap_allocate_page (&swap_table);
         *pte_old |= swap_frame_no << PGBITS;
+        lock_release (&swap_flush_lock);
+
         swap_write (&swap_table, swap_frame_no, page);
 
         lock_acquire (&swap_flush_lock);
@@ -347,7 +353,9 @@ palloc_get_page (enum palloc_flags flags, uint8_t *page)
 
   // TODO
   if (flags & PAL_USER)
-    printf ("(tid=%d) palloc_get_page %p for %p\n", thread_current()->tid, frame, page);
+  {
+    PRINTF ("(tid=%d) palloc_get_page %p for %p\n", thread_current()->tid, frame, page);
+  }
 
   return frame;
 }
@@ -381,7 +389,7 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
   for (i = 0; i < page_cnt; i++)
   {
     // TODO
-    printf ("(tid=%d) palloc_free_multiple frames[%d] = %p\n",
+    PRINTF ("(tid=%d) palloc_free_multiple frames[%d] = %p\n",
             thread_current()->tid, (int) (page_idx + i),
             pool->frame_table.frames[page_idx + i]);
     ASSERT (pool->frame_table.frames[page_idx + i] != NULL);
