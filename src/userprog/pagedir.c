@@ -50,6 +50,12 @@ pagedir_destroy (uint32_t *pd)
         {
           if (*pte & PTE_ADDR)
           {
+            lock_acquire (&swap_flush_lock);
+            while (*pte & PTE_F)
+            {
+              cond_wait (&swap_flush_cond, &swap_flush_lock);
+            }
+            lock_release (&swap_flush_lock);
             size_t swap_frame_no = (*pte >> PGBITS);
             swap_free ( &swap_table, swap_frame_no);
           }
