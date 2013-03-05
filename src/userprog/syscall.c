@@ -533,11 +533,10 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
   while (upage < vaddr + size)
   {
     uint32_t *pte = lookup_page (thread_current()->pagedir, upage, allocate);
-    if (pte == NULL || (*pte & PTE_ADDR) == 0)
+    if (pte == NULL || *pte == 0)
     {
-      if (!allocate)
+      if (!allocate && pte == NULL)
         return false;
-      ASSERT (pte != NULL);
       /* If the accessing page is not on stack, return false.
          Note: when to support malloc in user programs, it is also valid
          if [vaddr, vaddr+size) is in the allocated VA space. */
