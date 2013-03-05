@@ -146,6 +146,9 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage, bool pin)
   }
   lock_release (&file_flush_lock);
 
+  /* No need to hold the swap_flush_lock since this page is no longer present */
+  ASSERT (!(*pte & PTE_P));
+
   /* If MMF or code or initialized data, Load this page.
      If uninitialized data, load zero page 
      This is self-explanatory by s_pte->bytes_read and memset zeros*/
@@ -206,6 +209,9 @@ load_page_from_swap (uint32_t *pte, void *page, bool pin)
     cond_wait (&swap_flush_cond, &swap_flush_lock);
   }
   lock_release (&swap_flush_lock);
+
+  /* No need to hold the swap_flush_lock since this page is no longer present */
+  ASSERT (!(*pte & PTE_P));
 
   size_t swap_frame_no = (*pte >> PGBITS);
 

@@ -712,6 +712,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         return false;
       pte = lookup_page (cur->pagedir, upage, true);
       *pte |= PTE_M;
+      *pte |= PTE_U;
       s_pte->pte = pte;
       s_pte->file = file;
       s_pte->offset = ofs;

@@ -10,7 +10,7 @@
 #include "lib/kernel/hash.h"
 #include "vm/page.h"
 
-/* Hack to suppress warnings and errors in IDE */
+/* Hack to suppress IDE parsing errors */
 #ifndef USERPROG
 #define USERPROG
 #endif

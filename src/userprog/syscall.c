@@ -522,6 +522,22 @@ _munmap(mapid_t mapping)
     mmap_free_file (h_elem_mf, NULL);
 }
 
+static void
+load_page (uint32_t *pte, void *upage)
+{
+  if ((*pte & PTE_M) == 0)
+  {
+    load_page_from_swap (pte, upage, true);
+  }
+  else
+  {
+    struct suppl_pte *spte;
+    spte = suppl_pt_get_spte (&thread_current()->suppl_pt, pte);
+    load_page_from_file (spte, upage, true);
+  }
+  ASSERT (*pte & PTE_I);
+}
+
 /* Preload user memory pages between VADDR and VADDR + SIZE.
    If ALLOCATE is true, allocate a new memory page if not found. */
 static bool
@@ -537,9 +553,8 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
     uint32_t *pte = lookup_page (thread_current()->pagedir, upage, allocate);
     if (pte == NULL || *pte == 0)
     {
-      if (!allocate)
+      if (!allocate && pte == NULL)
         return false;
-      ASSERT (pte != NULL);
       /* If the accessing page is not on stack, return false.
          Note: when to support malloc in user programs, it is also valid
          if [vaddr, vaddr+size) is in the allocated VA space. */
@@ -560,23 +575,19 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
     }
     else if ((*pte & PTE_P) == 0)
     {
-      if ((*pte & PTE_M) == 0)
-      {
-        load_page_from_swap (pte, upage, true);
-      }
-      else
-      {
-        struct suppl_pte *spte;
-        spte = suppl_pt_get_spte (&thread_current()->suppl_pt, pte);
-        load_page_from_file (spte, upage, true);
-      }
-      ASSERT (*pte & PTE_I);
+      load_page (pte, upage);
     }
     else
     {
-      acquire_user_pool_lock ();
+      struct lock *frame_lock = get_user_pool_frame_lock (pte);
+      lock_acquire (frame_lock);
       *pte |= PTE_I;
-      release_user_pool_lock ();
+      if (!(*pte & PTE_P))
+      {
+        lock_release (frame_lock);
+        load_page (pte, upage);
+      }
+      lock_release (frame_lock);
     }
     upage += PGSIZE;
   }
