@@ -50,44 +50,47 @@ pagedir_destroy (uint32_t *pd)
         {
           if (*pte & PTE_ADDR)
           {
+            // TODO duplicate code
             lock_acquire (&swap_flush_lock);
             while (*pte & PTE_F)
             {
               cond_wait (&swap_flush_cond, &swap_flush_lock);
             }
-            lock_release (&swap_flush_lock);
+            ASSERT (*pte & PTE_ADDR);
             size_t swap_frame_no = (*pte >> PGBITS);
             swap_free ( &swap_table, swap_frame_no);
+            lock_release (&swap_flush_lock);
           }
         }
         else
         {
-          bool to_be_released = false;
-          acquire_user_pool_lock ();
-          *pte |= PTE_I;
-          if (*pte & PTE_P)
-            to_be_released = true;
-          release_user_pool_lock ();
+          struct lock *frame_lock = get_user_pool_frame_lock (pte);
+          lock_acquire (frame_lock);
 
-          if (to_be_released)
+          *pte |= PTE_I;
+
+          if (*pte & PTE_P)
           {
+            // TODO
             PRINTF ("(tid=%d) pagedir destroy free pte = %p\n",
                 thread_current()->tid, (void *) pte);
             palloc_free_page (pte_get_page (*pte));
           }
           else
           {
+            // TODO duplicate code
             lock_acquire (&swap_flush_lock);
             while (*pte & PTE_F)
             {
               cond_wait (&swap_flush_cond, &swap_flush_lock);
             }
-            lock_release (&swap_flush_lock);
-
             ASSERT (*pte & PTE_ADDR);
             size_t swap_frame_no = (*pte >> PGBITS);
             swap_free ( &swap_table, swap_frame_no);
+            lock_release (&swap_flush_lock);
           }
+
+          lock_release (frame_lock);
         }
       }
       palloc_free_page (pt);
@@ -186,10 +189,9 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
   if (pte != NULL) 
     {
       ASSERT ((*pte & PTE_P) == 0);
-      acquire_user_pool_lock ();
       bool pin = (*pte & PTE_I) != 0;
-      *pte = pte_create_user (kpage, writable) | (pin ? PTE_I : 0);
-      release_user_pool_lock ();
+      uint32_t temp = pte_create_user (kpage, writable) | (pin ? PTE_I : 0);
+      *pte = temp;
       return true;
     }
   else

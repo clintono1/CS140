@@ -6,6 +6,9 @@
 #include "userprog/pagedir.h"
 #include "threads/palloc.h"
 
+// TODO
+#include <stdio.h>
+
 extern struct lock file_flush_lock;
 extern struct lock global_lock_filesys;
 
@@ -42,33 +45,43 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
   size_t pg_cnt = 0;
   for (pg_cnt = 0; pg_cnt < pg_num; pg_cnt++)
   {
+    struct hash_elem * spte_d;
     uint32_t *pte = lookup_page (cur->pagedir, mmf_ptr->upage +
                                  pg_cnt * PGSIZE, false);
     ASSERT (*pte & PTE_M);
     struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte);
-    bool writable = file_is_writable(spte->file);
-    void * kpage = pte_get_page (*pte);
+
+    // TODO
+    PRINTF ("(tid=%d) mmap_free_file upage = %#x, pte = %p, *pte = %#x\n",
+        thread_current()->tid, (unsigned) (mmf_ptr->upage + pg_cnt * PGSIZE), pte, *pte);
+
     if (*pte & PTE_P)
     {
-      bool to_be_released = false;
-      acquire_user_pool_lock ();
-      *pte |= PTE_I;
-      if (*pte & PTE_P)
-        to_be_released = true;
-      release_user_pool_lock ();
+      struct lock *frame_lock = get_user_pool_frame_lock (pte);
+      lock_acquire (frame_lock);
 
-      if ((*pte & PTE_P) && (*pte & PTE_D))
+      if (!(*pte & PTE_P))
+        goto release_spte;
+
+      *pte |= PTE_I;
+      void * kpage = pte_get_page (*pte);
+
+      if (*pte & PTE_D)
       {
-        lock_acquire (&file_flush_lock);
+        // TODO
+        // lock_acquire (&file_flush_lock);
+        /* No need to acquire flush lock since other processes will not access
+           this page and try to page it in if not present */
         *pte |= PTE_F;
         *pte |= PTE_A;
-        lock_release (&file_flush_lock);
-
         *pte &= ~PTE_P;
+        invalidate_pagedir (thread_current ()->pagedir);
+        // TODO
+        // lock_release (&file_flush_lock);
 
         lock_acquire (&global_lock_filesys);
         off_t bytes_written;
-        if (writable)
+        if (file_is_writable (spte->file))
         {
           bytes_written = file_write_at (spte->file, kpage,
                                          spte->bytes_read, spte->offset);
@@ -79,14 +92,15 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
         }
         lock_release (&global_lock_filesys);
       }
+      palloc_free_page (kpage);
 
-      if (to_be_released)
-        palloc_free_page (kpage);
+      lock_release (frame_lock);
     }
 
-    struct hash_elem * spte_d = hash_delete (&cur->suppl_pt, &spte->elem_hash);
+release_spte:
+    spte_d = hash_delete (&cur->suppl_pt, &spte->elem_hash);
     /* ASSERT that this spte must be in the original suppl_pt */
-    ASSERT (spte_d);
+    ASSERT (spte_d != NULL);
     *pte = 0;
     invalidate_pagedir (thread_current()->pagedir);
     free (spte);

@@ -533,7 +533,7 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
   while (upage < vaddr + size)
   {
     uint32_t *pte = lookup_page (thread_current()->pagedir, upage, allocate);
-    if (pte == NULL || *pte == 0)
+    if (pte == NULL || (*pte & PTE_ADDR) == 0)
     {
       if (!allocate)
         return false;
@@ -558,6 +558,7 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
     }
     else if ((*pte & PTE_P) == 0)
     {
+load_page:
       if ((*pte & PTE_M) == 0)
       {
         load_page_from_swap (pte, upage, true);
@@ -572,9 +573,15 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
     }
     else
     {
-      acquire_user_pool_lock ();
+      struct lock *frame_lock = get_user_pool_frame_lock (pte);
+      lock_acquire (frame_lock);
       *pte |= PTE_I;
-      release_user_pool_lock ();
+      if (!(*pte & PTE_P))
+      {
+        lock_release (frame_lock);
+        goto load_page;
+      }
+      lock_release (frame_lock);
     }
     upage += PGSIZE;
   }
