@@ -50,19 +50,6 @@ static void init_pool (struct pool *, void *base, size_t page_cnt,
                        const char *name);
 static bool page_from_pool (const struct pool *, void *page);
 
-// TODO
-void acquire_user_pool_lock ()
-{
-  lock_acquire (&user_pool.lock);
-}
-
-// TODO
-void release_user_pool_lock ()
-{
-  lock_release (&user_pool.lock);
-}
-
-
 /* Initializes the page allocator.  At most USER_PAGE_LIMIT
    pages are put into the user pool. */
 void
