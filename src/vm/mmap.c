@@ -9,7 +9,6 @@
 // TODO
 #include <stdio.h>
 
-extern struct lock file_flush_lock;
 extern struct lock global_lock_filesys;
 
 static unsigned
@@ -68,16 +67,12 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
 
       if (*pte & PTE_D)
       {
-        // TODO
-        // lock_acquire (&file_flush_lock);
         /* No need to acquire flush lock since other processes will not access
            this page and try to page it in if not present */
         *pte |= PTE_F;
         *pte |= PTE_A;
         *pte &= ~PTE_P;
         invalidate_pagedir (thread_current ()->pagedir);
-        // TODO
-        // lock_release (&file_flush_lock);
 
         lock_acquire (&global_lock_filesys);
         off_t bytes_written;

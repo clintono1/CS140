@@ -28,6 +28,20 @@ pagedir_create (void)
   return pd;
 }
 
+static void
+free_swap_entry (uint32_t *pte)
+{
+  lock_acquire (&swap_flush_lock);
+  while (*pte & PTE_F)
+  {
+    cond_wait (&swap_flush_cond, &swap_flush_lock);
+  }
+  ASSERT (*pte & PTE_ADDR);
+  size_t swap_frame_no = (*pte >> PGBITS);
+  swap_free ( &swap_table, swap_frame_no);
+  lock_release (&swap_flush_lock);
+}
+
 /* Destroys page directory PD, freeing all the pages it
    references. */
 void
@@ -49,18 +63,7 @@ pagedir_destroy (uint32_t *pd)
         if (!(*pte & PTE_P))
         {
           if (*pte & PTE_ADDR)
-          {
-            // TODO duplicate code
-            lock_acquire (&swap_flush_lock);
-            while (*pte & PTE_F)
-            {
-              cond_wait (&swap_flush_cond, &swap_flush_lock);
-            }
-            ASSERT (*pte & PTE_ADDR);
-            size_t swap_frame_no = (*pte >> PGBITS);
-            swap_free ( &swap_table, swap_frame_no);
-            lock_release (&swap_flush_lock);
-          }
+            free_swap_entry (pte);
         }
         else
         {
@@ -77,18 +80,7 @@ pagedir_destroy (uint32_t *pd)
             palloc_free_page (pte_get_page (*pte));
           }
           else
-          {
-            // TODO duplicate code
-            lock_acquire (&swap_flush_lock);
-            while (*pte & PTE_F)
-            {
-              cond_wait (&swap_flush_cond, &swap_flush_lock);
-            }
-            ASSERT (*pte & PTE_ADDR);
-            size_t swap_frame_no = (*pte >> PGBITS);
-            swap_free ( &swap_table, swap_frame_no);
-            lock_release (&swap_flush_lock);
-          }
+            free_swap_entry (pte);
 
           lock_release (frame_lock);
         }
