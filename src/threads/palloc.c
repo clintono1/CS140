@@ -282,10 +282,10 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
           thread_current()->tid, (int) clock_cur, page);
 
       lock_acquire (&file_flush_lock);
-      *pte_old |= PTE_F;
-      *pte_old |= PTE_A;
-      *pte_old &= ~PTE_P;
-      invalidate_pagedir (thread_current ()->pagedir);
+        *pte_old |= PTE_F;
+        *pte_old |= PTE_A;
+        *pte_old &= ~PTE_P;
+        invalidate_pagedir (thread_current ()->pagedir);
       lock_release (&file_flush_lock);
 
       /* Initialized/uninitialized data pages are changed to normal memory
@@ -300,8 +300,8 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       }
 
       lock_acquire (&file_flush_lock);
-      *pte_old &= ~PTE_F;
-      cond_broadcast (&file_flush_cond, &file_flush_lock);
+        *pte_old &= ~PTE_F;
+        cond_broadcast (&file_flush_cond, &file_flush_lock);
       lock_release (&file_flush_lock);
     }
     else
@@ -311,20 +311,20 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
           thread_current()->tid, (int) clock_cur, page);
 
       lock_acquire (&swap_flush_lock);
-      *pte_old |= PTE_F;
-      *pte_old |= PTE_A;
-      *pte_old &= ~PTE_P;
-      invalidate_pagedir (thread_current ()->pagedir);
-      *pte_old &= PTE_FLAGS;
-      size_t swap_frame_no = swap_allocate_page (&swap_table);
-      *pte_old |= swap_frame_no << PGBITS;
+        *pte_old |= PTE_F;
+        *pte_old |= PTE_A;
+        *pte_old &= ~PTE_P;
+        invalidate_pagedir (thread_current ()->pagedir);
+        *pte_old &= PTE_FLAGS;
+        size_t swap_frame_no = swap_allocate_page (&swap_table);
+        *pte_old |= swap_frame_no << PGBITS;
       lock_release (&swap_flush_lock);
 
       swap_write (&swap_table, swap_frame_no, page);
 
       lock_acquire (&swap_flush_lock);
-      *pte_old &= ~PTE_F;
-      cond_broadcast (&swap_flush_cond, &swap_flush_lock);
+        *pte_old &= ~PTE_F;
+        cond_broadcast (&swap_flush_cond, &swap_flush_lock);
       lock_release (&swap_flush_lock);
     }
     lock_release (&pool->frame_table.frames[clock_cur].lock);

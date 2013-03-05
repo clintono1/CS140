@@ -520,6 +520,22 @@ _munmap(mapid_t mapping)
     mmap_free_file (h_elem_mf, NULL);
 }
 
+static void
+load_page (uint32_t *pte, void *upage)
+{
+  if ((*pte & PTE_M) == 0)
+  {
+    load_page_from_swap (pte, upage, true);
+  }
+  else
+  {
+    struct suppl_pte *spte;
+    spte = suppl_pt_get_spte (&thread_current()->suppl_pt, pte);
+    load_page_from_file (spte, upage, true);
+  }
+  ASSERT (*pte & PTE_I);
+}
+
 /* Preload user memory pages between VADDR and VADDR + SIZE.
    If ALLOCATE is true, allocate a new memory page if not found. */
 static bool
@@ -557,18 +573,7 @@ preload_user_memory (const void *vaddr, size_t size, bool allocate, uint8_t *esp
     }
     else if ((*pte & PTE_P) == 0)
     {
-load_page:
-      if ((*pte & PTE_M) == 0)
-      {
-        load_page_from_swap (pte, upage, true);
-      }
-      else
-      {
-        struct suppl_pte *spte;
-        spte = suppl_pt_get_spte (&thread_current()->suppl_pt, pte);
-        load_page_from_file (spte, upage, true);
-      }
-      ASSERT (*pte & PTE_I);
+      load_page (pte, upage);
     }
     else
     {
@@ -578,7 +583,7 @@ load_page:
       if (!(*pte & PTE_P))
       {
         lock_release (frame_lock);
-        goto load_page;
+        load_page (pte, upage);
       }
       lock_release (frame_lock);
     }
