@@ -100,8 +100,6 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
       ASSERT ((void *) page < PHYS_BASE);
       /* Only support allocate one page for user process at a time */
       ASSERT (page_cnt == 1);
-      // TODO
-      PRINTF ("(tid=%d) palloc_get_multiple %p\n", thread_current()->tid, page);
 
       lock_acquire (&pool->frame_table.frames[page_idx].lock);
       struct thread *cur = thread_current ();
@@ -123,10 +121,6 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt, uint8_t *page)
         pool->frame_table.frames[page_idx].frame = pte;
       }
       lock_release (&pool->frame_table.frames[page_idx].lock);
-      // TODO
-      PRINTF ("(tid=%d) palloc_get_multiple frames[%d] = %p\n",
-          thread_current()->tid, (int) page_idx,
-          pool->frame_table.frames[page_idx].frame);
     }
     else /* Kernel Pool */
     {
@@ -178,13 +172,12 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
   uint32_t *fte_new = NULL;
   struct thread *cur = thread_current ();
 
-  // TODO Can it be a race if the page to be paged in is being paged out now?
   if (flags & PAL_USER)
   {
     pte_new = lookup_page (cur->pagedir, upage, true);
     ASSERT ((void *) pte_new > PHYS_BASE);
 
-    /* No need to lock here since pte_new is not visible to other process yet */
+    /* No need to lock here since pte_new is not visible to other process yet*/
     *pte_new |= PTE_I;
 
     if (*pte_new & PTE_M)
@@ -192,12 +185,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte_new);
       ASSERT ((void *) spte > PHYS_BASE);
       if (flags & PAL_MMAP)
-      {
         fte_new = (uint32_t *) ((uint8_t *) spte - (unsigned) PHYS_BASE);
-        // TODO
-        PRINTF ("(tid=%d) page_out_then_get_page frames[?] = %p\n",
-            thread_current()->tid, fte_new);
-      }
       else
         fte_new = pte_new;
     }
@@ -217,9 +205,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
 
     if (fte_old == NULL)
     {
-      // TODO
-      PRINTF ("(tid=%d) page out found empty frames[%d] page %p\n",
-          thread_current()->tid, (int)clock_cur, page);
       pool->frame_table.frames[clock_cur].frame = fte_new;
       pool_increase_clock (pool);
       lock_release (&pool->lock);
@@ -267,20 +252,12 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       continue;
     }
 
-    // TODO
-    PRINTF ("(tid=%d) page out replace frames[%d] = %p --> %p\n",
-        thread_current()->tid, (int) clock_cur, pte_old, pte_new);
-
     pool->frame_table.frames[clock_cur].frame = fte_new;
     pool_increase_clock (pool);
     lock_release (&pool->lock);
 
     if (*pte_old & PTE_M)
     {
-      // TODO
-      PRINTF ("(tid=%d) page out unmap frames[%d] %p\n",
-          thread_current()->tid, (int) clock_cur, page);
-
       lock_acquire (&file_flush_lock);
         *pte_old |= PTE_F;
         *pte_old |= PTE_A;
@@ -306,10 +283,6 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
     }
     else
     {
-      // TODO
-      PRINTF ("(tid=%d) page out swap frames[%d] %p\n",
-          thread_current()->tid, (int) clock_cur, page);
-
       lock_acquire (&swap_flush_lock);
         *pte_old |= PTE_F;
         *pte_old |= PTE_A;
@@ -355,13 +328,6 @@ palloc_get_page (enum palloc_flags flags, uint8_t *page)
     else
       PANIC ("Running out of kernel memory pages... Kill the kernel :-(");
   }
-
-  // TODO
-  if (flags & PAL_USER)
-  {
-    PRINTF ("(tid=%d) palloc_get_page %p for %p\n", thread_current()->tid, frame, page);
-  }
-
   return frame;
 }
 
@@ -393,10 +359,6 @@ palloc_free_multiple (void *kpage, size_t page_cnt)
   size_t i;
   for (i = 0; i < page_cnt; i++)
   {
-    // TODO
-    PRINTF ("(tid=%d) palloc_free_multiple frames[%d] = %p\n",
-            thread_current()->tid, (int) (page_idx + i),
-            pool->frame_table.frames[page_idx + i].frame);
     ASSERT (pool->frame_table.frames[page_idx + i].frame != NULL);
     pool->frame_table.frames[page_idx + i].frame = NULL;
   }

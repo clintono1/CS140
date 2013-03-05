@@ -73,12 +73,7 @@ pagedir_destroy (uint32_t *pd)
           *pte |= PTE_I;
 
           if (*pte & PTE_P)
-          {
-            // TODO
-            PRINTF ("(tid=%d) pagedir destroy free pte = %p\n",
-                thread_current()->tid, (void *) pte);
             palloc_free_page (pte_get_page (*pte));
-          }
           else
             free_swap_entry (pte);
 

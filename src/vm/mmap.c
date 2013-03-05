@@ -6,9 +6,6 @@
 #include "userprog/pagedir.h"
 #include "threads/palloc.h"
 
-// TODO
-#include <stdio.h>
-
 extern struct lock global_lock_filesys;
 
 static unsigned
@@ -49,10 +46,6 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
                                  pg_cnt * PGSIZE, false);
     ASSERT (*pte & PTE_M);
     struct suppl_pte *spte = suppl_pt_get_spte (&cur->suppl_pt, pte);
-
-    // TODO
-    PRINTF ("(tid=%d) mmap_free_file upage = %#x, pte = %p, *pte = %#x\n",
-        thread_current()->tid, (unsigned) (mmf_ptr->upage + pg_cnt * PGSIZE), pte, *pte);
 
     if (*pte & PTE_P)
     {
