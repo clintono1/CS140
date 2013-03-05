@@ -366,7 +366,6 @@ page_fault (struct intr_frame *f)
      /* Case 4. Access to an invalid user address or a read-only page */
      PRINTF ("(tid=%d) case 4: fault_addr=%p pte=%p, *pte=%#x, not_present(%d) write(%d), user(%d)\n",
          thread_current()->tid, fault_addr, pte, (pte != NULL) ? *pte : 0x0,  not_present, write, user);
-     debug_backtrace ();
      _exit (-1);
 
 success:

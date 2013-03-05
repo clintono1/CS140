@@ -299,9 +299,8 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       *pte_old |= PTE_A;
       *pte_old &= ~PTE_P;
       invalidate_pagedir (thread_current ()->pagedir);
-
       // TODO
-      // lock_release (&file_flush_lock);
+      lock_release (&file_flush_lock);
 
       /* Initialized/uninitialized data pages are changed to normal memory
          pages once loaded. Thus they should not reach here. */
@@ -315,7 +314,7 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       }
 
       // TODO
-      // lock_acquire (&file_flush_lock);
+      lock_acquire (&file_flush_lock);
       *pte_old &= ~PTE_F;
       cond_broadcast (&file_flush_cond, &file_flush_lock);
       lock_release (&file_flush_lock);
@@ -335,12 +334,12 @@ page_out_then_get_page (struct pool *pool, enum palloc_flags flags, uint8_t *upa
       size_t swap_frame_no = swap_allocate_page (&swap_table);
       *pte_old |= swap_frame_no << PGBITS;
       // TODO
-      // lock_release (&swap_flush_lock);
+      lock_release (&swap_flush_lock);
 
       swap_write (&swap_table, swap_frame_no, page);
 
       // TODO
-      // lock_acquire (&swap_flush_lock);
+      lock_acquire (&swap_flush_lock);
       *pte_old &= ~PTE_F;
       cond_broadcast (&swap_flush_cond, &swap_flush_lock);
       lock_release (&swap_flush_lock);
