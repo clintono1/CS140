@@ -31,13 +31,16 @@ dir_create (block_sector_t sector, size_t entry_cnt)
 
 /* Opens and returns the directory for the given INODE, of which
    it takes ownership.  Returns a null pointer on failure. */
-struct dir *
+//directory文件有了inode，需要做一个directory把它包起来
+//有了inode，既可以做一个directory包住，又可以做一个file包住
+struct dir *  
 dir_open (struct inode *inode) 
 {
+  //分配内存
   struct dir *dir = calloc (1, sizeof *dir);
   if (inode != NULL && dir != NULL)
     {
-      dir->inode = inode;
+      dir->inode = inode;  //给做一个wrapper，包着direcotry file的inode
       dir->pos = 0;
       return dir;
     }
@@ -59,6 +62,7 @@ dir_open_root (void)
 
 /* Opens and returns a new directory for the same inode as DIR.
    Returns a null pointer on failure. */
+//两个dir指向同一个inode（这个inode是directory file的inode）
 struct dir *
 dir_reopen (struct dir *dir) 
 {
@@ -97,7 +101,7 @@ lookup (const struct dir *dir, const char *name,
   
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-
+  //这里需要改inode_read_at以支持indexed file 每次读e这么大，从ofs开始读
   for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
        ofs += sizeof e) 
     if (e.in_use && !strcmp (name, e.name)) 
@@ -138,6 +142,7 @@ dir_lookup (const struct dir *dir, const char *name,
    Returns true if successful, false on failure.
    Fails if NAME is invalid (i.e. too long) or a disk or memory
    error occurs. */
+// 向某个directory添加一个name<->node_sector的entry
 bool
 dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
 {
@@ -159,7 +164,7 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   /* Set OFS to offset of free slot.
      If there are no free slots, then it will be set to the
      current end-of-file.
-     
+
      inode_read_at() will only return a short read at end of file.
      Otherwise, we'd need to verify that we didn't get a short
      read due to something intermittent such as low memory. */
@@ -181,6 +186,7 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
 /* Removes any entry for NAME in DIR.
    Returns true if successful, false on failure,
    which occurs only if there is no file with the given NAME. */
+//是指改目录下名字是name的文件的inode以及文件的所有block被删了，目录下仍有这个entry，只不过inuse置为false
 bool
 dir_remove (struct dir *dir, const char *name) 
 {
@@ -207,11 +213,11 @@ dir_remove (struct dir *dir, const char *name)
     goto done;
 
   /* Remove inode. */
-  inode_remove (inode);
+  inode_remove (inode);  //配合下面的inode_close
   success = true;
 
  done:
-  inode_close (inode);
+  inode_close (inode);  //同时删掉14个pointer指向的block
   return success;
 }
 

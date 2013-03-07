@@ -48,8 +48,8 @@ filesys_create (const char *name, off_t initial_size)
   block_sector_t inode_sector = 0;
   struct dir *dir = dir_open_root ();
   bool success = (dir != NULL
-                  && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size)
+                  && free_map_allocate (1, &inode_sector)  //ask free_list给这个新文件分配一个sector存放inode
+                  && inode_create (inode_sector, initial_size)  //给这个sector写上inode信息：长度，根据大小初始化14个pointer，给每个pointer分配block，给每个block写满0
                   && dir_add (dir, name, inode_sector));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
