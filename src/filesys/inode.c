@@ -11,11 +11,12 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 /* 128 indexes per sector*/
+#define DIRECT_IDX_CNT 124
 #define IDX_PER_SECTOR (BLOCK_SECTOR_SIZE/4)
-#define CAPACITY_L0    (123*BLOCK_SECTOR_SIZE)
+#define CAPACITY_L0    (DIRECT_IDX_CNT*BLOCK_SECTOR_SIZE)
 #define CAPACITY_L1    (IDX_PER_SECTOR*BLOCK_SECTOR_SIZE)
 #define CAPACITY_L2    (IDX_PER_SECTOR*IDX_PER_SECTOR*BLOCK_SECTOR_SIZE)
-#define DIRECT_IDX_CNT 124
+
 
 /* On-disk inode.
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
@@ -92,7 +93,9 @@ indirect_get_sector (block_sector_t sector, off_t ofs)
   if (indirect_block == NULL)
     return -1;
   cache_read(sector, indirect_block);
-  return indirect_block->idx[ofs];
+  block_sector_t sec = indirect_block->idx[ofs];
+  free(indirect_block);
+  return sec;
 }
 
 /* For seek pointer at OFS in a file, return 
@@ -286,6 +289,7 @@ inode_extend_single(struct inode_disk *inode_disk)
         double_indirect_blk->idx[ofs_l2] = data_sector;
         cache_write(indirect_blk->idx[ofs1], double_indirect_blk);
         free(indirect_blk);
+        free(double_indirect_blk);
         return true;
       }
     }
@@ -393,6 +397,7 @@ inode_open (block_sector_t sector)
     return NULL;
   cache_read ( sector, inode_dsk);
   inode->length = inode_dsk->length;
+  free(inode_dsk);
   return inode;
 }
 
@@ -445,6 +450,7 @@ inode_close (struct inode *inode)
             sector = byte_to_sector( inode_dsk, ofs);
             free_map_release(sector, 1);
           }
+          free(inode_dsk);
           free_map_release (inode->sector, 1);
         }
       /* remove the in-memory inode if open_cnt = 0*/
@@ -482,6 +488,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     {
       /* Disk sector to read, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode_dsk, offset);
+//TODO:
       //printf("                   offset=%d, at sector %d\n", (int)offset, (int)sector_idx);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
@@ -512,6 +519,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       offset += chunk_size;
       bytes_read += chunk_size;
     }
+  free(inode_dsk);
   return bytes_read;
 }
 
@@ -570,6 +578,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       offset += chunk_size;
       bytes_written += chunk_size;
     }
+  free(inode_dsk);
   return bytes_written;
 }
 
