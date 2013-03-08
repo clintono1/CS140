@@ -38,9 +38,8 @@ void debug_backtrace_all (void);
 #define NOT_REACHED() for (;;)
 #endif /* lib/debug.h */
 
-// #define PDEBUG
 #ifdef PDEBUG
-#define PRINTF(...) printf(__VA_ARGS__)
+#define PRINTF(...) printf (__VA_ARGS__)
 #else
 #define PRINTF(...)
 #endif
