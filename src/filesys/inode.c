@@ -11,7 +11,7 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 /* 128 indexes per sector*/
-#define DIRECT_IDX_CNT 124
+#define DIRECT_IDX_CNT 123
 #define IDX_PER_SECTOR (BLOCK_SECTOR_SIZE/4)
 #define CAPACITY_L0    (DIRECT_IDX_CNT*BLOCK_SECTOR_SIZE)
 #define CAPACITY_L1    (IDX_PER_SECTOR*BLOCK_SECTOR_SIZE)
@@ -22,6 +22,7 @@
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
+    block_sector_t sector;              /* Sector number of disk location.*/
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
     block_sector_t idx0[DIRECT_IDX_CNT];     /* Direct index */
@@ -54,7 +55,7 @@ struct inode
     struct lock lock_inode;             /* Inode lock */
   };
 
-//dummy cache
+//dummy cache, Jinchao, please implement these 4 interfaces in cache.c
 static void cache_read( block_sector_t sector, void * buffer)
 {
   block_read(fs_device, sector, buffer);
@@ -299,17 +300,30 @@ inode_extend_single(struct inode_disk *inode_disk)
     return false;
 }
 
-/* Extend the length of the file to OFS by allocating new blocks*/
-// 扩展inode_disk到OFS这么长
+/* Extend the length of the file to exactly LENGTH, possibly allocating new blocks*/
 static bool 
-inode_extend_multiple(struct inode_disk *inode_disk, off_t length)
+inode_extend_to_size(struct inode_disk *inode_disk, const off_t length)
 {
-  while ( inode_disk->length < length )
+  off_t extention = length - inode_disk->length;
+  off_t cur_left = ROUND_UP(inode_disk->length, BLOCK_SECTOR_SIZE) - inode_disk->length;
+  /* Case 1: no need to allocate new sectors */
+  if (extention <= cur_left)
   {
-    if (!inode_extend_single(inode_disk))
-      return false;
+    inode_disk->length = length;
+    return true;
   }
-  return true;
+  else
+  {
+    inode_disk->length = ROUND_UP(inode_disk->length, BLOCK_SECTOR_SIZE);
+    while ( inode_disk->length < length )
+    {
+      if (!inode_extend_single(inode_disk))
+        return false;
+    }
+    inode_disk->length = length;
+    return true;
+  }
+
 }
 
 
@@ -345,12 +359,11 @@ inode_create (block_sector_t sector, off_t length)
   if (disk_inode == NULL)
     return false;
   disk_inode->length = 0;
-  inode_extend_multiple( disk_inode, length);
+  inode_extend_to_size( disk_inode, length);
   ASSERT(disk_inode->length >= length);
   ASSERT(disk_inode->length-length < BLOCK_SECTOR_SIZE);
-  disk_inode->length= length;
-  disk_inode->length = length;
   disk_inode->magic = INODE_MAGIC;
+  disk_inode->sector = sector;
   cache_write(sector, disk_inode);
   free (disk_inode);
   return true;
@@ -427,6 +440,7 @@ inode_close (struct inode *inode)
   if (inode == NULL)
     return;
 
+  lock_acquire(&inode->lock_inode);
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
@@ -454,8 +468,11 @@ inode_close (struct inode *inode)
           free_map_release (inode->sector, 1);
         }
       /* remove the in-memory inode if open_cnt = 0*/
+      lock_release(&inode->lock_inode);
       free (inode); 
+      return;
     }
+  lock_release(&inode->lock_inode);
 }
 
 /* Marks INODE to be deleted when it is closed by the last caller who
@@ -463,8 +480,10 @@ inode_close (struct inode *inode)
 void
 inode_remove (struct inode *inode) 
 {
+  lock_acquire(&inode->lock_inode);
   ASSERT (inode != NULL);
   inode->removed = true;
+  lock_release(&inode->lock_inode);
 }
 
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
@@ -483,18 +502,21 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   if (inode_dsk == NULL)
     return 0;
   cache_read(inode->sector, inode_dsk);
+  /* Acquire the lock and then read the file length */
+  lock_acquire(&inode->lock_inode);
+  size_t total_length = inode_length(inode);
+  lock_release(&inode->lock_inode);
 
   while (size > 0) 
     {
       /* Disk sector to read, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode_dsk, offset);
 //TODO:
-      //printf("                   offset=%d, at sector %d\n", (int)offset, (int)sector_idx);
+      //printf("  offset=%d, at sector %d\n", (int)offset, (int)sector_idx);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
-      // TODO: 改成用index组织各个block，acquire_lock然后读超过EOF之后的部分
-      off_t inode_left = inode_length (inode) - offset;
+      off_t inode_left = total_length - offset;
       int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
       int min_left = inode_left < sector_left ? inode_left : sector_left;
 
@@ -542,7 +564,16 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
   if (inode->deny_write_cnt)
     return 0;
-
+  /* If total bytes to be written is larger than current file length,
+     need to extend the file to (offset + size). Don't release the lock
+     until finish extendingly writing the file*/
+  if ( offset + size > inode->length )
+  {
+    lock_acquire(&inode->lock_inode);
+    inode_extend_to_size(inode_dsk, offset + size);
+    inode->length = inode_dsk->length;
+  }
+  //printf("offset = %d, size = %d, file size = %d \n", offset, size, inode->length);
   while (size > 0) 
     {
       /* Sector to write, starting byte offset within sector. */
@@ -578,6 +609,10 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       offset += chunk_size;
       bytes_written += chunk_size;
     }
+  if (lock_held_by_current_thread(&inode->lock_inode))
+    lock_release(&inode->lock_inode);
+  ASSERT(inode->sector == inode_dsk->sector);
+  cache_write(inode->sector, inode_dsk);
   free(inode_dsk);
   return bytes_written;
 }
@@ -587,8 +622,10 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 void
 inode_deny_write (struct inode *inode) 
 {
+  lock_acquire(&inode->lock_inode);
   inode->deny_write_cnt++;
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
+  lock_release(&inode->lock_inode);
 }
 
 /* Re-enables writes to INODE.
@@ -597,9 +634,11 @@ inode_deny_write (struct inode *inode)
 void
 inode_allow_write (struct inode *inode) 
 {
+  lock_acquire(&inode->lock_inode);
   ASSERT (inode->deny_write_cnt > 0);
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
   inode->deny_write_cnt--;
+  lock_release(&inode->lock_inode);
 }
 
 /* Returns the length, in bytes, of INODE's data. */
