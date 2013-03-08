@@ -56,7 +56,7 @@ void
 free_map_open (void) 
 {
   //file_open就是根据建一个file wrapper，directory_open就是建一个dir wrapper，inode_open就是建立一个inode
-  free_map_file = file_open (inode_open (FREE_MAP_SECTOR));
+  free_map_file = file_open (inode_open (FREE_MAP_SECTOR, false));
   if (free_map_file == NULL)
     PANIC ("can't open free map");
   if (!bitmap_read (free_map, free_map_file))
@@ -80,7 +80,7 @@ free_map_create (void)
     PANIC ("free map creation failed");
 
   /* Write bitmap to file. */
-  free_map_file = file_open (inode_open (FREE_MAP_SECTOR));
+  free_map_file = file_open (inode_open (FREE_MAP_SECTOR, false));
   if (free_map_file == NULL)
     PANIC ("can't open free map");
   if (!bitmap_write (free_map, free_map_file))

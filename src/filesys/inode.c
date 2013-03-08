@@ -52,8 +52,21 @@ struct inode
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
     off_t length;                       /* File size in bytes. */
+    bool is_dir;                        /* True if inode is for directory */
     struct lock lock_inode;             /* Inode lock */
   };
+
+void
+inode_lock(struct inode *inode)
+{
+  lock_acquire(&inode->lock_inode);
+}
+
+void
+inode_unlock(struct inode *inode)
+{
+  lock_release(&inode->lock_inode);
+}
 
 //dummy cache, Jinchao, please implement these 4 interfaces in cache.c
 static void cache_read( block_sector_t sector, void * buffer)
@@ -348,6 +361,7 @@ inode_init (void)
 bool
 inode_create (block_sector_t sector, off_t length)  
 {
+ 
   struct inode_disk *disk_inode = NULL;
   ASSERT (length >= 0);
   /* If this assertion fails, the inode structure is not exactly
@@ -357,7 +371,10 @@ inode_create (block_sector_t sector, off_t length)
   
   disk_inode = calloc (1, sizeof *disk_inode);
   if (disk_inode == NULL)
+  { 
+    printf("disk inode =null");
     return false;
+  }
   disk_inode->length = 0;
   inode_extend_to_size( disk_inode, length);
   ASSERT(disk_inode->length >= length);
@@ -366,6 +383,7 @@ inode_create (block_sector_t sector, off_t length)
   disk_inode->sector = sector;
   cache_write(sector, disk_inode);
   free (disk_inode);
+   printf("indoe_creat success!");
   return true;
 }
 
@@ -373,7 +391,7 @@ inode_create (block_sector_t sector, off_t length)
    and returns a `struct inode' that contains it.
    Returns a null pointer if memory allocation fails. */
 struct inode *
-inode_open (block_sector_t sector)
+inode_open (block_sector_t sector, bool is_dir)
 {
   struct list_elem *e;
   struct inode *inode;
@@ -399,6 +417,7 @@ inode_open (block_sector_t sector)
   list_push_front (&open_inodes, &inode->elem);
   inode->sector = sector;
   inode->open_cnt = 1;
+  inode->is_dir = is_dir;
   inode->deny_write_cnt = 0;
   inode->removed = false;
   lock_init(&inode->lock_inode);
@@ -500,12 +519,18 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   struct inode_disk *inode_dsk;
   inode_dsk = malloc(sizeof *inode_dsk);
   if (inode_dsk == NULL)
+  {
+    printf("can't malloc inode_dsk!\n");
     return 0;
+  }
   cache_read(inode->sector, inode_dsk);
   /* Acquire the lock and then read the file length */
-  lock_acquire(&inode->lock_inode);
+  if (!lock_held_by_current_thread(&inode->lock_inode))
+    lock_acquire(&inode->lock_inode);
   size_t total_length = inode_length(inode);
   lock_release(&inode->lock_inode);
+  if (offset > total_length)
+    return 0;  
 
   while (size > 0) 
     {
@@ -568,8 +593,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
      need to extend the file to (offset + size). Don't release the lock
      until finish extendingly writing the file*/
   if ( offset + size > inode->length )
-  {
-    lock_acquire(&inode->lock_inode);
+  { 
+    if (!lock_held_by_current_thread(&inode->lock_inode))
+      lock_acquire(&inode->lock_inode);
     inode_extend_to_size(inode_dsk, offset + size);
     inode->length = inode_dsk->length;
   }
@@ -610,7 +636,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       bytes_written += chunk_size;
     }
   if (lock_held_by_current_thread(&inode->lock_inode))
-    lock_release(&inode->lock_inode);
+    lock_release(&inode->lock_inode); 
   ASSERT(inode->sector == inode_dsk->sector);
   cache_write(inode->sector, inode_dsk);
   free(inode_dsk);
@@ -647,4 +673,10 @@ off_t
 inode_length (const struct inode *inode)
 {
   return inode->length;
+}
+
+bool
+inode_is_dir(struct inode *inode)
+{
+  return (inode->is_dir);
 }

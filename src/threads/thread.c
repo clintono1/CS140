@@ -728,6 +728,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  if ( t != initial_thread)
+  {
+    t->cur_dir = thread_current()->cur_dir;
+  }
+  
   if(thread_mlfqs)
   {
     if(t == initial_thread)

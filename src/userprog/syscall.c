@@ -28,6 +28,11 @@ int   _write (int fd, const void *buffer, unsigned size);
 void  _seek (int fd, unsigned position);
 unsigned _tell (int fd);
 void  _close (int fd);
+bool _chdir (const char *dir);
+bool _mkdir (const char *dir);
+bool _readdir (int fd, char *name);
+bool _isdir (int fd);
+int  _inumber (int fd);
 
 struct lock global_lock_filesys;  /* global lock for file system*/
 
@@ -136,7 +141,33 @@ syscall_handler (struct intr_frame *f UNUSED)
       arg1 = get_argument(esp, 1);
       _close ((int)arg1);
       break;
-                                         
+    
+    case SYS_CHDIR:
+      arg1 = get_argument(esp, 1);
+      f->eax = (uint32_t) _chdir ((const char*)arg1);
+      break;
+    
+    case SYS_MKDIR:
+      arg1 = get_argument(esp, 1);
+      f->eax = (uint32_t) _mkdir ((const char*)arg1);
+      break;
+    
+    case SYS_READDIR:
+      arg1 = get_argument(esp, 1);
+      arg2 = get_argument(esp, 2);
+      f->eax = (uint32_t) _readdir ((int)arg1, (const char*)arg2);
+      break;
+
+    case SYS_ISDIR:
+      arg1 = get_argument(esp, 1);
+      f->eax = (uint32_t) _isdir((int)arg1);
+      break;
+
+    case SYS_INUMBER:
+      arg1 = get_argument(esp, 1);
+      f->eax = (uint32_t) _inumber((int)arg1);
+      break;
+
     default:
       break;
   }
@@ -206,6 +237,7 @@ _wait(pid_t pid)
 
 
 /* Part2: syscalls for file system */
+//TODO: need to parse the path, get the file's  name
 bool
 _create (const char *file, unsigned initial_size)
 {
@@ -217,9 +249,29 @@ _create (const char *file, unsigned initial_size)
     _exit (-1);
 
   lock_acquire (&global_lock_filesys);
+  //TODO: change filesys_create()
   bool success = filesys_create (file, initial_size);
   lock_release (&global_lock_filesys);
   return success;
+}
+
+int
+_open (const char *file)
+{
+  if (!valid_vaddr_range (file, 0))
+    _exit (-1);
+
+  if (!valid_vaddr_range (file, strlen (file)))
+    _exit (-1);
+  //TODO: Parse path
+  lock_acquire (&global_lock_filesys);
+  struct file *f = filesys_open (file);
+  lock_release (&global_lock_filesys);
+
+  if (f == NULL)
+    return -1;
+
+  return thread_add_file_handler (thread_current(), f);
 }
 
 bool
@@ -235,25 +287,6 @@ _remove (const char *file)
   bool success = filesys_remove (file);
   lock_release (&global_lock_filesys);
   return success;
-}
-
-int
-_open (const char *file)
-{
-  if (!valid_vaddr_range (file, 0))
-    _exit (-1);
-
-  if (!valid_vaddr_range (file, strlen (file)))
-    _exit (-1);
-
-  lock_acquire (&global_lock_filesys);
-  struct file *f = filesys_open (file);
-  lock_release (&global_lock_filesys);
-
-  if (f == NULL)
-    return -1;
-
-  return thread_add_file_handler (thread_current(), f);
 }
 
 int
@@ -377,3 +410,59 @@ _close (int fd)
   thread_remove_file_handler (t, fd);
 }
 
+
+
+/* Part3: syscalls for sub-directories */
+
+bool
+_chdir (const char *dir)
+{
+  if (!valid_vaddr_range (dir, 0))
+    _exit (-1);
+  if (!valid_vaddr_range (dir, strlen (dir)))
+    _exit (-1);
+
+
+
+
+}
+
+bool
+_mkdir (const char *dir)
+{
+  if (!valid_vaddr_range (dir, 0))
+    _exit (-1);
+  if (!valid_vaddr_range (dir, strlen (dir)))
+    _exit (-1);
+  
+  if (strcmp(dir, ""))
+    return 0;
+
+
+
+
+}
+
+bool
+_readdir (int fd, char name[READDIR_MAX_LEN + 1])
+{
+  if (!valid_vaddr_range (name, 0))
+    _exit (-1);
+  if (!valid_vaddr_range (name, strlen (name)))
+    _exit (-1);
+
+
+
+}
+
+bool
+_isdir (int fd)
+{
+
+}
+
+int
+_inumber (int fd)
+{
+
+}
