@@ -10,6 +10,9 @@
 #include "lib/string.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/free-map.h"
+#include "filesys/inode.h"
+#include "filesys/directory.h"
 #include "devices/input.h"
 
 static void syscall_handler (struct intr_frame *);
@@ -237,7 +240,6 @@ _wait(pid_t pid)
 
 
 /* Part2: syscalls for file system */
-//TODO: need to parse the path, get the file's  name
 bool
 _create (const char *file, unsigned initial_size)
 {
@@ -249,7 +251,6 @@ _create (const char *file, unsigned initial_size)
     _exit (-1);
 
   lock_acquire (&global_lock_filesys);
-  //TODO: change filesys_create()
   bool success = filesys_create (file, initial_size);
   lock_release (&global_lock_filesys);
   return success;
@@ -260,10 +261,9 @@ _open (const char *file)
 {
   if (!valid_vaddr_range (file, 0))
     _exit (-1);
-
   if (!valid_vaddr_range (file, strlen (file)))
     _exit (-1);
-  //TODO: Parse path
+
   lock_acquire (&global_lock_filesys);
   struct file *f = filesys_open (file);
   lock_release (&global_lock_filesys);
@@ -275,16 +275,16 @@ _open (const char *file)
 }
 
 bool
-_remove (const char *file)
+_remove (const char *name)
 {
-  if (!valid_vaddr_range (file, 0))
+  if (!valid_vaddr_range (name, 0))
     _exit (-1);
 
-  if (!valid_vaddr_range (file, strlen (file)))
+  if (!valid_vaddr_range (name, strlen (name)))
     _exit (-1);
 
   lock_acquire (&global_lock_filesys);
-  bool success = filesys_remove (file);
+  bool success = filesys_remove (name);
   lock_release (&global_lock_filesys);
   return success;
 }
@@ -360,6 +360,14 @@ _write (int fd, const void *buffer, unsigned size)
   {
     struct file *file = t->file_handlers[fd];
     lock_acquire (&global_lock_filesys);
+    bool is_dir = (inode_is_dir(file_get_inode(file)));
+    
+    if (is_dir)
+    {
+      lock_release (&global_lock_filesys);
+      return -1;
+    }
+    
     result = file_write (file, buffer, size);
     lock_release (&global_lock_filesys);
   }
@@ -413,56 +421,127 @@ _close (int fd)
 
 
 /* Part3: syscalls for sub-directories */
-
+//TODO: no sync yet!
 bool
-_chdir (const char *dir)
-{
-  if (!valid_vaddr_range (dir, 0))
-    _exit (-1);
-  if (!valid_vaddr_range (dir, strlen (dir)))
-    _exit (-1);
-
-
-
-
-}
-
-bool
-_mkdir (const char *dir)
-{
-  if (!valid_vaddr_range (dir, 0))
-    _exit (-1);
-  if (!valid_vaddr_range (dir, strlen (dir)))
-    _exit (-1);
-  
-  if (strcmp(dir, ""))
-    return 0;
-
-
-
-
-}
-
-bool
-_readdir (int fd, char name[READDIR_MAX_LEN + 1])
+_chdir (const char *name)
 {
   if (!valid_vaddr_range (name, 0))
     _exit (-1);
   if (!valid_vaddr_range (name, strlen (name)))
     _exit (-1);
+  if(!strcmp(name, "/"))
+  {
+    thread_current()->cwd_sector = ROOT_DIR_SECTOR;
+    return true;
+  }
 
+  struct dir *dir;
+  char *dir_name;
+  PRINTF("\nchdir called! name:%s\n", name);
+  if(!filesys_parse(name, &dir, &dir_name)) 
+    return false;
+  struct inode *inode = NULL;
+  if (!dir_lookup(dir, dir_name, &inode))
+    return false;
+  dir_close(dir);
+  thread_current()->cwd_sector = inode_get_inumber(inode);
+  return true;
+}
 
+bool
+_mkdir (const char *name)
+{
+  
+  PRINTF("\nmkdir called! name:%s\n", name);
+  if (!valid_vaddr_range (name, 0))
+    _exit (-1);
+  if (!valid_vaddr_range (name, strlen (name)))
+    _exit (-1);
+  
+  if (!strcmp(name, "") || !strcmp(name, "/"))
+    return false;
+  block_sector_t inode_sector = 0;
+  struct dir *dir, *new_dir;
+  char *dir_name;
+  
+  if(!filesys_parse(name, &dir, &dir_name)) 
+    return false;
+  bool success = (dir != NULL
+    && free_map_allocate (1, &inode_sector)      /* Ask the free_list for a sector to store directory file */
+    && inode_create (inode_sector, 0)            /* Write to this sector an inode with 0 initial size. */
+    && dir_add (dir, dir_name, inode_sector, true));   /* Add this directory file to the parsed dir */
+  if (!success && inode_sector != 0) 
+    free_map_release (inode_sector, 1);
+  if (success)
+  { 
+    /* Add . and .. to the new directory */
+    new_dir = dir_open(inode_open( inode_sector, true));
+    success &= dir_add (new_dir, ".", inode_sector, true);
+    success &= dir_add (new_dir, "..", inode_get_inumber(dir_get_inode(dir)), true);
+    dir_close(new_dir);
+  }
+  PRINTF("mkdir success(%d)\n", success);
+  dir_close (dir);
+  return success;
+}
 
+bool
+_readdir (int fd, char name[READDIR_MAX_LEN + 1])
+{
+  //TODO: page 53, line 6 under readdir() is not considered yet 
+  if (!valid_vaddr_range (name, 0))
+    _exit (-1);
+  if (!valid_vaddr_range (name, strlen (name)))
+    _exit (-1);
+
+  struct thread *t  = thread_current();
+  struct file *file = t->file_handlers[fd];
+
+  if ( !valid_file_handler (t, fd) || fd < 2)
+    _exit(-1);
+
+  lock_acquire (&global_lock_filesys);
+  struct inode *inode = file_get_inode(file);
+  struct dir *dir = dir_open(inode);
+  /* Make sure we are reading a directory, not a file*/
+  ASSERT(inode_is_dir(inode));
+  bool success = dir_readdir(dir,name);
+  // TODO . and .. should not be returned by readdir ?
+  if (!strcmp(name, ".") || !strcmp(name, ".."))
+  {
+    lock_release (&global_lock_filesys);
+    return false;
+  }
+  dir_close(dir);
+  lock_release (&global_lock_filesys);
+  return success;
 }
 
 bool
 _isdir (int fd)
 {
-
+  struct thread *t  = thread_current();
+  struct file *file = t->file_handlers[fd];
+  
+  if ( !valid_file_handler (t, fd) || fd < 2)
+    _exit(-1);
+  lock_acquire (&global_lock_filesys);
+  bool is_dir = (inode_is_dir(file_get_inode(file)));
+  lock_release (&global_lock_filesys);
+  return is_dir;
 }
 
 int
 _inumber (int fd)
 {
+  struct thread *t  = thread_current();
+  struct file *file = t->file_handlers[fd];
 
+  if ( !valid_file_handler (t, fd) || fd < 2)
+    _exit(-1);
+
+  lock_acquire (&global_lock_filesys);
+  int inumber = (inode_get_inumber(file_get_inode(file)));
+  lock_release (&global_lock_filesys);
+  return inumber;
 }

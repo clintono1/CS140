@@ -7,6 +7,7 @@
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "debug.h"
 
 
 bool dir_empty(struct inode *);
@@ -75,7 +76,6 @@ dir_open_current(void)
 
 /* Opens and returns a new directory for the same inode as DIR.
    Returns a null pointer on failure. */
-//两个dir指向同一个inode（这个inode是directory file的inode）
 struct dir *
 dir_reopen (struct dir *dir) 
 {
@@ -115,7 +115,6 @@ lookup (const struct dir *dir, const char *name,
   
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-  //这里需要改inode_read_at以支持indexed file 每次读e这么大，从ofs开始读
   for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
        ofs += sizeof e) 
     if (e.in_use && !strcmp (name, e.name)) 
@@ -143,7 +142,7 @@ dir_lookup (const struct dir *dir, const char *name,
   ASSERT (name != NULL);
 
   if (lookup (dir, name, &e, NULL))
-    *inode = inode_open (e.inode_sector, true);
+    *inode = inode_open (e.inode_sector, e.is_dir);
   else
     *inode = NULL;
 
@@ -152,13 +151,14 @@ dir_lookup (const struct dir *dir, const char *name,
 
 /* Adds a file named NAME to DIR, which must not already contain a
    file by that name.  The file's inode is in sector
-   INODE_SECTOR.
+   INODE_SECTOR, if the added file is a directory then IS_DIR is true
    Returns true if successful, false on failure.
    Fails if NAME is invalid (i.e. too long) or a disk or memory
    error occurs. */
-// 向某个directory添加一个name<->node_sector的entry
+// 向某个directory添加一个 <name, inode_sector> 的entry
 bool
-dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
+dir_add (struct dir *dir, const char *name, block_sector_t inode_sector,
+         bool is_dir)
 {
   struct dir_entry e;
   off_t ofs;
@@ -169,13 +169,8 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   
   /* Check NAME for validity. */
   if (*name == '\0' || strlen (name) > NAME_MAX)
-  {
-    //TODO
-    //PRINTF("null name");
     return false;
-  }
 
-  //PRINTF("\ndir name = %s\n", name);
   /* Check that NAME is not in use. */
   if (lookup (dir, name, NULL, NULL))
     goto done;
@@ -196,8 +191,7 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   //PRINTF("find ofs %d for it\n", (int)ofs);
   /* Write slot. */
   e.in_use = true;
-  //TODO:
-  e.is_dir = false;
+  e.is_dir = is_dir;
   strlcpy (e.name, name, sizeof e.name);
   e.inode_sector = inode_sector;
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
@@ -228,7 +222,7 @@ dir_remove (struct dir *dir, const char *name)
     goto done;
 
   /* Open inode. */
-  inode = inode_open (e.inode_sector, true);
+  inode = inode_open (e.inode_sector, e.is_dir);
   if (inode == NULL)
     goto done;
 
@@ -236,8 +230,15 @@ dir_remove (struct dir *dir, const char *name)
   {
     block_sector_t sector = e.inode_sector;
     struct inode *inode = inode_open(sector, true);
-    if (dir_empty(inode))
-      return false;
+    /* Can't close a non-empty directory */
+    if (!dir_empty(inode))
+      goto done;
+    /* Can't remove cwd */
+    if (inode_get_inumber(inode) == thread_current()->cwd_sector)
+      goto done;
+    /* Can't remove opened inode */
+    if (inode_open_cnt(inode) > 2) //TODO: 2 is experimental result. only 2 can pass all. Why? reference handout page 53 line 8 and test case of : dir-rm-*.c
+      goto done;
   } 
 
 
@@ -247,11 +248,11 @@ dir_remove (struct dir *dir, const char *name)
     goto done;
 
   /* Remove inode. */
-  inode_remove (inode);  //配合下面的inode_close
+  inode_remove (inode); 
   success = true;
 
  done:
-  inode_close (inode);  //同时删掉14个pointer指向的block
+  inode_close (inode); 
   return success;
 }
 
@@ -275,12 +276,17 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   return false;
 }
 
-
+/* Check if an directory's inode is empty */
 bool
 dir_empty(struct inode * inode)
 {
-  //TODO: 
-  ///检查inode每个dir_entry是否是！in_use;
+  ASSERT(inode_is_dir(inode));
+  struct dir_entry e;
+  size_t ofs;
+  for (ofs = 0; inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;
+       ofs += sizeof e) 
+    if (e.in_use && strcmp (".", e.name) && strcmp("..", e.name)) 
+      return false;
   return true;
 }
 

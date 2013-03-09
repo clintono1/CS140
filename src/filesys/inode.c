@@ -367,7 +367,6 @@ inode_create (block_sector_t sector, off_t length)
   /* If this assertion fails, the inode structure is not exactly
      one sector in size, and you should fix that. */
   ASSERT ((sizeof *disk_inode) == BLOCK_SECTOR_SIZE);
-
   
   disk_inode = calloc (1, sizeof *disk_inode);
   if (disk_inode == NULL)
@@ -676,4 +675,10 @@ bool
 inode_is_dir(struct inode *inode)
 {
   return (inode->is_dir);
+}
+
+int
+inode_open_cnt(struct inode *inode)
+{
+  return inode->open_cnt;
 }

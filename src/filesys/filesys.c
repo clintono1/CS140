@@ -14,7 +14,7 @@ struct block *fs_device;
 
 static void do_format (void);
 bool filesys_parse(const char *name, struct dir **dir, char **file_name);
-inline bool is_root(struct dir *dir);
+
 
 /* Initializes the file system module.
    If FORMAT is true, reformats the file system. */
@@ -39,6 +39,7 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
+  //major TODO: need flush all the cache to disk in order to pass 23 *persistance test!
   free_map_close ();
 }
 
@@ -55,14 +56,16 @@ filesys_create (const char *name, off_t initial_size)
   //struct dir *dir = dir_open_root ();
   struct dir *dir;
   char *file_name;
-  PRINTF("\nfilesys create called! filename:%s\n", name);
+  if (!strcmp(name, "/"))
+    return false;
+  //printf("\nfilesys create called! filename:%s\n", name);
   if(!filesys_parse(name, &dir, &file_name)) 
     return false;
   //PRINTF(" name =%s, filename = %s, dir not null? %d\n", name, file_name, dir!=NULL);
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)  //ask free_list给这个新文件分配一个sector存放inode
                   && inode_create (inode_sector, initial_size)  //给这个sector写上inode信息：长度，根据大小初始化14个pointer，给每个pointer分配block，给每个block写满0
-                  && dir_add (dir, file_name, inode_sector));
+                  && dir_add (dir, file_name, inode_sector, false));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
@@ -82,7 +85,9 @@ filesys_open (const char *name)
 {
   struct dir *dir;
   char *file_name;
-  //TODO:
+  if ( !strcmp(name, "/"))
+    return file_open(inode_open(ROOT_DIR_SECTOR, true));
+  //TODO: 
   PRINTF("\nfilesys_open called. filename:%s\n", name);
   if(!filesys_parse(name, &dir, &file_name)) 
     return NULL;
@@ -91,7 +96,7 @@ filesys_open (const char *name)
   if (dir != NULL)
     dir_lookup (dir, file_name, &inode);
   dir_close (dir);
-
+  //TODO:
   PRINTF("filesys_open: inode=%p\n", inode);
   return file_open (inode);
 }
@@ -106,19 +111,17 @@ filesys_remove (const char *name)
   //struct dir *dir = dir_open_root ();
   struct dir *dir;
   char *file_name;
-  
+  if(!strcmp(name, "/"))
+    return false;
   if(!filesys_parse(name, &dir, &file_name)) 
-    return NULL;
-  PRINTF("\n\nremove called, name=%s\n", file_name);
+    return false;
   if ( !strcmp(file_name,".") || !strcmp(file_name, ".."))
   {
     PRINTF("can't remove . and ..");
     return false;
   }
   
-
   bool success = dir != NULL && dir_remove (dir, file_name);
-  PRINTF("success(%d)\n", success);
   dir_close (dir); 
 
   return success;
@@ -135,8 +138,8 @@ do_format (void)
   if (!dir_create (ROOT_DIR_SECTOR, 2))
     PANIC ("root directory creation failed");
   struct dir *dir = dir_open_root();
-  dir_add(dir,".", ROOT_DIR_SECTOR);
-  dir_add(dir,"..", ROOT_DIR_SECTOR);
+  dir_add(dir,".", ROOT_DIR_SECTOR, true);
+  dir_add(dir,"..", ROOT_DIR_SECTOR, true);
   free_map_close ();
   PRINTF ("done.\n");
 }
@@ -153,14 +156,14 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
   char *token, *save_ptr;
   struct dir *cur_dir;
   bool is_root = false;
-  bool is_new_file = false;
   char *begin = buf;
   /* Tail is the last file name */
   char *tail = buf + strlen(buf)-1;
   while ( tail >= begin && *tail != '/')
     tail--;
   tail++;
-  //PRINTF("begin:%s   tail: %s\n\n", begin, tail);
+  //TODO:
+  //printf("begin:%s   tail: %s\n\n", begin, tail);
   /* find the first word */
   while (*begin == ' ')
     begin++;
@@ -169,12 +172,12 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
     begin++;
     is_root = true;
   }
-  //TODO:
-  
+    
   if (is_root)
   {
-    PRINTF("from root.\n");
     cur_dir = dir_open_root();
+    if (tail==NULL) /* Don't parse if the input path is just "/" */
+      return false;
   }
   else
   {
@@ -182,7 +185,6 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
     PRINTF("root_dir = %p\n", cur_dir);
     PRINTF( "cur_dir's inumber=%d \n", inode_get_inumber(dir_get_inode(cur_dir)));
   }
-  // TODO: begin = "/a/b/c"
   for (token = strtok_r (begin, "/", &save_ptr); token != tail;
        token = strtok_r (NULL, "/", &save_ptr))
   {
@@ -195,7 +197,7 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
     dir_close(cur_dir);
     cur_dir = dir_open(inode);
   }
-
+  //TODO:
   PRINTF("dir=%p, extracted file name = %s\n", cur_dir, tail);
     
   *dir = cur_dir;
@@ -203,14 +205,5 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
   return true;
 }
 
-/* Check if the directory is root directory */
-inline bool
-is_root(struct dir *dir)
-{
-/*
-  struct inode *inode1 =dir->inode;
-  return (inode1.sector == ROOT_DIR_SECTOR);*/
-   return false;
 
-}
 
