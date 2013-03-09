@@ -4,6 +4,7 @@
 #include <round.h>
 #include <string.h>
 #include "filesys/filesys.h"
+#include "filesys/cache.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
@@ -68,35 +69,6 @@ inode_unlock(struct inode *inode)
   lock_release(&inode->lock_inode);
 }
 
-//dummy cache, Jinchao, please implement these 4 interfaces in cache.c
-static void cache_read( block_sector_t sector, void * buffer)
-{
-  block_read(fs_device, sector, buffer);
-}
-static void cache_write ( block_sector_t sector, const void *buffer)
-{
-  block_write (fs_device, sector, buffer);
-}
-static void cache_read_partial(block_sector_t sector, void *buffer, off_t start, off_t length)
-{
-  uint8_t *bounce = malloc (BLOCK_SECTOR_SIZE);
-  if (bounce==NULL)
-    PANIC("not enough space for bounce!");
-  cache_read (sector, bounce);
-  memcpy (buffer, bounce + start, length);
-  free(bounce);
-}
-static void cache_write_partial(block_sector_t sector, const void *buffer, off_t start, off_t length)
-{
-  uint8_t *bounce = malloc (BLOCK_SECTOR_SIZE);
-  if (start > 0 || length < BLOCK_SECTOR_SIZE - start)
-    cache_read(sector, bounce);
-  else
-    memset (bounce, 0, BLOCK_SECTOR_SIZE);
-  memcpy(bounce + start, buffer, length);
-  cache_write (sector, bounce);
-  free(bounce);
-}
 
 /* Get sector number from indirect index block at SECTOR */
 static block_sector_t
