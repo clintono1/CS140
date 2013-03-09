@@ -11,9 +11,12 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "devices/input.h"
+#include "threads/pte.h"
 
 static void syscall_handler (struct intr_frame *);
 bool valid_vaddr_range(const void * vaddr, unsigned size);
+static bool
+  check_user_memory (const void *vaddr, size_t size, bool to_be_written);
 
 void  _halt (void);
 void  _exit (int status);
@@ -172,6 +175,7 @@ _exec (const char *cmd_line)
 
   if (!valid_vaddr_range(cmd_line, strlen(cmd_line)))
     _exit (-1);
+
   char file_path[MAX_FILE_LENGTH];
   get_first_string(cmd_line, file_path);
   /* Lock on process_execute since it needs to open the executable file */
@@ -276,6 +280,9 @@ _read (int fd, void *buffer, unsigned size)
   if (!valid_vaddr_range (buffer, size))
      _exit (-1);
 
+  if (!check_user_memory (buffer, size, true))
+    _exit (-1);
+
   if (size < 0)
     return -1;
   if (fd == STDOUT_FILENO)
@@ -311,8 +318,13 @@ _write (int fd, const void *buffer, unsigned size)
 {
   if (!valid_vaddr_range (buffer, size))
     _exit (-1);
+
+  if (!check_user_memory (buffer, size, false))
+    _exit (-1);
+
   if (size <= 0)
     return 0;
+
   if (fd == STDIN_FILENO)
     return -1;
 
@@ -377,3 +389,25 @@ _close (int fd)
   thread_remove_file_handler (t, fd);
 }
 
+/* Check whether specified user memory range [ADDR, ADDR + SIZE) is valid. */
+static bool
+check_user_memory (const void *vaddr, size_t size, bool to_be_written)
+{
+  if (vaddr + size > PHYS_BASE)
+    return false;
+
+  void *upage = pg_round_down (vaddr);
+
+  while (upage < vaddr + size)
+  {
+    uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
+    if (pte == NULL || *pte == 0)
+      return false;
+    if (!(*pte & PTE_P) || !(*pte & PTE_U))
+      return false;
+    if (to_be_written && !(*pte & PTE_W))
+      return false;
+    upage += PGSIZE;
+  }
+  return true;
+}
