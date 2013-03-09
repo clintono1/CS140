@@ -16,6 +16,7 @@
 #endif
 #include "threads/fixed-point.h"
 #include "filesys/filesys.h"
+#include "filesys/cache.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -100,6 +101,8 @@ thread_init (void)
     list_init (&ready_list[i]);
 
   list_init (&all_list);
+
+  cache_init();
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
