@@ -371,10 +371,7 @@ inode_create (block_sector_t sector, off_t length)
   
   disk_inode = calloc (1, sizeof *disk_inode);
   if (disk_inode == NULL)
-  { 
-    printf("disk inode =null");
     return false;
-  }
   disk_inode->length = 0;
   inode_extend_to_size( disk_inode, length);
   ASSERT(disk_inode->length >= length);
@@ -383,7 +380,6 @@ inode_create (block_sector_t sector, off_t length)
   disk_inode->sector = sector;
   cache_write(sector, disk_inode);
   free (disk_inode);
-   printf("indoe_creat success!");
   return true;
 }
 
@@ -520,9 +516,10 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   inode_dsk = malloc(sizeof *inode_dsk);
   if (inode_dsk == NULL)
   {
-    printf("can't malloc inode_dsk!\n");
+    PRINTF("can't malloc inode_dsk!\n");
     return 0;
   }
+  PRINTF("inode.sector=%d\n", inode->sector);
   cache_read(inode->sector, inode_dsk);
   /* Acquire the lock and then read the file length */
   if (!lock_held_by_current_thread(&inode->lock_inode))

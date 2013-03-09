@@ -728,10 +728,15 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  if ( t != initial_thread)
+  if ( t != initial_thread )
   {
-    t->cur_dir = thread_current()->cur_dir;
+      t->cur_dir = thread_current()->cur_dir;
+      //TODO:
+      //printf("parent: pid=%d, cur_dir=%p\n", thread_current()->tid, thread_current()->cur_dir);
+      //printf("child: pid=%d, cur_dir=%p\n", t->tid, t->cur_dir);
   }
+  
+
   
   if(thread_mlfqs)
   {

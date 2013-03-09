@@ -126,6 +126,7 @@ main (void)
   locate_block_devices ();
   filesys_init (format_filesys);
   thread_current()->cur_dir = dir_open_root();
+  printf("pid=%d, cur_dir=%p", thread_current()->tid, thread_current()->cur_dir);
 #endif
 
   printf ("Boot complete.\n");

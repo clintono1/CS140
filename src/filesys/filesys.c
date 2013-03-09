@@ -66,6 +66,7 @@ filesys_create (const char *name, off_t initial_size)
     free_map_release (inode_sector, 1);
   dir_close (dir);
 
+  PRINTF("filesys creat success(%d)\n", success);
   return success;
 }
 
@@ -78,19 +79,19 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
-  //TODO: no longer dir = root_dir, need to parse
-  //struct dir *dir = dir_open_root ();
   struct dir *dir;
   char *file_name;
-  printf("filesys_open: filename:%s\n", name);
+  //TODO:
+  PRINTF("\nfilesys_open called. filename:%s\n", name);
   if(!filesys_parse(name, &dir, &file_name)) 
     return NULL;
-
+  PRINTF("dir=%p, filename=%s\n", dir, file_name);
   struct inode *inode = NULL;
   if (dir != NULL)
     dir_lookup (dir, file_name, &inode);
   dir_close (dir);
 
+  PRINTF("filesys_open: inode=%p\n", inode);
   return file_open (inode);
 }
 
@@ -104,13 +105,19 @@ filesys_remove (const char *name)
   //struct dir *dir = dir_open_root ();
   struct dir *dir;
   char *file_name;
+  
   if(!filesys_parse(name, &dir, &file_name)) 
     return NULL;
-  if (is_root(dir) || strcmp(file_name,".") || strcmp(file_name, ".."))
+  PRINTF("\n\nremove called, name=%s\n", file_name);
+  if ( !strcmp(file_name,".") || !strcmp(file_name, ".."))
+  {
+    PRINTF("can't remove . and ..");
     return false;
+  }
   
 
   bool success = dir != NULL && dir_remove (dir, file_name);
+  PRINTF("success(%d)\n", success);
   dir_close (dir); 
 
   return success;
@@ -133,15 +140,26 @@ do_format (void)
 }
 
 bool
-filesys_parse(const char *_name, struct dir **dir, char **file_name)
+filesys_parse(const char *path, struct dir **dir, char **file_name)
 {
-  char *name = malloc(strlen(_name)+1);
-  memcpy(name, _name, strlen(_name)+1);
-  char *token, *last_token, *save_ptr;
+  size_t len = strlen (path);
+  if (len == 0)
+    return false;
+  //TODO: this buf is never freed.
+  char *buf = malloc(len+1);
+  memcpy(buf, path, len+1);
+  char *token, *save_ptr;
   struct dir *cur_dir;
   bool is_root = false;
   bool is_new_file = false;
-  char *begin = name;
+  char *begin = buf;
+  /* Tail is the last file name */
+  char *tail = buf + strlen(buf)-1;
+  while ( tail >= begin && *tail != '/')
+    tail--;
+  tail++;
+  PRINTF("begin:%s   tail: %s\n\n", begin, tail);
+  /* find the first word */
   while (*begin == ' ')
     begin++;
   while (*begin == '/')
@@ -150,49 +168,34 @@ filesys_parse(const char *_name, struct dir **dir, char **file_name)
     is_root = true;
   }
   //TODO:
-  printf("is root(%d), string is:%s\n", is_root, begin);
+  PRINTF("is root(%d), string is:%s\n", is_root, begin);
   if (is_root)
     cur_dir = dir_open_root();
   else
   {
     cur_dir = thread_current()->cur_dir;
-//    cur_dir = dir_open_root();
-    printf("cur_dir = %p\n", cur_dir);
+    cur_dir = dir_open_root();
+    PRINTF("cur_dir = %p\n", cur_dir);
   }
   // TODO: begin = "/a/b/c"
-  for (token = strtok_r (begin, "/", &save_ptr); token != NULL;
+  for (token = strtok_r (begin, "/", &save_ptr); token != tail;
        token = strtok_r (NULL, "/", &save_ptr))
   {
-    printf ("token is %s\n", token);
+    PRINTF ("token is %s\n", token);
     struct inode *inode = NULL;
     /* Find the name<->inode_sector pair in cur_dir, return false 
        if not found*/
     if (!dir_lookup(cur_dir, token, &inode))
-    { 
-      is_new_file = 1;
-      break;
-    }
-    last_token = token;
-  }
-
-  if ( is_new_file)
-  {
-    printf("meet new file\n");
-    /* If token is not the last one, then mean non-existing folder */
-    if (strtok_r (NULL, "/", &save_ptr))
       return false;
-    printf("extracted file name = %s\n", token);
-    *file_name = token;
+    dir_close(cur_dir);
+    cur_dir = dir_open(inode);
   }
-  else
-  {
-    printf("extracted file name = %s\n", last_token);
-    *file_name = last_token;
-  }
- 
-  *dir = cur_dir;
 
-  //free();
+  PRINTF("dir=%p, extracted file name = %s\n", cur_dir, tail);
+    
+  *dir = cur_dir;
+  *file_name = tail;
+  return true;
 }
 
 /* Check if the directory is root directory */
