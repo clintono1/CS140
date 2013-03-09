@@ -53,18 +53,16 @@ filesys_create (const char *name, off_t initial_size)
 {
   //TODO: parse out the path and real name from NAME
   block_sector_t inode_sector = 0;
-  //struct dir *dir = dir_open_root ();
   struct dir *dir;
   char *file_name;
   if (!strcmp(name, "/"))
     return false;
-  //printf("\nfilesys create called! filename:%s\n", name);
-  if(!filesys_parse(name, &dir, &file_name)) 
+  if(!filesys_parse (name, &dir, &file_name))
     return false;
   //PRINTF(" name =%s, filename = %s, dir not null? %d\n", name, file_name, dir!=NULL);
   bool success = (dir != NULL
-                  && free_map_allocate (1, &inode_sector)  //ask free_list给这个新文件分配一个sector存放inode
-                  && inode_create (inode_sector, initial_size)  //给这个sector写上inode信息：长度，根据大小初始化14个pointer，给每个pointer分配block，给每个block写满0
+                  && free_map_allocate (1, &inode_sector)
+                  && inode_create (inode_sector, initial_size)
                   && dir_add (dir, file_name, inode_sector, false));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);

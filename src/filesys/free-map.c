@@ -24,14 +24,12 @@ free_map_init (void)
    Returns true if successful, false if not enough consecutive
    sectors were available or if the free_map file could not be
    written. */
-//更新bitmap，既要更新内存中的free_map，又要更新硬盘上的free_map_file
 bool
 free_map_allocate (size_t cnt, block_sector_t *sectorp)
 {
   block_sector_t sector = bitmap_scan_and_flip (free_map, 0, cnt, false);
   if (sector != BITMAP_ERROR
       && free_map_file != NULL
-      //把这个更新后的bitmap写到磁盘上的文件里，时刻保证磁盘上的free map file是最新的
       && !bitmap_write (free_map, free_map_file))
     {
       bitmap_set_multiple (free_map, sector, cnt, false); 
@@ -55,7 +53,6 @@ free_map_release (block_sector_t sector, size_t cnt)
 void
 free_map_open (void) 
 {
-  //file_open就是根据建一个file wrapper，directory_open就是建一个dir wrapper，inode_open就是建立一个inode
   free_map_file = file_open (inode_open (FREE_MAP_SECTOR, false));
   if (free_map_file == NULL)
     PANIC ("can't open free map");

@@ -38,16 +38,13 @@ dir_create (block_sector_t sector, size_t entry_cnt)
 
 /* Opens and returns the directory for the given INODE, of which
    it takes ownership.  Returns a null pointer on failure. */
-//directory文件有了inode，需要做一个directory把它包起来
-//有了inode，既可以做一个directory包住，又可以做一个file包住
 struct dir *  
 dir_open (struct inode *inode) 
 {
-  //分配内存
   struct dir *dir = calloc (1, sizeof *dir);
   if (inode != NULL && dir != NULL)
     {
-      dir->inode = inode;  //给做一个wrapper，包着direcotry file的inode
+      dir->inode = inode;
       dir->pos = 0;
       return dir;
     }
@@ -115,6 +112,7 @@ lookup (const struct dir *dir, const char *name,
   
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
+
   for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
        ofs += sizeof e) 
     if (e.in_use && !strcmp (name, e.name)) 
@@ -155,7 +153,6 @@ dir_lookup (const struct dir *dir, const char *name,
    Returns true if successful, false on failure.
    Fails if NAME is invalid (i.e. too long) or a disk or memory
    error occurs. */
-// 向某个directory添加一个 <name, inode_sector> 的entry
 bool
 dir_add (struct dir *dir, const char *name, block_sector_t inode_sector,
          bool is_dir)
@@ -188,7 +185,6 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector,
     if (!e.in_use)
       break;
 
-  //PRINTF("find ofs %d for it\n", (int)ofs);
   /* Write slot. */
   e.in_use = true;
   e.is_dir = is_dir;
@@ -196,7 +192,6 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector,
   e.inode_sector = inode_sector;
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
   //TODO:
-  //PRINTF("inode write success(%d)\n", success);
   //no need to unlock here, since inode_write_at releases the lock before return;
  done:
   return success;
@@ -205,7 +200,6 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector,
 /* Removes any entry for NAME in DIR.
    Returns true if successful, false on failure,
    which occurs only if there is no file with the given NAME. */
-//是指改目录下名字是name的文件的inode以及文件的所有block被删了，目录下仍有这个entry，只不过inuse置为false
 bool
 dir_remove (struct dir *dir, const char *name) 
 {
@@ -241,7 +235,6 @@ dir_remove (struct dir *dir, const char *name)
       goto done;
   } 
 
-
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e) 
@@ -251,7 +244,7 @@ dir_remove (struct dir *dir, const char *name)
   inode_remove (inode); 
   success = true;
 
- done:
+done:
   inode_close (inode); 
   return success;
 }
@@ -278,9 +271,9 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 
 /* Check if an directory's inode is empty */
 bool
-dir_empty(struct inode * inode)
+dir_empty (struct inode * inode)
 {
-  ASSERT(inode_is_dir(inode));
+  ASSERT (inode_is_dir (inode));
   struct dir_entry e;
   size_t ofs;
   for (ofs = 0; inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;
