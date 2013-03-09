@@ -112,7 +112,7 @@ struct thread
     int nice;                           /* Nice value of each thread*/
     bool is_kernel;                     /* True if this is a kernel process */
     bool in_syscall;                    /* True if thread is in system call */
-    struct dir *cur_dir;                /* Current directory */
+    block_sector_t cwd_sector;     /* Current directory */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

@@ -15,6 +15,7 @@
 #include "userprog/process.h"
 #endif
 #include "threads/fixed-point.h"
+#include "filesys/filesys.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -105,6 +106,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->cwd_sector = ROOT_DIR_SECTOR;
   load_avg = 0;
 }
 
@@ -730,10 +732,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   if ( t != initial_thread )
   {
-      t->cur_dir = thread_current()->cur_dir;
+      t->cwd_sector = thread_current()->cwd_sector;
       //TODO:
-      //printf("parent: pid=%d, cur_dir=%p\n", thread_current()->tid, thread_current()->cur_dir);
-      //printf("child: pid=%d, cur_dir=%p\n", t->tid, t->cur_dir);
+      PRINTF("parent: pid=%d, cur_dir=%p\n", thread_current()->tid, thread_current()->cwd_sector);
+      PRINTF("child: pid=%d, cur_dir=%p\n", t->tid, t->cwd_sector);
   }
   
 

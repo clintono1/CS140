@@ -55,9 +55,10 @@ filesys_create (const char *name, off_t initial_size)
   //struct dir *dir = dir_open_root ();
   struct dir *dir;
   char *file_name;
+  PRINTF("\nfilesys create called! filename:%s\n", name);
   if(!filesys_parse(name, &dir, &file_name)) 
     return false;
-  //printf(" name =%s, filename = %s, dir not null? %d\n", name, file_name, dir!=NULL);
+  //PRINTF(" name =%s, filename = %s, dir not null? %d\n", name, file_name, dir!=NULL);
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)  //ask free_list给这个新文件分配一个sector存放inode
                   && inode_create (inode_sector, initial_size)  //给这个sector写上inode信息：长度，根据大小初始化14个pointer，给每个pointer分配block，给每个block写满0
@@ -127,7 +128,8 @@ filesys_remove (const char *name)
 static void
 do_format (void)
 {
-  printf ("Formatting file system...");
+  //TODO: this is origin PRINTF
+  PRINTF ("Formatting file system...");
   free_map_create ();
   /* Creat a root directory that only contains . and .. */
   if (!dir_create (ROOT_DIR_SECTOR, 2))
@@ -136,7 +138,7 @@ do_format (void)
   dir_add(dir,".", ROOT_DIR_SECTOR);
   dir_add(dir,"..", ROOT_DIR_SECTOR);
   free_map_close ();
-  printf ("done.\n");
+  PRINTF ("done.\n");
 }
 
 bool
@@ -158,7 +160,7 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
   while ( tail >= begin && *tail != '/')
     tail--;
   tail++;
-  PRINTF("begin:%s   tail: %s\n\n", begin, tail);
+  //PRINTF("begin:%s   tail: %s\n\n", begin, tail);
   /* find the first word */
   while (*begin == ' ')
     begin++;
@@ -168,14 +170,17 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
     is_root = true;
   }
   //TODO:
-  PRINTF("is root(%d), string is:%s\n", is_root, begin);
+  
   if (is_root)
+  {
+    PRINTF("from root.\n");
     cur_dir = dir_open_root();
+  }
   else
   {
-    cur_dir = thread_current()->cur_dir;
-    cur_dir = dir_open_root();
-    PRINTF("cur_dir = %p\n", cur_dir);
+    cur_dir = dir_open_current();
+    PRINTF("root_dir = %p\n", cur_dir);
+    PRINTF( "cur_dir's inumber=%d \n", inode_get_inumber(dir_get_inode(cur_dir)));
   }
   // TODO: begin = "/a/b/c"
   for (token = strtok_r (begin, "/", &save_ptr); token != tail;

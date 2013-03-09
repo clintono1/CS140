@@ -6,6 +6,7 @@
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
 
 
 bool dir_empty(struct inode *);
@@ -65,6 +66,13 @@ dir_open_root (void)
   return dir_open (inode_open (ROOT_DIR_SECTOR, true));
 }
 
+/* Opens the current thread's working directory */
+struct dir*
+dir_open_current(void)
+{
+  return dir_open (inode_open (thread_current()->cwd_sector, true));
+}
+
 /* Opens and returns a new directory for the same inode as DIR.
    Returns a null pointer on failure. */
 //两个dir指向同一个inode（这个inode是directory file的inode）
@@ -80,6 +88,7 @@ dir_close (struct dir *dir)
 {
   if (dir != NULL)
     {
+      PRINTF("dir%p inode(%d) closed\n", dir, inode_get_inumber(dir->inode));
       inode_close (dir->inode);
       free (dir);
     }
@@ -166,7 +175,7 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
     return false;
   }
 
-  //printf("\ndir name = %s\n", name);
+  //PRINTF("\ndir name = %s\n", name);
   /* Check that NAME is not in use. */
   if (lookup (dir, name, NULL, NULL))
     goto done;
