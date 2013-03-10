@@ -21,6 +21,7 @@
 /* Hash of open inodes, so that opening a single inode twice
    returns the same 'struct inode'. */
 static struct hash open_inodes;
+static struct lock lock_open_inodes;
 
 /* On-disk inode.
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
@@ -337,6 +338,7 @@ void
 inode_init (void)
 {
   hash_init (&open_inodes, inode_hash_func, inode_hash_less, NULL);
+  lock_init (&lock_open_inodes);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -381,9 +383,12 @@ inode_open (block_sector_t sector, bool is_dir)
   /* Check whether this inode is already open. */
   struct inode temp_inode;
   temp_inode.sector = sector;
+
+  lock_acquire (&lock_open_inodes);
   e = hash_find (&open_inodes, &temp_inode.elem);
   if (e != NULL)
   {
+    lock_release (&lock_open_inodes);
     inode = hash_entry (e, struct inode, elem);
     ASSERT (inode->sector == sector);
     inode_reopen (inode);
@@ -403,6 +408,7 @@ inode_open (block_sector_t sector, bool is_dir)
   inode->to_be_removed = false;
   lock_init (&inode->lock_inode);
   hash_insert (&open_inodes, &inode->elem);
+  lock_release (&lock_open_inodes);
 
   struct inode_disk *inode_dsk;
   // TODO: whether need inode->length??
@@ -446,7 +452,9 @@ inode_close (struct inode *inode)
   if (--inode->open_cnt == 0)
   {
     /* Remove from inode list and release lock. */
+    lock_acquire (&lock_open_inodes);
     hash_delete (&open_inodes, &inode->elem);
+    lock_release (&lock_open_inodes);
 
     /* Deallocate blocks if removed. */
     if (inode->to_be_removed)
