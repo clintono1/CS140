@@ -53,7 +53,8 @@ struct inode
     struct list_elem elem;              /* Element in inode list. */
     block_sector_t sector;              /* Sector number of disk location. */
     int open_cnt;                       /* Number of openers. */
-    bool removed;                       /* True if deleted, false otherwise. */
+    bool to_be_removed;                 /* True if deleted when open_cnt
+                                           reaches zero. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
     off_t length;                       /* File size in bytes. */
     bool is_dir;                        /* True if inode is for directory */
@@ -383,7 +384,7 @@ inode_open (block_sector_t sector, bool is_dir)
   inode->open_cnt = 1;
   inode->is_dir = is_dir;
   inode->deny_write_cnt = 0;
-  inode->removed = false;
+  inode->to_be_removed = false;
   lock_init (&inode->lock_inode);
 
   struct inode_disk *inode_dsk;
@@ -431,7 +432,7 @@ inode_close (struct inode *inode)
     list_remove (&inode->elem);
 
     /* Deallocate blocks if removed. */
-    if (inode->removed)
+    if (inode->to_be_removed)
     {
       /* Remove the on-disk inode and all the sectors it points to */
       struct inode_disk *inode_dsk;
@@ -465,7 +466,7 @@ inode_remove (struct inode *inode)
 {
   ASSERT (inode != NULL);
   lock_acquire (&inode->lock_inode);
-  inode->removed = true;
+  inode->to_be_removed = true;
   lock_release (&inode->lock_inode);
 }
 
