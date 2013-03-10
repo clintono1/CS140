@@ -1,5 +1,5 @@
 #include "filesys/inode.h"
-#include <list.h>
+#include <hash.h>
 #include <debug.h>
 #include <round.h>
 #include <string.h>
@@ -18,9 +18,9 @@
 #define CAPACITY_L1    (IDX_PER_SECTOR * BLOCK_SECTOR_SIZE)
 #define CAPACITY_L2    (IDX_PER_SECTOR * IDX_PER_SECTOR * BLOCK_SECTOR_SIZE)
 
-/* List of open inodes, so that opening a single inode twice
+/* Hash of open inodes, so that opening a single inode twice
    returns the same 'struct inode'. */
-static struct list open_inodes;
+static struct hash open_inodes;
 
 /* On-disk inode.
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
@@ -50,7 +50,7 @@ bytes_to_sectors (off_t size)
 /* In-memory inode. */
 struct inode 
   {
-    struct list_elem elem;              /* Element in inode list. */
+    struct hash_elem elem;              /* Element in inode hash. */
     block_sector_t sector;              /* Sector number of disk location. */
     int open_cnt;                       /* Number of openers. */
     bool to_be_removed;                 /* True if deleted when open_cnt
@@ -315,11 +315,28 @@ inode_extend_to_size (struct inode_disk *inode_disk, const off_t length)
   }
 }
 
+static block_sector_t
+inode_hash_func (const struct hash_elem *e, void *aux UNUSED)
+{
+  struct inode *inode = hash_entry (e, struct inode, elem);
+  return inode->sector;
+}
+
+static bool
+inode_hash_less (const struct hash_elem *a,
+                 const struct hash_elem *b,
+                 void *aux UNUSED)
+{
+  struct inode *inode_a = hash_entry (a, struct inode, elem);
+  struct inode *inode_b = hash_entry (b, struct inode, elem);
+  return inode_a->sector < inode_b->sector;
+}
+
 /* Initializes the inode module. */
 void
 inode_init (void)
 {
-  list_init (&open_inodes);
+  hash_init (&open_inodes, inode_hash_func, inode_hash_less, NULL);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -358,20 +375,20 @@ inode_create (block_sector_t sector, off_t length)
 struct inode *
 inode_open (block_sector_t sector, bool is_dir)
 {
-  struct list_elem *e;
+  struct hash_elem *e;
   struct inode *inode;
 
   /* Check whether this inode is already open. */
-  for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
-       e = list_next (e)) 
-    {
-      inode = list_entry (e, struct inode, elem);
-      if (inode->sector == sector) 
-        {
-          inode_reopen (inode);
-          return inode; 
-        }
-    }
+  struct inode temp_inode;
+  temp_inode.sector = sector;
+  e = hash_find (&open_inodes, &temp_inode.elem);
+  if (e != NULL)
+  {
+    inode = hash_entry (e, struct inode, elem);
+    ASSERT (inode->sector == sector);
+    inode_reopen (inode);
+    return inode;
+  }
 
   /* Not opened yet. Allocate memory */
   inode = malloc (sizeof *inode);
@@ -379,13 +396,13 @@ inode_open (block_sector_t sector, bool is_dir)
     return NULL;
 
   /* Initialize. */
-  list_push_front (&open_inodes, &inode->elem);
   inode->sector = sector;
   inode->open_cnt = 1;
   inode->is_dir = is_dir;
   inode->deny_write_cnt = 0;
   inode->to_be_removed = false;
   lock_init (&inode->lock_inode);
+  hash_insert (&open_inodes, &inode->elem);
 
   struct inode_disk *inode_dsk;
   // TODO: whether need inode->length??
@@ -429,7 +446,7 @@ inode_close (struct inode *inode)
   if (--inode->open_cnt == 0)
   {
     /* Remove from inode list and release lock. */
-    list_remove (&inode->elem);
+    hash_delete (&open_inodes, &inode->elem);
 
     /* Deallocate blocks if removed. */
     if (inode->to_be_removed)
