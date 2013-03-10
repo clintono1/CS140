@@ -289,7 +289,7 @@ inode_extend_single (struct inode_disk *inode_disk)
 }
 
 /* Extend the length of the file to exactly LENGTH, possibly allocating
-   new blocks*/
+   new blocks. */
 static bool
 inode_extend_to_size (struct inode_disk *inode_disk, const off_t length)
 {
@@ -463,16 +463,17 @@ inode_close (struct inode *inode)
       struct inode_disk *inode_dsk;
       inode_dsk = malloc (sizeof *inode_dsk);
       if (inode_dsk == NULL)
-        PANIC("couldn't allocate inode_disk!");
+        PANIC ("couldn't allocate inode_disk!");
       cache_read (inode->sector, inode_dsk);
-      off_t file_end = ROUND_UP(inode->length, BLOCK_SECTOR_SIZE);
+      off_t file_end = ROUND_UP (inode->length, BLOCK_SECTOR_SIZE);
       off_t ofs;
       block_sector_t sector;
-      for ( ofs = 0; ofs < file_end; ofs += BLOCK_SECTOR_SIZE)
+      for (ofs = 0; ofs < file_end; ofs += BLOCK_SECTOR_SIZE)
       {
-        sector = byte_to_sector( inode_dsk, ofs);
-        free_map_release(sector, 1);
+        sector = byte_to_sector (inode_dsk, ofs);
+        free_map_release (sector, 1);
       }
+      //TODO index blocks on disk are NOT freed.
       free (inode_dsk);
       free_map_release (inode->sector, 1);
     }
@@ -512,13 +513,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   }
   PRINTF("inode.sector=%d\n", inode->sector);
   cache_read (inode->sector, inode_dsk);
-  /* Acquire the lock and then read the file length */
-  if (!lock_held_by_current_thread (&inode->lock_inode))
-    lock_acquire (&inode->lock_inode);
-  off_t total_length = inode->length;
-  lock_release (&inode->lock_inode);
-  if (offset > total_length)
-    return 0;  
+  if (offset > inode->length)
+    return 0;
 
   while (size > 0) 
   {
@@ -526,17 +522,19 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     block_sector_t sector_idx = byte_to_sector (inode_dsk, offset);
     int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
-    /* Bytes left in inode, bytes left in sector, lesser of the two. */
-    off_t inode_left = total_length - offset;
+    /* Bytes left in inode, bytes left in sector, lesser of the two.
+       Note: inode->length may be updated concurrently if another process
+       writes exceeding the end of the file. */
+    off_t inode_left = inode->length - offset;
     int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
     int min_left = inode_left < sector_left ? inode_left : sector_left;
 
     /* Number of bytes to actually copy out of this sector. */
-    int chunk_size = size < min_left ? size : min_left;
-    if (chunk_size <= 0)
+    int bytes_to_read = size < min_left ? size : min_left;
+    if (bytes_to_read <= 0)
       break;
 
-    if (sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE)
+    if (sector_ofs == 0 && bytes_to_read == BLOCK_SECTOR_SIZE)
     {
       /* Read full sector directly into caller's buffer. */
       cache_read (sector_idx, buffer + bytes_read);
@@ -545,13 +543,13 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     {
       /* Read sector and partially copy into caller's buffer */
       cache_read_partial (sector_idx, buffer + bytes_read,
-                          sector_ofs, chunk_size);
+                          sector_ofs, bytes_to_read);
     }
 
     /* Advance. */
-    size -= chunk_size;
-    offset += chunk_size;
-    bytes_read += chunk_size;
+    size -= bytes_to_read;
+    offset += bytes_to_read;
+    bytes_read += bytes_to_read;
   }
   free (inode_dsk);
   return bytes_read;
@@ -574,36 +572,49 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
   if (inode->deny_write_cnt)
     return 0;
+
+  /* Acquire the lock before checking the inode->length since another process
+     may be extending this inode. The inode->length is updated progressively
+     as soon as a sector of data is written. The lock is not released until
+     all the data is written. */
+  lock_acquire (&inode->lock_inode);
+
   /* If total bytes to be written is larger than current file length,
      need to extend the file to (offset + size). Don't release the lock
      until finish extending and writing the file. */
-  if ( offset + size > inode->length )
+  bool need_extension = false;
+  if (offset + size > inode_dsk->length)
   {
-    if (!lock_held_by_current_thread (&inode->lock_inode))
-      lock_acquire (&inode->lock_inode);
+    need_extension = true;
     inode_extend_to_size (inode_dsk, offset + size);
-    inode->length = inode_dsk->length;
+    /* Note: inode->length is not updated until a sector of data is written */
   }
+  else
+  {
+    /* No need to hold the lock if data to write does not exceed the EOF */
+    lock_release (&inode->lock_inode);
+  }
+
   while (size > 0)
   {
     /* Sector to write, starting byte offset within sector. */
     block_sector_t sector_idx = byte_to_sector (inode_dsk, offset);
     int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
+    /* Make sure enough space to write data */
+    ASSERT (inode_dsk->length >= offset + size);
+
     /* Bytes left in inode, bytes left in sector, lesser of the two. */
-    //TODO: implement write past end of file! need acquire a lock and then write past eof
-    off_t inode_left = inode->length - offset;
     int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
-    int min_left = inode_left < sector_left ? inode_left : sector_left;
 
     /* Number of bytes to actually write into this sector. */
-    int chunk_size = size < min_left ? size : min_left;
-    if (chunk_size <= 0)
+    int bytes_to_write = size < sector_left ? size : sector_left;
+    if (bytes_to_write <= 0)
       break;
 
-    if (sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE)
+    if (sector_ofs == 0 && bytes_to_write == BLOCK_SECTOR_SIZE)
     {
-      /* Write full sector directly to disk. */
+      /* Write a full sector. */
       cache_write (sector_idx, buffer + bytes_written);
     }
     else
@@ -611,16 +622,23 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       /* If the sector contains data before or after the chunk
          we're writing, then we need to read in the sector
          first.  Otherwise we start with a sector of all zeros. */
-      cache_write_partial (sector_idx, buffer + bytes_written, sector_ofs, chunk_size );
+      cache_write_partial (sector_idx, buffer + bytes_written,
+                           sector_ofs, bytes_to_write);
     }
 
     /* Advance. */
-    size -= chunk_size;
-    offset += chunk_size;
-    bytes_written += chunk_size;
+    size -= bytes_to_write;
+    offset += bytes_to_write;
+    bytes_written += bytes_to_write;
+
+    /* Update inode->length in case of file extension */
+    if (inode->length < offset)
+      inode->length = offset;
   }
-  if (lock_held_by_current_thread (&inode->lock_inode))
+
+  if (need_extension)
     lock_release (&inode->lock_inode);
+
   ASSERT (inode->sector == inode_dsk->sector);
   cache_write (inode->sector, inode_dsk);
   free (inode_dsk);
