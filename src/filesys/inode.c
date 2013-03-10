@@ -180,7 +180,7 @@ allocate_indirect_block (off_t first_entry)
   if (!free_map_allocate (1, &sector))
     return -1;  
   struct indirect_block *indirect_blk = NULL;
-  indirect_blk = malloc (sizeof *indirect_blk);
+  indirect_blk = calloc (1, sizeof *indirect_blk);
   if (indirect_blk == NULL)
     return -1;
   indirect_blk->idx[0] = first_entry;
@@ -194,7 +194,7 @@ static bool
 inode_extend_single (struct inode_disk *inode_disk)
 {
   block_sector_t data_sector = allocate_zeroed_sector();
-  if ((int)data_sector == -1)
+  if ((int) data_sector == -1)
     return false;
   off_t file_offset = inode_disk->length - 1;
   inode_disk->length += BLOCK_SECTOR_SIZE;
@@ -490,7 +490,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   /* Acquire the lock and then read the file length */
   if (!lock_held_by_current_thread (&inode->lock_inode))
     lock_acquire (&inode->lock_inode);
-  size_t total_length = inode->length;
+  off_t total_length = inode->length;
   lock_release (&inode->lock_inode);
   if (offset > total_length)
     return 0;  
