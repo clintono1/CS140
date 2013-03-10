@@ -439,6 +439,43 @@ inode_get_inumber (const struct inode *inode)
   return inode->sector;
 }
 
+static void
+remove_inode (struct inode* inode)
+{
+  ASSERT (lock_held_by_current_thread (&inode->lock_inode));
+  struct inode_disk *inode_dsk;
+  inode_dsk = malloc (sizeof *inode_dsk);
+  if (inode_dsk == NULL)
+    PANIC ("couldn't allocate inode_disk!");
+  cache_read (inode->sector, inode_dsk);
+  off_t file_end = ROUND_UP (inode->length, BLOCK_SECTOR_SIZE);
+  off_t ofs;
+  block_sector_t sector;
+
+  /* Release the sectors for data block */
+  for (ofs = 0; ofs < file_end; ofs += BLOCK_SECTOR_SIZE)
+  {
+    sector = byte_to_sector (inode_dsk, ofs);
+    free_map_release (sector, 1);
+  }
+
+  // TODO
+  /* Release the sector for indirect index block */
+//  free_map_release (inode_dsk->idx1, 1);
+
+  /* Release the sectors for double indirect index block */
+//  size_t idx;
+//  for (idx = 0; idx < IDX_PER_SECTOR; idx++)
+//  {
+//    free_map_release (inode_dsk->idx2[idx], 1);
+//  }
+//  free_map_release (inode_dsk->idx2, 1);
+
+  free (inode_dsk);
+  /* Release the sector for inode */
+  free_map_release (inode->sector, 1);
+}
+
 /* Closes INODE and writes it to disk.
    If this was the last reference to INODE, frees its memory.
    If INODE was also a removed inode, frees its blocks. */
@@ -460,25 +497,7 @@ inode_close (struct inode *inode)
 
     /* Deallocate blocks if removed. */
     if (inode->to_be_removed)
-    {
-      /* Remove the on-disk inode and all the sectors it points to */
-      struct inode_disk *inode_dsk;
-      inode_dsk = malloc (sizeof *inode_dsk);
-      if (inode_dsk == NULL)
-        PANIC ("couldn't allocate inode_disk!");
-      cache_read (inode->sector, inode_dsk);
-      off_t file_end = ROUND_UP (inode->length, BLOCK_SECTOR_SIZE);
-      off_t ofs;
-      block_sector_t sector;
-      for (ofs = 0; ofs < file_end; ofs += BLOCK_SECTOR_SIZE)
-      {
-        sector = byte_to_sector (inode_dsk, ofs);
-        free_map_release (sector, 1);
-      }
-      //TODO index blocks on disk are NOT freed.
-      free (inode_dsk);
-      free_map_release (inode->sector, 1);
-    }
+      remove_inode (inode);
     /* Remove the in-memory inode if open_cnt = 0 */
     lock_release (&inode->lock_inode);
     free (inode);
@@ -494,7 +513,10 @@ inode_remove (struct inode *inode)
 {
   ASSERT (inode != NULL);
   lock_acquire (&inode->lock_inode);
-  inode->to_be_removed = true;
+  if (inode->open_cnt > 0)
+    inode->to_be_removed = true;
+  else
+    remove_inode (inode);
   lock_release (&inode->lock_inode);
 }
 
