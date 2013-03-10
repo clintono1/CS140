@@ -39,7 +39,7 @@ dir_create (block_sector_t sector, size_t entry_cnt)
 /* Opens and returns the directory for the given INODE, of which
    it takes ownership.  Returns a null pointer on failure. */
 struct dir *  
-dir_open (struct inode *inode) 
+dir_open (struct inode *inode)
 {
   struct dir *dir = calloc (1, sizeof *dir);
   if (inode != NULL && dir != NULL)
@@ -110,8 +110,8 @@ lookup (const struct dir *dir, const char *name,
   struct dir_entry e;
   size_t ofs;
   
-  ASSERT (dir != NULL);
-  ASSERT (name != NULL);
+  if (dir == NULL || name == NULL)
+    return false;
 
   for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
        ofs += sizeof e) 
@@ -136,8 +136,8 @@ dir_lookup (const struct dir *dir, const char *name,
 {
   struct dir_entry e;
 
-  ASSERT (dir != NULL);
-  ASSERT (name != NULL);
+  if (dir == NULL || name == NULL)
+    return false;
 
   if (lookup (dir, name, &e, NULL))
     *inode = inode_open (e.inode_sector, e.is_dir);
@@ -161,8 +161,8 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector,
   off_t ofs;
   bool success = false;
 
-  ASSERT (dir != NULL);
-  ASSERT (name != NULL);
+  if (dir == NULL || name == NULL)
+    return false;
   
   /* Check NAME for validity. */
   if (*name == '\0' || strlen (name) > NAME_MAX)
@@ -208,8 +208,8 @@ dir_remove (struct dir *dir, const char *name)
   bool success = false;
   off_t ofs;
 
-  ASSERT (dir != NULL);
-  ASSERT (name != NULL);
+  if (dir == NULL || name == NULL)
+    return false;
 
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
@@ -256,6 +256,9 @@ bool
 dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 {
   struct dir_entry e;
+
+  if (dir == NULL || name == NULL)
+    return false;
 
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e) 
     {

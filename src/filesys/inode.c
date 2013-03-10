@@ -330,7 +330,9 @@ bool
 inode_create (block_sector_t sector, off_t length)
 {
   struct inode_disk *disk_inode = NULL;
-  ASSERT (length >= 0);
+  if (length < 0)
+    return false;
+
   /* If this assertion fails, the inode structure is not exactly
      one sector in size, and you should fix that. */
   ASSERT ((sizeof *disk_inode) == BLOCK_SECTOR_SIZE);
@@ -461,10 +463,10 @@ inode_close (struct inode *inode)
 void
 inode_remove (struct inode *inode) 
 {
-  lock_acquire(&inode->lock_inode);
   ASSERT (inode != NULL);
+  lock_acquire (&inode->lock_inode);
   inode->removed = true;
-  lock_release(&inode->lock_inode);
+  lock_release (&inode->lock_inode);
 }
 
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
