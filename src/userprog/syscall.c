@@ -477,15 +477,15 @@ _mkdir (const char *name)
   if(!filesys_parse(name, &dir, &dir_name)) 
     return false;
   bool success = (dir != NULL
-    && free_map_allocate (1, &inode_sector)      /* Ask the free_list for a sector to store directory file */
-    && inode_create (inode_sector, 0)            /* Write to this sector an inode with 0 initial size. */
-    && dir_add (dir, dir_name, inode_sector, true));   /* Add this directory file to the parsed dir */
-  if (!success && inode_sector != 0) 
+    && free_map_allocate (1, &inode_sector) /* Allocate sector */
+    && inode_create (inode_sector, 0, true) /* Write inode to this sector. */
+    && dir_add (dir, dir_name, inode_sector, true)); /* Add this inode to parent dir */
+  if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
   if (success)
   { 
     /* Add . and .. to the new directory */
-    new_dir = dir_open(inode_open( inode_sector, true));
+    new_dir  = dir_open (inode_open (inode_sector));
     success &= dir_add (new_dir, ".", inode_sector, true);
     success &= dir_add (new_dir, "..", inode_get_inumber(dir_get_inode(dir)), true);
     dir_close(new_dir);

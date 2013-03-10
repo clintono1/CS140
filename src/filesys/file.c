@@ -18,19 +18,21 @@ struct file *
 file_open (struct inode *inode) 
 {
   struct file *file = calloc (1, sizeof *file);
-  if (inode != NULL && file != NULL)
-    {
-      file->inode = inode;
-      file->pos = 0;
-      file->deny_write = false;
-      return file;
-    }
+  if (file == NULL)
+    return NULL;
+
+  if (inode != NULL)
+  {
+    file->inode = inode;
+    file->pos = 0;
+    file->deny_write = false;
+    return file;
+  }
   else
-    {
-      inode_close (inode);
-      free (file);
-      return NULL; 
-    }
+  {
+    free (file);
+    return NULL;
+  }
 }
 
 /* Opens and returns a new file for the same inode as FILE.

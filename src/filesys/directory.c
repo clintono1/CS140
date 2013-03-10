@@ -33,7 +33,7 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -41,6 +41,7 @@ dir_create (block_sector_t sector, size_t entry_cnt)
 struct dir *  
 dir_open (struct inode *inode)
 {
+  ASSERT (inode_is_dir(inode));
   struct dir *dir = calloc (1, sizeof *dir);
   if (inode != NULL && dir != NULL)
     {
@@ -61,14 +62,14 @@ dir_open (struct inode *inode)
 struct dir *
 dir_open_root (void)
 {
-  return dir_open (inode_open (ROOT_DIR_SECTOR, true));
+  return dir_open (inode_open (ROOT_DIR_SECTOR));
 }
 
 /* Opens the current thread's working directory */
 struct dir*
 dir_open_current(void)
 {
-  return dir_open (inode_open (thread_current()->cwd_sector, true));
+  return dir_open (inode_open (thread_current()->cwd_sector));
 }
 
 /* Opens and returns a new directory for the same inode as DIR.
@@ -140,7 +141,7 @@ dir_lookup (const struct dir *dir, const char *name,
     return false;
 
   if (lookup (dir, name, &e, NULL))
-    *inode = inode_open (e.inode_sector, e.is_dir);
+    *inode = inode_open (e.inode_sector);
   else
     *inode = NULL;
 
@@ -154,8 +155,8 @@ dir_lookup (const struct dir *dir, const char *name,
    Fails if NAME is invalid (i.e. too long) or a disk or memory
    error occurs. */
 bool
-dir_add (struct dir *dir, const char *name, block_sector_t inode_sector,
-         bool is_dir)
+dir_add (struct dir *dir, const char *name,
+         block_sector_t inode_sector, bool is_dir)
 {
   struct dir_entry e;
   off_t ofs;
@@ -214,22 +215,23 @@ dir_remove (struct dir *dir, const char *name)
     goto done;
 
   /* Open inode. */
-  inode = inode_open (e.inode_sector, e.is_dir);
+  inode = inode_open (e.inode_sector);
   if (inode == NULL)
     goto done;
 
   if (e.is_dir) 
   {
     block_sector_t sector = e.inode_sector;
-    struct inode *inode = inode_open(sector, true);
+    struct inode *inode = inode_open (sector);
+    ASSERT (inode_is_dir(inode));
     /* Can't close a non-empty directory */
-    if (!dir_empty(inode))
+    if (!dir_empty (inode))
       goto done;
     /* Can't remove cwd */
-    if (inode_get_inumber(inode) == thread_current()->cwd_sector)
+    if (inode_get_inumber (inode) == thread_current ()->cwd_sector)
       goto done;
     /* Can't remove opened inode */
-    if (inode_open_cnt(inode) > 2) //TODO: 2 is experimental result. only 2 can pass all. Why? reference handout page 53 line 8 and test case of : dir-rm-*.c
+    if (inode_open_cnt (inode) > 2) //TODO: 2 is experimental result. only 2 can pass all. Why? reference handout page 53 line 8 and test case of : dir-rm-*.c
       goto done;
   } 
 
@@ -274,7 +276,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 bool
 dir_empty (struct inode * inode)
 {
-  ASSERT (inode_is_dir (inode));
+  ASSERT (inode_is_dir(inode));
   struct dir_entry e;
   size_t ofs;
   for (ofs = 0; inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;

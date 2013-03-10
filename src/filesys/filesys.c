@@ -62,7 +62,7 @@ filesys_create (const char *name, off_t initial_size)
   //PRINTF(" name =%s, filename = %s, dir not null? %d\n", name, file_name, dir!=NULL);
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size)
+                  && inode_create (inode_sector, initial_size, false)
                   && dir_add (dir, file_name, inode_sector, false));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
@@ -71,7 +71,6 @@ filesys_create (const char *name, off_t initial_size)
   PRINTF("filesys creat success(%d)\n", success);
   return success;
 }
-
 
 /* Opens the file with the given NAME.
    Returns the new file if successful or a null pointer
@@ -84,10 +83,10 @@ filesys_open (const char *name)
   struct dir *dir;
   char *file_name;
   if ( !strcmp(name, "/"))
-    return file_open(inode_open(ROOT_DIR_SECTOR, true));
+    return file_open (inode_open (ROOT_DIR_SECTOR));
   //TODO: 
   PRINTF("\nfilesys_open called. filename:%s\n", name);
-  if(!filesys_parse(name, &dir, &file_name)) 
+  if(!filesys_parse (name, &dir, &file_name))
     return NULL;
   PRINTF("dir=%p, filename=%s\n", dir, file_name);
   struct inode *inode = NULL;
@@ -129,17 +128,16 @@ filesys_remove (const char *name)
 static void
 do_format (void)
 {
-  //TODO: this is origin PRINTF
-  PRINTF ("Formatting file system...");
+  printf ("Formatting file system...");
   free_map_create ();
   /* Creat a root directory that only contains . and .. */
   if (!dir_create (ROOT_DIR_SECTOR, 2))
     PANIC ("root directory creation failed");
   struct dir *dir = dir_open_root();
-  dir_add(dir,".", ROOT_DIR_SECTOR, true);
-  dir_add(dir,"..", ROOT_DIR_SECTOR, true);
+  dir_add (dir,".", ROOT_DIR_SECTOR, true);
+  dir_add (dir,"..", ROOT_DIR_SECTOR, true);
   free_map_close ();
-  PRINTF ("done.\n");
+  printf ("done.\n");
 }
 
 bool

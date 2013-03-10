@@ -12,7 +12,7 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 /* 128 indexes per sector */
-#define DIRECT_IDX_CNT 123
+#define DIRECT_IDX_CNT 122
 #define IDX_PER_SECTOR (BLOCK_SECTOR_SIZE / 4)
 #define CAPACITY_L0    (DIRECT_IDX_CNT * BLOCK_SECTOR_SIZE)
 #define CAPACITY_L1    (IDX_PER_SECTOR * BLOCK_SECTOR_SIZE)
@@ -30,6 +30,8 @@ struct inode_disk
     block_sector_t sector;                 /* Sector number of disk location.*/
     off_t length;                          /* File size in bytes. */
     unsigned magic;                        /* Magic number. */
+    int is_dir;                            /* 1 if this inode is a dir,
+                                              0 otherwise. */
     block_sector_t idx0 [DIRECT_IDX_CNT];  /* Direct index. */
     block_sector_t idx1;                   /* Single indirect index. */
     block_sector_t idx2;                   /* Double indirect index. */
@@ -341,13 +343,12 @@ inode_init (void)
   lock_init (&lock_open_inodes);
 }
 
-/* Initializes an inode with LENGTH bytes of data and
-   writes the new inode to sector SECTOR on the file system
-   device.
-   Returns true if successful.
-   Returns false if memory or disk allocation fails. */
+/* Initializes an inode with LENGTH bytes of data and writes the new inode
+   to sector SECTOR on the file system device.
+   Set the new inode as a directory if IS_DIR is true.
+   Returns true if successful, false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length)
+inode_create (block_sector_t sector, off_t length, bool is_dir)
 {
   struct inode_disk *disk_inode = NULL;
   if (length < 0)
@@ -366,6 +367,7 @@ inode_create (block_sector_t sector, off_t length)
   ASSERT (disk_inode->length-length < BLOCK_SECTOR_SIZE);
   disk_inode->magic = INODE_MAGIC;
   disk_inode->sector = sector;
+  disk_inode->is_dir = is_dir ? 1 : 0;
   cache_write(sector, disk_inode);
   free (disk_inode);
   return true;
@@ -375,7 +377,7 @@ inode_create (block_sector_t sector, off_t length)
    and returns a `struct inode' that contains it.
    Returns a null pointer if memory allocation fails. */
 struct inode *
-inode_open (block_sector_t sector, bool is_dir)
+inode_open (block_sector_t sector)
 {
   struct hash_elem *e;
   struct inode *inode;
@@ -403,7 +405,6 @@ inode_open (block_sector_t sector, bool is_dir)
   /* Initialize. */
   inode->sector = sector;
   inode->open_cnt = 1;
-  inode->is_dir = is_dir;
   inode->deny_write_cnt = 0;
   inode->to_be_removed = false;
   lock_init (&inode->lock_inode);
@@ -417,6 +418,7 @@ inode_open (block_sector_t sector, bool is_dir)
     return NULL;
   cache_read (sector, inode_dsk);
   inode->length = inode_dsk->length;
+  inode->is_dir = inode_dsk->is_dir != 0;
   free (inode_dsk);
   return inode;
 }
