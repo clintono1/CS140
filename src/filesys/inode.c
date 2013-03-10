@@ -461,15 +461,17 @@ remove_inode (struct inode* inode)
 
   // TODO
   /* Release the sector for indirect index block */
-//  free_map_release (inode_dsk->idx1, 1);
+  free_map_release (inode_dsk->idx1, 1);
 
   /* Release the sectors for double indirect index block */
-//  size_t idx;
-//  for (idx = 0; idx < IDX_PER_SECTOR; idx++)
-//  {
-//    free_map_release (inode_dsk->idx2[idx], 1);
-//  }
-//  free_map_release (inode_dsk->idx2, 1);
+  off_t idx;
+  struct indirect_block indirect_blk;
+  cache_read(inode_dsk->idx2, &indirect_blk);
+  for (idx = 0; idx < offset_double_indirect1(inode_dsk->length); idx++)
+  {
+    free_map_release (indirect_blk.idx[idx], 1);
+  }
+  free_map_release (inode_dsk->idx2, 1);
 
   free (inode_dsk);
   /* Release the sector for inode */
