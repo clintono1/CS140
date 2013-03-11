@@ -5,7 +5,7 @@ void
 cache_init(void)
 {
   lock_init(&global_cache_lock);
-  lock_init(&io_lock);
+//  lock_init(&io_lock);
   list_init(&evict_wb_list);
   cache_used_num = 0;
   hand = 0;
@@ -82,7 +82,7 @@ cache_read_wait(uint32_t cache_id, bool hit_flag)
 
 /* After reading from cache, signal other threads to enable writing */
 static void
-cache_read_signal(uint32_t cache_id)
+cache_read_signal(uint32_t cache_id, bool hit_flag)
 {
   lock_acquire(&buffer_cache[cache_id].lock);
   buffer_cache[cache_id].AR--;
@@ -91,14 +91,21 @@ cache_read_signal(uint32_t cache_id)
     cond_signal(&buffer_cache[cache_id].can_write,
 				    &buffer_cache[cache_id].lock);
   }
+  if(!hit_flag)
+  {
+	buffer_cache[cache_id].loading = false;
+	cond_signal(&buffer_cache[cache_id].can_read, &buffer_cache[cache_id].lock);
+	cond_signal(&buffer_cache[cache_id].can_write,
+	  			      &buffer_cache[cache_id].lock);
+  }
   lock_release(&buffer_cache[cache_id].lock);
 }
 
 /* If there is a hit, copy from cache to buffer */
 static void
-cache_read_hit(void *buffer, off_t start,
-		                        off_t length, uint32_t cache_id)
+cache_read_hit(void *buffer, off_t start, off_t length, uint32_t cache_id)
 {
+  PRINTF("cache_read_hit\n");
   lock_acquire(&buffer_cache[cache_id].lock);
   /*TODO: should this statement be in or outside the while loop */
   buffer_cache[cache_id].WR++;
@@ -112,7 +119,7 @@ cache_read_hit(void *buffer, off_t start,
   memcpy(buffer, buffer_cache[cache_id].data + start,
 		        length*sizeof(uint8_t));
 
-  cache_read_signal(cache_id);
+  cache_read_signal(cache_id, true);
 
 }
 
@@ -120,6 +127,7 @@ cache_read_hit(void *buffer, off_t start,
 static void
 cache_read_miss(block_sector_t sector, void *buffer, off_t start, off_t length)
 {
+  PRINTF("cache_read_miss\n");
   /* if cache is not full */
   if(cache_used_num < BUFFER_CACHE_SIZE)
   {
@@ -140,17 +148,13 @@ cache_read_miss(block_sector_t sector, void *buffer, off_t start, off_t length)
 
 	/*TODO: need to check whether this lock is necessary */
 	/*TODO: need to check whether loading is useful here */
-	lock_acquire(&io_lock);
+//	lock_acquire(&io_lock);
 	block_read(fs_device, sector, buffer_cache[cache_id].data);
-	buffer_cache[cache_id].loading = false;
-	cond_signal(&buffer_cache[cache_id].can_read, &buffer_cache[cache_id].lock);
-	cond_signal(&buffer_cache[cache_id].can_write,
-			        &buffer_cache[cache_id].lock);
-	lock_release(&io_lock);
+//	lock_release(&io_lock);
 	memcpy(buffer, buffer_cache[cache_id].data + start,
 			                   length*sizeof(uint8_t));
 
-	cache_read_signal(cache_id);
+	cache_read_signal(cache_id, false);
   }
   /* if cache is full, do eviction */
   else
@@ -199,7 +203,7 @@ cache_read_miss(block_sector_t sector, void *buffer, off_t start, off_t length)
 	    buffer_cache[evict_id].AR++;
 	    buffer_cache[evict_id].loading = true;
 	    buffer_cache[evict_id].accessed = true;
-	    lock_acquire(&io_lock);
+//	    lock_acquire(&io_lock);
 	    lock_release(&buffer_cache[evict_id].lock);
 	    /* if dirty */
 		if(buffer_cache[evict_id].dirty)
@@ -207,19 +211,14 @@ cache_read_miss(block_sector_t sector, void *buffer, off_t start, off_t length)
 		  block_write (fs_device, old_sector, buffer_cache[evict_id].data);
 		  /* release io_lock so that other processes can read the sector
 		   * just written to disk */
-		  lock_release(&io_lock);
-		  lock_acquire(&io_lock);
+//		  lock_release(&io_lock);
+//		  lock_acquire(&io_lock);
 		}
 	    block_read(fs_device, sector, buffer_cache[evict_id].data);
-	    buffer_cache[evict_id].loading = false;
-	    cond_signal(&buffer_cache[evict_id].can_read,
-	    		       &buffer_cache[evict_id].lock);
-	    cond_signal(&buffer_cache[evict_id].can_write,
-	    		       &buffer_cache[evict_id].lock);
-	    lock_release(&io_lock);
+//	    lock_release(&io_lock);
 	    memcpy(buffer, buffer_cache[evict_id].data + start,
 	      			               length*sizeof(uint8_t));
-	    cache_read_signal(evict_id);
+	    cache_read_signal(evict_id, false);
 	  }
 	}
   }
@@ -231,6 +230,7 @@ void
 cache_read_partial(block_sector_t sector, void *buffer,
 		                off_t start, off_t length)
 {
+  PRINTF("reading cache %d\n", sector);
   lock_acquire(&global_cache_lock);
   int cache_id_hit = is_in_cache(sector);
   if(cache_id_hit != -1)
@@ -241,6 +241,7 @@ cache_read_partial(block_sector_t sector, void *buffer,
   {
 	cache_read_miss(sector, buffer, start, length);
   }
+  PRINTF("reading cache %d done\n", sector);
 }
 
 /* Reads sector SECTOR from cache into BUFFER. */
@@ -281,7 +282,7 @@ cache_write_wait(uint32_t cache_id, bool hit_flag)
 
 /* After writing to cache, signal other threads to enable writing or reading */
 static void
-cache_write_signal(uint32_t cache_id)
+cache_write_signal(uint32_t cache_id, bool hit_flag)
 {
   lock_acquire(&buffer_cache[cache_id].lock);
   buffer_cache[cache_id].AW--;
@@ -294,6 +295,13 @@ cache_write_signal(uint32_t cache_id)
   {
 	cond_broadcast(&buffer_cache[cache_id].can_read,
 			          &buffer_cache[cache_id].lock);
+  }
+  if(!hit_flag)
+  {
+	buffer_cache[cache_id].loading = false;
+	cond_signal(&buffer_cache[cache_id].can_read, &buffer_cache[cache_id].lock);
+	cond_signal(&buffer_cache[cache_id].can_write,
+	  			    &buffer_cache[cache_id].lock);
   }
   lock_release(&buffer_cache[cache_id].lock);
 }
@@ -315,7 +323,7 @@ cache_write_hit (const void *buffer, off_t start,
   cache_write_wait(cache_id, true);
   memcpy(buffer_cache[cache_id].data + start, buffer,
 		                     length*sizeof(uint8_t));
-  cache_write_signal(cache_id);
+  cache_write_signal(cache_id, true);
 }
 
 /* If it is a miss, load this sector from disk to cache, then copy buffer
@@ -345,17 +353,13 @@ cache_write_miss (block_sector_t sector, const void *buffer,
 
 	/*TODO: need to check whether this lock is necessary */
 	/*TODO: need to check whether loading is useful here */
-	lock_acquire(&io_lock);
+//	lock_acquire(&io_lock);
 	block_read(fs_device, sector, buffer_cache[cache_id].data);
-	buffer_cache[cache_id].loading = false;
-	cond_signal(&buffer_cache[cache_id].can_read, &buffer_cache[cache_id].lock);
-	cond_signal(&buffer_cache[cache_id].can_write,
-			        &buffer_cache[cache_id].lock);
-	lock_release(&io_lock);
+//	lock_release(&io_lock);
 	memcpy(buffer_cache[cache_id].data + start, buffer,
                                length*sizeof(uint8_t));
 
-	cache_write_signal(cache_id);
+	cache_write_signal(cache_id, false);
   }
   /* if cache is full, do eviction */
   else
@@ -405,7 +409,7 @@ cache_write_miss (block_sector_t sector, const void *buffer,
 	    buffer_cache[evict_id].loading = true;
 	    buffer_cache[evict_id].accessed = true;
 	    buffer_cache[evict_id].dirty = true;
-	    lock_acquire(&io_lock);
+//	    lock_acquire(&io_lock);
 	    lock_release(&buffer_cache[evict_id].lock);
 	    /* if dirty */
 		if(buffer_cache[evict_id].dirty)
@@ -413,19 +417,14 @@ cache_write_miss (block_sector_t sector, const void *buffer,
 		  block_write (fs_device, old_sector, buffer_cache[evict_id].data);
 		  /* release io_lock so that other processes can read the sector
 		   * just written to disk */
-		  lock_release(&io_lock);
-		  lock_acquire(&io_lock);
+//		  lock_release(&io_lock);
+//		  lock_acquire(&io_lock);
 		}
 	    block_read(fs_device, sector, buffer_cache[evict_id].data);
-	    buffer_cache[evict_id].loading = false;
-	    cond_signal(&buffer_cache[evict_id].can_read,
-	    		       &buffer_cache[evict_id].lock);
-	    cond_signal(&buffer_cache[evict_id].can_write,
-	    		       &buffer_cache[evict_id].lock);
-	    lock_release(&io_lock);
+//	    lock_release(&io_lock);
 	    memcpy(buffer_cache[evict_id].data + start, buffer,
                                    length*sizeof(uint8_t));
-	    cache_write_signal(evict_id);
+	    cache_write_signal(evict_id, false);
 	  }
 	}
   }
@@ -437,6 +436,7 @@ void
 cache_write_partial (block_sector_t sector, const void *buffer,
 		                 off_t start, off_t length)
 {
+  PRINTF("writing to cache %d\n", sector);
   lock_acquire (&global_cache_lock);
   int cache_id_hit = is_in_cache (sector);
   if(cache_id_hit != -1)

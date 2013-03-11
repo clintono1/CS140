@@ -46,7 +46,7 @@ uint32_t cache_used_num;
 
 /* TODO: need to use this to serialize IO? */
 /* lock for I/O between filesys and disk */
-struct lock io_lock;
+//struct lock io_lock;
 
 /* hand for clock algorithm */
 uint32_t hand;
