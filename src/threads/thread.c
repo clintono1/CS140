@@ -738,8 +738,8 @@ init_thread (struct thread *t, const char *name, int priority)
   {
       t->cwd_sector = thread_current()->cwd_sector;
       //TODO:
-      PRINTF("parent: pid=%d, cur_dir=%p\n", thread_current()->tid, thread_current()->cwd_sector);
-      PRINTF("child: pid=%d, cur_dir=%p\n", t->tid, t->cwd_sector);
+      PRINTF("parent: pid=%d, cur_dir=%d\n", thread_current()->tid, thread_current()->cwd_sector);
+      PRINTF("child: pid=%d, cur_dir=%d\n", t->tid, t->cwd_sector);
   }
   
 
