@@ -168,16 +168,16 @@ cache_read_miss(block_sector_t sector, void *buffer, off_t start, off_t length)
 	  if(buffer_cache[hand].AW + buffer_cache[hand].AR
 	     + buffer_cache[hand].WW + buffer_cache[hand].WR >= 1)
 	  {
-		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 		lock_release(&buffer_cache[hand].lock);
+		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 		continue;
 	  }
 	  /* if accessed recently, skip it */
 	  if(buffer_cache[hand].accessed)
 	  {
 		buffer_cache[hand].accessed = false;
-		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 		lock_release(&buffer_cache[hand].lock);
+		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 		continue;
 	  }
 	  /* if not accessed recently, evict it
@@ -185,8 +185,6 @@ cache_read_miss(block_sector_t sector, void *buffer, off_t start, off_t length)
 	  else
 	  {
 		uint32_t evict_id = hand;
-		/*TODO: is this necessary? */
-		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 		/* release global cache lock here */
 		lock_release(&global_cache_lock);
 		block_sector_t old_sector = buffer_cache[evict_id].sector_id;
@@ -219,6 +217,8 @@ cache_read_miss(block_sector_t sector, void *buffer, off_t start, off_t length)
 	    memcpy(buffer, buffer_cache[evict_id].data + start,
 	      			               length*sizeof(uint8_t));
 	    cache_read_signal(evict_id, false);
+		/*TODO: is this necessary? */
+		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 	  }
 	}
   }
@@ -373,16 +373,16 @@ cache_write_miss (block_sector_t sector, const void *buffer,
 	  if(buffer_cache[hand].AW + buffer_cache[hand].AR
 	     + buffer_cache[hand].WW + buffer_cache[hand].WR >= 1)
 	  {
-		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 		lock_release(&buffer_cache[hand].lock);
+		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 		continue;
 	  }
 	  /* if accessed recently, skip it */
 	  if(buffer_cache[hand].accessed)
 	  {
 		buffer_cache[hand].accessed = false;
-		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 		lock_release(&buffer_cache[hand].lock);
+		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 		continue;
 	  }
 	  /* if not accessed recently, evict it
@@ -390,8 +390,6 @@ cache_write_miss (block_sector_t sector, const void *buffer,
 	  else
 	  {
 		uint32_t evict_id = hand;
-		/*TODO: is this necessary? */
-		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 		/* release global cache lock here */
 		lock_release(&global_cache_lock);
 		block_sector_t old_sector = buffer_cache[evict_id].sector_id;
@@ -425,6 +423,8 @@ cache_write_miss (block_sector_t sector, const void *buffer,
 	    memcpy(buffer_cache[evict_id].data + start, buffer,
                                    length*sizeof(uint8_t));
 	    cache_write_signal(evict_id, false);
+		/*TODO: is this necessary? */
+		hand = (hand + 1) % BUFFER_CACHE_SIZE;
 	  }
 	}
   }
