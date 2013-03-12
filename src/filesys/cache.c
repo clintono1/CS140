@@ -167,13 +167,14 @@ cache_read_hit (void *buffer, off_t start, off_t length, uint32_t cache_id)
   cur_c->AR++;
   lock_release(&cur_c->lock);
 
+  memcpy(buffer, cur_c->data + start, length);
+
   lock_acquire(&cur_c->lock);
   cur_c->AR--;
   if(cur_c->AR + cur_c->AW == 0)
   {
 	cond_signal(&cur_c->load_complete, &cur_c->lock);
   }
-  memcpy(buffer, cur_c->data + start, length);
   cur_c->accessed = true;
   lock_release(&cur_c->lock);
 }
