@@ -241,12 +241,25 @@ cache_write_hit (const void *buffer, off_t start,
   struct cache_entry *cur_c;
   cur_c = &buffer_cache[cache_id];
   lock_acquire(&cur_c->lock);
+  cur_c->WW++;
   lock_release(&global_cache_lock);
-  while(cur_c->loading || cur_c->flushing)
+  while(cur_c->loading || cur_c->flushing
+		|| cur_c->AR + cur_c->AW > 0)
   {
     cond_wait(&cur_c->load_complete, &cur_c->lock);
   }
+  cur_c->WW--;
+  cur_c->AW++;
+  lock_release(&cur_c->lock);
+
   memcpy(cur_c->data + start, buffer, length);
+
+  lock_acquire(&cur_c->lock);
+  cur_c->AW--;
+  if(cur_c->AR + cur_c->AW == 0 || cur_c->WW + cur_c->AW == 0)
+  {
+	cond_signal(&cur_c->load_complete, &cur_c->lock);
+  }
   cur_c->accessed = true;
   cur_c->dirty = true;
   lock_release(&cur_c->lock);
@@ -261,7 +274,24 @@ cache_write_miss (block_sector_t sector, const void *buffer,
   struct cache_entry *cur_c;
   cur_c = cache_get_entry(sector);
 
+  cur_c->WW++;
+  while(cur_c->loading || cur_c->flushing
+  		|| cur_c->AR + cur_c->AW > 0)
+  {
+    cond_wait(&cur_c->load_complete, &cur_c->lock);
+  }
+  cur_c->WW--;
+  cur_c->AW++;
+  lock_release(&cur_c->lock);
+
   memcpy(cur_c->data + start, buffer, length);
+
+  lock_acquire(&cur_c->lock);
+  cur_c->AW--;
+  if(cur_c->AR + cur_c->AW == 0 || cur_c->WW + cur_c->AW == 0)
+  {
+  	cond_signal(&cur_c->load_complete, &cur_c->lock);
+  }
   cur_c->accessed = true;
   cur_c->dirty = true;
   lock_release(&cur_c->lock);
