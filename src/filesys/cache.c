@@ -84,7 +84,10 @@ cache_evict_id (void)
 {
   while (1)
   {
-	  if (buffer_cache[hand].flushing || buffer_cache[hand].loading )
+	  if (buffer_cache[hand].flushing || buffer_cache[hand].loading
+		  ||
+		  buffer_cache[hand].AW + buffer_cache[hand].AR
+		  + buffer_cache[hand].WW + buffer_cache[hand].WR > 0)
 	  {
 	    hand = (hand + 1) % BUFFER_CACHE_SIZE;
 	    continue;
@@ -127,6 +130,8 @@ cache_get_entry (block_sector_t sector_id)
     buffer_cache[evict_id].accessed = false;
     buffer_cache[evict_id].sector_id = sector_id;
     buffer_cache[evict_id].flushing = false;
+    cond_signal(&buffer_cache[evict_id].load_complete,
+    		            &buffer_cache[evict_id].lock);
     return &buffer_cache[evict_id];
   }
   else
@@ -151,10 +156,22 @@ cache_read_hit (void *buffer, off_t start, off_t length, uint32_t cache_id)
   struct cache_entry *cur_c;
   cur_c = &buffer_cache[cache_id];
   lock_acquire(&cur_c->lock);
+  cur_c->WR++;
   lock_release(&global_cache_lock);
-  while(cur_c->loading || cur_c->flushing)
+  while(cur_c->loading || cur_c->flushing
+		|| cur_c->WW + cur_c->AW > 0 )
   {
     cond_wait(&cur_c->load_complete, &cur_c->lock);
+  }
+  cur_c->WR--;
+  cur_c->AR++;
+  lock_release(&cur_c->lock);
+
+  lock_acquire(&cur_c->lock);
+  cur_c->AR--;
+  if(cur_c->AR + cur_c->AW == 0)
+  {
+	cond_signal(&cur_c->load_complete, &cur_c->lock);
   }
   memcpy(buffer, cur_c->data + start, length);
   cur_c->accessed = true;
@@ -175,7 +192,24 @@ cache_read_miss (block_sector_t sector, void *buffer, off_t start, off_t length)
   lock_acquire(&cur_c->lock);
   cur_c->loading = false;
   cond_signal(&cur_c->load_complete, &cur_c->lock);
+  cur_c->WR++;
+  while(cur_c->loading || cur_c->flushing
+		|| cur_c->WW + cur_c->AW > 0 )
+  {
+    cond_wait(&cur_c->load_complete, &cur_c->lock);
+  }
+  cur_c->WR--;
+  cur_c->AR++;
+  lock_release(&cur_c->lock);
+
   memcpy(buffer, cur_c->data + start, length);
+
+  lock_acquire(&cur_c->lock);
+  cur_c->AR--;
+  if(cur_c->AR + cur_c->AW == 0)
+  {
+  	cond_signal(&cur_c->load_complete, &cur_c->lock);
+  }
   cur_c->accessed = true;
   lock_release(&cur_c->lock);
 }
