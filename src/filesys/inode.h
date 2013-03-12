@@ -21,6 +21,8 @@ void inode_allow_write (struct inode *);
 off_t inode_length (const struct inode *);
 void inode_unlock(struct inode *inode);
 void inode_lock(struct inode *inode);
+void dir_unlock(struct inode *inode);
+void dir_lock(struct inode *inode);
 bool inode_is_dir(struct inode *inode);
 int inode_open_cnt(struct inode *inode);
 
