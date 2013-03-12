@@ -56,8 +56,11 @@ filesys_create (const char *name, off_t initial_size)
   if (!strcmp(name, "/"))
     return false;
   if(!filesys_parse (name, &dir, &file_name))
+  {
     return false;
-  //PRINTF(" name =%s, filename = %s, dir not null? %d\n", name, file_name, dir!=NULL);
+  }
+  //TODO;
+  //printf(" name =%s, filename = %s, dir not null? %d\n", name, file_name, dir!=NULL);
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size, false)

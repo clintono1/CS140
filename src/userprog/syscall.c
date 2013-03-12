@@ -428,6 +428,7 @@ _chdir (const char *name)
     return false;
   dir_close(dir);
   thread_current()->cwd_sector = inode_get_inumber(inode);
+  inode_close(inode);
   return true;
 }
 
