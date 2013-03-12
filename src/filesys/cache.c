@@ -84,14 +84,14 @@ cache_evict_id (void)
 {
   while (1)
   {
-	  if (buffer_cache[hand].flushing || buffer_cache[hand].loading
-		  ||
-		  buffer_cache[hand].AW + buffer_cache[hand].AR
-		  + buffer_cache[hand].WW + buffer_cache[hand].WR > 0)
-	  {
-	    hand = (hand + 1) % BUFFER_CACHE_SIZE;
-	    continue;
-	  }
+          if (buffer_cache[hand].flushing || buffer_cache[hand].loading
+                  ||
+                  buffer_cache[hand].AW + buffer_cache[hand].AR
+                  + buffer_cache[hand].WW + buffer_cache[hand].WR > 0)
+          {
+            hand = (hand + 1) % BUFFER_CACHE_SIZE;
+            continue;
+          }
         if (buffer_cache[hand].accessed)
         {
           buffer_cache[hand].accessed = false;
@@ -131,13 +131,13 @@ cache_get_entry (block_sector_t sector_id)
     buffer_cache[evict_id].sector_id = sector_id;
     buffer_cache[evict_id].flushing = false;
     cond_signal(&buffer_cache[evict_id].load_complete,
-    		            &buffer_cache[evict_id].lock);
+                            &buffer_cache[evict_id].lock);
     return &buffer_cache[evict_id];
   }
   else
   {
-  	/* should never reach here */
-  	ASSERT(1==0);
+        /* should never reach here */
+        ASSERT(1==0);
     return &buffer_cache[cache_hit_id];
   }
 }
@@ -159,7 +159,7 @@ cache_read_hit (void *buffer, off_t start, off_t length, uint32_t cache_id)
   cur_c->WR++;
   lock_release(&global_cache_lock);
   while(cur_c->loading || cur_c->flushing
-		|| cur_c->WW + cur_c->AW > 0 )
+                || cur_c->WW + cur_c->AW > 0 )
   {
     cond_wait(&cur_c->load_complete, &cur_c->lock);
   }
@@ -171,10 +171,7 @@ cache_read_hit (void *buffer, off_t start, off_t length, uint32_t cache_id)
 
   lock_acquire(&cur_c->lock);
   cur_c->AR--;
-  if(cur_c->AR + cur_c->AW == 0)
-  {
-	cond_signal(&cur_c->load_complete, &cur_c->lock);
-  }
+  cond_signal(&cur_c->load_complete, &cur_c->lock);
   cur_c->accessed = true;
   lock_release(&cur_c->lock);
 }
@@ -195,7 +192,7 @@ cache_read_miss (block_sector_t sector, void *buffer, off_t start, off_t length)
   cond_signal(&cur_c->load_complete, &cur_c->lock);
   cur_c->WR++;
   while(cur_c->loading || cur_c->flushing
-		|| cur_c->WW + cur_c->AW > 0 )
+                || cur_c->WW + cur_c->AW > 0 )
   {
     cond_wait(&cur_c->load_complete, &cur_c->lock);
   }
@@ -207,10 +204,7 @@ cache_read_miss (block_sector_t sector, void *buffer, off_t start, off_t length)
 
   lock_acquire(&cur_c->lock);
   cur_c->AR--;
-  if(cur_c->AR + cur_c->AW == 0)
-  {
-  	cond_signal(&cur_c->load_complete, &cur_c->lock);
-  }
+  cond_signal(&cur_c->load_complete, &cur_c->lock);
   cur_c->accessed = true;
   lock_release(&cur_c->lock);
 }
@@ -244,7 +238,7 @@ cache_write_hit (const void *buffer, off_t start,
   cur_c->WW++;
   lock_release(&global_cache_lock);
   while(cur_c->loading || cur_c->flushing
-		|| cur_c->AR + cur_c->AW > 0)
+                || cur_c->AR + cur_c->AW > 0)
   {
     cond_wait(&cur_c->load_complete, &cur_c->lock);
   }
@@ -256,10 +250,7 @@ cache_write_hit (const void *buffer, off_t start,
 
   lock_acquire(&cur_c->lock);
   cur_c->AW--;
-  if(cur_c->AR + cur_c->AW == 0 || cur_c->WW + cur_c->AW == 0)
-  {
-	cond_signal(&cur_c->load_complete, &cur_c->lock);
-  }
+  cond_signal(&cur_c->load_complete, &cur_c->lock);
   cur_c->accessed = true;
   cur_c->dirty = true;
   lock_release(&cur_c->lock);
@@ -276,7 +267,7 @@ cache_write_miss (block_sector_t sector, const void *buffer,
 
   cur_c->WW++;
   while(cur_c->loading || cur_c->flushing
-  		|| cur_c->AR + cur_c->AW > 0)
+                || cur_c->AR + cur_c->AW > 0)
   {
     cond_wait(&cur_c->load_complete, &cur_c->lock);
   }
@@ -288,10 +279,7 @@ cache_write_miss (block_sector_t sector, const void *buffer,
 
   lock_acquire(&cur_c->lock);
   cur_c->AW--;
-  if(cur_c->AR + cur_c->AW == 0 || cur_c->WW + cur_c->AW == 0)
-  {
-  	cond_signal(&cur_c->load_complete, &cur_c->lock);
-  }
+  cond_signal(&cur_c->load_complete, &cur_c->lock);
   cur_c->accessed = true;
   cur_c->dirty = true;
   lock_release(&cur_c->lock);
