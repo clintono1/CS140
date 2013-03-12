@@ -34,6 +34,8 @@ static uint32_t hand;
 static struct list write_behind_q;
 /* write-behind queue lock */
 static struct lock wb_q_lock;
+/* write-behind queue ready conditional variable */
+static struct condition wb_q_ready;
 struct write_b
 {
   cache_entry_t * c_ptr;
@@ -41,7 +43,7 @@ struct write_b
 };
 typedef struct write_b write_b_t;
 
-/* write-behind function */
+/* write-behind periodically function */
 static void
 write_behind_period(void * aux UNUSED)
 {
@@ -70,6 +72,32 @@ write_behind_period(void * aux UNUSED)
   }
 }
 
+/* write-behind periodically function */
+static void
+write_behind_eviction(void * aux UNUSED)
+{
+  while(true)
+  {
+	lock_acquire(&wb_q_lock);
+	while(list_empty(&write_behind_q))
+	{
+      cond_wait(&wb_q_ready, &wb_q_lock);
+	}
+	struct list_elem * e_ptr = list_pop_front(&write_behind_q);
+	write_b_t * wb_ptr = (write_b_t *) list_entry(e_ptr,write_b_t, elem);
+	cache_entry_t * c_ptr = wb_ptr->c_ptr;
+	lock_release(&wb_q_lock);
+
+	block_write(fs_device, c_ptr->sector_id, c_ptr->data);
+
+	lock_acquire(&c_ptr->lock);
+	c_ptr->dirty = false;
+	c_ptr->flushing = false;
+	cond_signal(&c_ptr->load_complete, &c_ptr->lock);
+	lock_release(&c_ptr->lock);
+  }
+}
+
 /* Initialize cache */
 void
 cache_init (void)
@@ -93,8 +121,11 @@ cache_init (void)
   }
   list_init(&write_behind_q);
   lock_init(&wb_q_lock);
+  cond_init(&wb_q_ready);
   thread_create ("write_behind_period_t", PRI_DEFAULT,
 		                    write_behind_period, NULL);
+  thread_create ("write_behind_evict_t", PRI_DEFAULT,
+		  	  	  	  	  write_behind_eviction, NULL);
 }
 
 /* See whether there is a hit for sector. If yes, return cache id.
@@ -159,27 +190,28 @@ cache_evict_id (void)
         }
         else
         {
-//          if(buffer_cache[hand].dirty)
-//          {
-//        	printf("push into write_behind queue\n");
-//        	buffer_cache[hand].flushing = true;
-//        	lock_release(&buffer_cache[hand].lock);
-//        	write_b_t * wb_ptr = (write_b_t *)malloc(sizeof(write_b_t));
-//        	lock_acquire(&wb_q_lock);
-//        	list_push_back(&write_behind_q, &wb_ptr->elem);
-//        	lock_release(&wb_q_lock);
-//            hand = (hand + 1) % BUFFER_CACHE_SIZE;
-//            continue;
-//          }
-//          else
-//          {
+          if(buffer_cache[hand].dirty)
+          {
+        	buffer_cache[hand].flushing = true;
+        	lock_release(&buffer_cache[hand].lock);
+        	write_b_t * wb_ptr = (write_b_t *)malloc(sizeof(write_b_t));
+        	wb_ptr->c_ptr = &buffer_cache[hand];
+        	lock_acquire(&wb_q_lock);
+        	list_push_back(&write_behind_q, &wb_ptr->elem);
+        	cond_signal(&wb_q_ready, &wb_q_lock);
+        	lock_release(&wb_q_lock);
+            hand = (hand + 1) % BUFFER_CACHE_SIZE;
+            continue;
+          }
+          else
+          {
         	uint32_t result = hand;
 //        	buffer_cache[hand].dirty = false;
 //        	buffer_cache[hand].accessed = false;
 //        	buffer_cache[hand].flushing = false;
 		    hand = (hand + 1) % BUFFER_CACHE_SIZE;
         	return result;
-//          }
+          }
         }
   }
   /* will never reach here */
@@ -192,20 +224,20 @@ cache_get_entry (block_sector_t sector_id)
 {
   uint32_t evict_id = cache_evict_id();
 //  lock_acquire(&buffer_cache[evict_id].lock);
-  buffer_cache[evict_id].flushing = true;
-  lock_release(&buffer_cache[evict_id].lock);
-  if (buffer_cache[evict_id].dirty)
-  {
-    block_write(fs_device, buffer_cache[evict_id].sector_id,
-                               buffer_cache[evict_id].data);
-  }
-  lock_acquire(&buffer_cache[evict_id].lock);
-  buffer_cache[evict_id].dirty = false;
-  buffer_cache[evict_id].accessed = false;
+//  buffer_cache[evict_id].flushing = true;
+//  lock_release(&buffer_cache[evict_id].lock);
+//  if (buffer_cache[evict_id].dirty)
+//  {
+//    block_write(fs_device, buffer_cache[evict_id].sector_id,
+//                               buffer_cache[evict_id].data);
+//  }
+//  lock_acquire(&buffer_cache[evict_id].lock);
+//  buffer_cache[evict_id].dirty = false;
+//  buffer_cache[evict_id].accessed = false;
   buffer_cache[evict_id].sector_id = sector_id;
-  buffer_cache[evict_id].flushing = false;
-  cond_signal(&buffer_cache[evict_id].load_complete,
-                          &buffer_cache[evict_id].lock);
+//  buffer_cache[evict_id].flushing = false;
+//  cond_signal(&buffer_cache[evict_id].load_complete,
+//                          &buffer_cache[evict_id].lock);
   return &buffer_cache[evict_id];
 }
 
