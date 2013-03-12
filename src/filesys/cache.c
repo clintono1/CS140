@@ -25,14 +25,12 @@ typedef struct cache_entry cache_entry_t;
 /* global buffer cache */
 static cache_entry_t buffer_cache[BUFFER_CACHE_SIZE];
 static uint32_t hand;
-static struct lock global_cache_lock;
 
 /* Initialize cache */
 void
 cache_init (void)
 {
   hand = 0;
-  lock_init(&global_cache_lock);
   int i = 0;
   for (i = 0; i < BUFFER_CACHE_SIZE; i++)
   {
@@ -54,7 +52,7 @@ cache_init (void)
 /* See whether there is a hit for sector. If yes, return cache id.
  * Else, return -1 */
 static int
-is_in_cache (block_sector_t sector)
+is_in_cache (block_sector_t sector, bool write_flag)
 {
   uint32_t i = 0;
   for (i = 0; i < BUFFER_CACHE_SIZE; i++)
@@ -65,11 +63,22 @@ is_in_cache (block_sector_t sector)
         {
           if(buffer_cache[i].flushing)
           {
+        	/* wait for the sector to be fully written to disk */
+        	while(buffer_cache[i].flushing)
+        	{
+              cond_wait(&buffer_cache[i].load_complete, &buffer_cache[i].lock);
+        	}
             lock_release(&buffer_cache[i].lock);
             return -1;
           }
-          lock_release(&buffer_cache[i].lock);
-          return i;
+          else
+          {
+        	if(write_flag)
+        	  buffer_cache[i].WW++;
+        	else
+        	  buffer_cache[i].WR++;
+        	return i;
+          }
         }
         lock_release(&buffer_cache[i].lock);
   }
@@ -114,7 +123,6 @@ cache_get_entry (block_sector_t sector_id)
 {
   uint32_t evict_id = cache_evict_id();
   lock_acquire(&buffer_cache[evict_id].lock);
-  lock_release(&global_cache_lock);
   buffer_cache[evict_id].flushing = true;
   lock_release(&buffer_cache[evict_id].lock);
   if (buffer_cache[evict_id].dirty)
@@ -145,9 +153,6 @@ cache_read_hit (void *buffer, off_t start, off_t length, uint32_t cache_id)
 {
   struct cache_entry *cur_c;
   cur_c = &buffer_cache[cache_id];
-  lock_acquire(&cur_c->lock);
-  cur_c->WR++;
-  lock_release(&global_cache_lock);
   while(cur_c->loading || cur_c->flushing
                 || cur_c->WW + cur_c->AW > 0 )
   {
@@ -205,8 +210,7 @@ void
 cache_read_partial (block_sector_t sector, void *buffer,
                                       off_t start, off_t length)
 {
-  lock_acquire(&global_cache_lock);
-  int cache_id_hit = is_in_cache(sector);
+  int cache_id_hit = is_in_cache(sector, false);
   if(cache_id_hit != -1)
   {
     cache_read_hit(buffer, start, length, cache_id_hit);
@@ -224,9 +228,6 @@ cache_write_hit (const void *buffer, off_t start,
 {
   struct cache_entry *cur_c;
   cur_c = &buffer_cache[cache_id];
-  lock_acquire(&cur_c->lock);
-  cur_c->WW++;
-  lock_release(&global_cache_lock);
   while(cur_c->loading || cur_c->flushing
                 || cur_c->AR + cur_c->AW > 0)
   {
@@ -288,8 +289,7 @@ void
 cache_write_partial (block_sector_t sector, const void *buffer,
                                              off_t start, off_t length)
 {
-  lock_acquire(&global_cache_lock);
-  int cache_id_hit = is_in_cache (sector);
+  int cache_id_hit = is_in_cache (sector, true);
   if(cache_id_hit != -1)
   {
     cache_write_hit (buffer, start, length, cache_id_hit);
