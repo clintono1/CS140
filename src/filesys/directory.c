@@ -273,14 +273,19 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e) 
   {
     dir->pos += sizeof e;
-    if (e.in_use)
+    //TODO:
+    printf("e.name=%s  in_use(%d)\n", e.name, e.in_use);
+    if (e.in_use && strcmp(e.name, ".") && strcmp(e.name, ".."))
     {
+      printf("INSIDE: e.name=%s, in_use(%d)\n", e.name, e.in_use);
       strlcpy (name, e.name, NAME_MAX + 1);
       dir_unlock (dir->inode);
       return true;
     }
   }
   dir_unlock (dir->inode);
+  printf("didn't find\n");
+
   return false;
 }
 
@@ -297,4 +302,18 @@ dir_empty (struct inode * inode)
     if (e.in_use && strcmp (".", e.name) && strcmp("..", e.name))
       return false;
   return true;
+}
+
+/* Set offset for directory DIR */
+void
+dir_set_pos(struct dir *dir, off_t pos)
+{
+  dir->pos = pos;
+}
+
+/* Get offset for directory DIR */
+off_t
+dir_get_pos(struct dir *dir )
+{
+  return dir->pos;
 }

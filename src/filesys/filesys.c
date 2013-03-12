@@ -82,17 +82,12 @@ filesys_open (const char *name)
   char *file_name;
   if ( !strcmp(name, "/"))
     return file_open (inode_open (ROOT_DIR_SECTOR));
-  //TODO: 
-  PRINTF("\nfilesys_open called. filename:%s\n", name);
   if(!filesys_parse (name, &dir, &file_name))
     return NULL;
-  PRINTF("dir=%p, filename=%s\n", dir, file_name);
   struct inode *inode = NULL;
   if (dir != NULL)
     dir_lookup (dir, file_name, &inode);
   dir_close (dir);
-  //TODO:
-  PRINTF("filesys_open: inode=%p\n", inode);
   return file_open (inode);
 }
 
@@ -192,7 +187,7 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
     cur_dir = dir_open(inode);
   }
   //TODO:
-  PRINTF("dir=%p, extracted file name = %s\n", cur_dir, tail);
+  printf("dir=%p, extracted file name = %s\n", cur_dir, tail);
     
   *dir = cur_dir;
   *file_name = tail;

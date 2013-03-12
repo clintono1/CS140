@@ -80,6 +80,7 @@ inode_unlock (struct inode *inode)
 void
 dir_lock (struct inode *inode)
 {
+  printf("lock acquire: length=%d open%d sec%d\n", inode->length, inode->open_cnt, inode->sector);
   lock_acquire (&inode->lock_dir);
 }
 
@@ -474,18 +475,21 @@ remove_inode (struct inode* inode)
   }
 
   /* Release the sector for indirect index block */
-  free_map_release (inode_dsk->idx1, 1);
+  if ( inode->length >= CAPACITY_L0 )
+    free_map_release (inode_dsk->idx1, 1);
 
   /* Release the sectors for double indirect index block */
-  off_t idx;
-  struct indirect_block indirect_blk;
-  cache_read(inode_dsk->idx2, &indirect_blk);
-  for (idx = 0; idx < offset_double_indirect1(inode_dsk->length); idx++)
+  if ( inode->length >= CAPACITY_L0 + CAPACITY_L1 )
   {
-    free_map_release (indirect_blk.idx[idx], 1);
+    off_t idx;
+    struct indirect_block indirect_blk;
+    cache_read(inode_dsk->idx2, &indirect_blk);
+    for (idx = 0; idx < offset_double_indirect1(inode_dsk->length); idx++)
+    {
+      free_map_release (indirect_blk.idx[idx], 1);
+    }
+    free_map_release (inode_dsk->idx2, 1);
   }
-  free_map_release (inode_dsk->idx2, 1);
-
   free (inode_dsk);
   /* Release the sector for inode */
   free_map_release (inode->sector, 1);
@@ -541,6 +545,12 @@ inode_remove (struct inode *inode)
 off_t         
 inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) 
 {
+  printf("length: %d,%d\n", inode->length, offset);
+  if (offset >= inode->length)
+  {
+    printf("exceed!\n");
+    return 0;
+  }
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
   struct inode_disk *inode_dsk;
@@ -552,9 +562,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   }
   PRINTF("inode.sector=%d\n", inode->sector);
   cache_read (inode->sector, inode_dsk);
-  if (offset > inode->length)
-    return 0;
-
   while (size > 0) 
   {
     /* Disk sector to read, starting byte offset within sector. */
@@ -591,6 +598,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     bytes_read += bytes_to_read;
   }
   free (inode_dsk);
+  printf("length: %d\n\n", inode->length);
   return bytes_read;
 }
 

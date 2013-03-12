@@ -40,10 +40,13 @@ bool _readdir (int fd, char *name);
 bool _isdir (int fd);
 int  _inumber (int fd);
 
+struct lock global_lock_filesys;  /* global lock for file system*/
+
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init (&global_lock_filesys);
 }
 /* Check then Retrieve the n-th argument */
 static uint32_t
@@ -210,12 +213,15 @@ _exec (const char *cmd_line)
   char file_path[MAX_FILE_LENGTH];
   get_first_string(cmd_line, file_path);
   /* Lock on process_execute since it needs to open the executable file */
+  lock_acquire (&global_lock_filesys);
   struct file *file = filesys_open (file_path);
   if (file == NULL ) 
   { 
+     lock_release (&global_lock_filesys);
      return -1; 
   }
   pid_t pid = (pid_t) process_execute(cmd_line);
+  lock_release (&global_lock_filesys);
 
   if (pid == (pid_t) TID_ERROR)
     return -1;
@@ -248,7 +254,9 @@ _create (const char *file, unsigned initial_size)
   if (!valid_vaddr_range (file, strlen (file)))
     _exit (-1);
 
+  lock_acquire (&global_lock_filesys);
   bool success = filesys_create (file, initial_size);
+  lock_release (&global_lock_filesys);
   return success;
 }
 
@@ -260,7 +268,9 @@ _open (const char *file)
   if (!valid_vaddr_range (file, strlen (file)))
     _exit (-1);
 
+  lock_acquire (&global_lock_filesys);
   struct file *f = filesys_open (file);
+  lock_release (&global_lock_filesys);
 
   if (f == NULL)
     return -1;
@@ -277,7 +287,9 @@ _remove (const char *name)
   if (!valid_vaddr_range (name, strlen (name)))
     _exit (-1);
 
+  lock_acquire (&global_lock_filesys);
   bool success = filesys_remove (name);
+  lock_release (&global_lock_filesys);
   return success;
 }
 
@@ -288,7 +300,9 @@ _filesize (int fd)
   if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !valid_file_handler(t, fd))
     _exit (-1);
 
+  lock_acquire (&global_lock_filesys);
   int size = (int) file_length (t->file_handlers[fd]);
+  lock_release (&global_lock_filesys);
 
   return size;
 }
@@ -321,7 +335,9 @@ _read (int fd, void *buffer, unsigned size)
   else if(valid_file_handler (t, fd))
   {
       struct file *file = t->file_handlers[fd];
+      lock_acquire(&global_lock_filesys );
       result = file_read(file, buffer, size);
+      lock_release(&global_lock_filesys);
       return result;
   }
   return -1;
@@ -352,14 +368,17 @@ _write (int fd, const void *buffer, unsigned size)
   else if (valid_file_handler (t, fd))
   {
     struct file *file = t->file_handlers[fd];
+    lock_acquire (&global_lock_filesys);
     bool is_dir = (inode_is_dir(file_get_inode(file)));
     
     if (is_dir)
     {
+      lock_release (&global_lock_filesys);
       return -1;
     }
     
     result = file_write (file, buffer, size);
+    lock_release (&global_lock_filesys);
   }
   return result;
 }
@@ -373,7 +392,9 @@ _seek (int fd, unsigned position)
   if ( !valid_file_handler (t, fd) || fd < 2)
     _exit(-1);
 
+   lock_acquire (&global_lock_filesys);
    file_seek (file, position);
+   lock_release (&global_lock_filesys);
 
 }
 
@@ -386,7 +407,9 @@ _tell (int fd)
   if ( !valid_file_handler (t, fd) || fd < 2)
     _exit(-1);
 
+  lock_acquire (&global_lock_filesys);
   off_t n= file_tell (file);
+  lock_release (&global_lock_filesys);
   return n;
 }
 
@@ -397,7 +420,9 @@ _close (int fd)
   if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !valid_file_handler(t, fd))
     return;
 
+  lock_acquire (&global_lock_filesys);
   file_close (t->file_handlers[fd]);
+  lock_release (&global_lock_filesys);
 
   thread_remove_file_handler (t, fd);
 }
@@ -449,7 +474,7 @@ _mkdir (const char *name)
   if(!filesys_parse(name, &dir, &dir_name)) 
     return false;
   bool success = (dir != NULL
-    && free_map_allocate (1, &inode_sector) /* Allocate sector */
+    && free_map_allocate (1, &inode_sector) /* Allocate sector to store inode*/
     && inode_create (inode_sector, 0, true) /* Write inode to this sector. */
     && dir_add (dir, dir_name, inode_sector, true)); /* Add this inode to parent dir */
   if (!success && inode_sector != 0)
@@ -478,21 +503,22 @@ _readdir (int fd, char name[READDIR_MAX_LEN + 1])
 
   struct thread *t  = thread_current();
   struct file *file = t->file_handlers[fd];
-
+  off_t pos = file_tell(file);
   if ( !valid_file_handler (t, fd) || fd < 2)
     _exit(-1);
 
+  lock_acquire (&global_lock_filesys);
   struct inode *inode = file_get_inode(file);
-  struct dir *dir = dir_open(inode);
   /* Make sure we are reading a directory, not a file*/
-  ASSERT(inode_is_dir(inode));
-  bool success = dir_readdir(dir,name);
-  // TODO . and .. should not be returned by readdir ?
-  if (!strcmp(name, ".") || !strcmp(name, ".."))
-  {
+  if (!inode_is_dir(inode))
     return false;
-  }
+  struct dir *dir = dir_open(inode);
+  dir_set_pos(dir, pos);
+  bool success = dir_readdir(dir, name);
+  printf("name:%s\n", name);
+  file_seek(file, dir_get_pos(dir));
   dir_close(dir);
+  lock_release (&global_lock_filesys);
   return success;
 }
 
@@ -504,7 +530,9 @@ _isdir (int fd)
   
   if ( !valid_file_handler (t, fd) || fd < 2)
     _exit(-1);
+  lock_acquire (&global_lock_filesys);
   bool is_dir = (inode_is_dir(file_get_inode(file)));
+  lock_release (&global_lock_filesys);
   return is_dir;
 }
 
@@ -517,7 +545,9 @@ _inumber (int fd)
   if ( !valid_file_handler (t, fd) || fd < 2)
     _exit(-1);
 
+  lock_acquire (&global_lock_filesys);
   int inumber = (inode_get_inumber(file_get_inode(file)));
+  lock_release (&global_lock_filesys);
   return inumber;
 }
 
