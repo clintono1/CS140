@@ -9,9 +9,6 @@
 #include "threads/thread.h"
 #include "debug.h"
 
-
-bool dir_empty(struct inode *);
-
 /* A directory. */
 struct dir
   {
@@ -27,6 +24,10 @@ struct dir_entry
     bool in_use;                        /* In use or free? */
     bool is_dir;                        /* Directory or file? */
   };
+
+static bool dir_empty (struct inode * inode);
+static bool lookup (const struct dir *dir, const char *name,
+                    struct dir_entry *ep, off_t *ofsp);
 
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
@@ -284,23 +285,16 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 }
 
 /* Check if an directory's inode is empty */
-bool
+static bool
 dir_empty (struct inode * inode)
 {
   ASSERT (inode_is_dir(inode));
   struct dir_entry e;
   size_t ofs;
-  dir_unlock (inode);
   for (ofs = 0;
       inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;
       ofs += sizeof e)
-  {
     if (e.in_use && strcmp (".", e.name) && strcmp("..", e.name))
-    {
-      dir_unlock (inode);
       return false;
-    }
-  }
-  dir_unlock (inode);
   return true;
 }
