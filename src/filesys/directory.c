@@ -203,8 +203,7 @@ done:
 }
 
 /* Removes any entry for NAME in DIR.
-   Returns true if successful, false on failure,
-   which occurs only if there is no file with the given NAME. */
+   Returns true if successful, false on failure */
 bool
 dir_remove (struct dir *dir, const char *name) 
 {
@@ -214,37 +213,54 @@ dir_remove (struct dir *dir, const char *name)
   off_t ofs;
 
   if (dir == NULL || name == NULL)
+  {
+    //printf("dir or name is null \n");
     return false;
+  }
 
   dir_lock (dir->inode);
 
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
+  {
+    //printf("didn't fine such file or child directory \n");
     goto done;
+
+  }
 
   /* Open inode. */
   inode = inode_open (e.inode_sector);
   if (inode == NULL)
+  {
+    //printf("inode is null \n");
     goto done;
-
+  }
   if (e.is_dir) 
   {
-    block_sector_t sector = e.inode_sector;
-    struct inode *inode = inode_open (sector);
     ASSERT (inode_is_dir(inode));
     /* Can't close a non-empty directory */
     if (!dir_empty (inode))
+    {
+      //printf("/* Can't close a non-empty directory */ \n");
       goto done;
+    }
     /* Can't remove cwd */
     if (inode_get_inumber (inode) == thread_current ()->cwd_sector)
+    {
+      //printf("/* Can't remove cwd */\n");
       goto done;
+    }
     /* Can't remove opened inode */
     if (inode_open_cnt (inode) > 2) //TODO: 2 is experimental result. only 2 can pass all. Why? reference handout page 53 line 8 and test case of : dir-rm-*.c
+    {
+      //printf("/* Can't remove opened inode */\n");
       goto done;
+    }
   } 
 
   /* Erase directory entry. */
   e.in_use = false;
+  //printf("remove name=%s\n", e.name);
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e) 
     goto done;
 
@@ -274,17 +290,16 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   {
     dir->pos += sizeof e;
     //TODO:
-    printf("e.name=%s  in_use(%d)\n", e.name, e.in_use);
+    //printf("e.name=%s  in_use(%d)\n", e.name, e.in_use);
     if (e.in_use && strcmp(e.name, ".") && strcmp(e.name, ".."))
     {
-      printf("INSIDE: e.name=%s, in_use(%d)\n", e.name, e.in_use);
+      //printf("INSIDE: e.name=%s, in_use(%d)\n", e.name, e.in_use);
       strlcpy (name, e.name, NAME_MAX + 1);
       dir_unlock (dir->inode);
       return true;
     }
   }
   dir_unlock (dir->inode);
-  printf("didn't find\n");
 
   return false;
 }
@@ -300,7 +315,10 @@ dir_empty (struct inode * inode)
       inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;
       ofs += sizeof e)
     if (e.in_use && strcmp (".", e.name) && strcmp("..", e.name))
+    {
+      //printf("remain: %s\n" , e.name);
       return false;
+    }
   return true;
 }
 

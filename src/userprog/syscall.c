@@ -515,9 +515,8 @@ _readdir (int fd, char name[READDIR_MAX_LEN + 1])
   struct dir *dir = dir_open(inode);
   dir_set_pos(dir, pos);
   bool success = dir_readdir(dir, name);
-  printf("name:%s\n", name);
   file_seek(file, dir_get_pos(dir));
-  dir_close(dir);
+  free(dir);
   lock_release (&global_lock_filesys);
   return success;
 }

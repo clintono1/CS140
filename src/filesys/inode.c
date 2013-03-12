@@ -80,7 +80,6 @@ inode_unlock (struct inode *inode)
 void
 dir_lock (struct inode *inode)
 {
-  printf("lock acquire: length=%d open%d sec%d\n", inode->length, inode->open_cnt, inode->sector);
   lock_acquire (&inode->lock_dir);
 }
 
@@ -545,10 +544,8 @@ inode_remove (struct inode *inode)
 off_t         
 inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) 
 {
-  printf("length: %d,%d\n", inode->length, offset);
   if (offset >= inode->length)
   {
-    printf("exceed!\n");
     return 0;
   }
   uint8_t *buffer = buffer_;
@@ -598,7 +595,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     bytes_read += bytes_to_read;
   }
   free (inode_dsk);
-  printf("length: %d\n\n", inode->length);
   return bytes_read;
 }
 
@@ -633,7 +629,12 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   if (offset + size > inode_dsk->length)
   {
     need_extension = true;
-    inode_extend_to_size (inode_dsk, offset + size);
+    if( !inode_extend_to_size (inode_dsk, offset + size ))
+    {
+      lock_release (&inode->lock_inode);
+      free(inode_dsk);
+      return 0;
+    }
     /* Note: inode->length is not updated until a sector of data is written */
   }
   else
@@ -649,6 +650,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
     /* Make sure enough space to write data */
+
     ASSERT (inode_dsk->length >= offset + size);
 
     /* Bytes left in inode, bytes left in sector, lesser of the two. */

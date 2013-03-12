@@ -28,11 +28,11 @@ test_main (void)
       char file_name[16], dir_name[16];
       char contents[128];
       int fd;
+
       /* Create file. */
       snprintf (file_name, sizeof file_name, "file%d", i);
       if (!create (file_name, 0))
         break;
-
       CHECK ((fd = open (file_name)) > 1, "open \"%s\"", file_name);
       snprintf (contents, sizeof contents, "contents %d\n", i);
       if (write (fd, contents, strlen (contents)) != (int) strlen (contents)) 
@@ -42,7 +42,7 @@ test_main (void)
           break;
         }
       close (fd);
-
+      
       /* Create directory. */
       snprintf (dir_name, sizeof dir_name, "dir%d", i);
       if (!mkdir (dir_name)) 
@@ -56,23 +56,21 @@ test_main (void)
       CHECK (readdir (fd, name[0]), "readdir \".\"");
       CHECK (readdir (fd, name[1]), "readdir \".\"");
       CHECK (!readdir (fd, name[2]), "readdir \".\" (should fail)");
-      msg("pass1");
       CHECK ((!strcmp (name[0], dir_name) && !strcmp (name[1], file_name))
              || (!strcmp (name[1], dir_name) && !strcmp (name[0], file_name)),
              "names should be \"%s\" and \"%s\", "
              "actually \"%s\" and \"%s\"",
              file_name, dir_name, name[0], name[1]);
       close (fd);
-      
+
       /* Descend into directory. */
       CHECK (chdir (dir_name), "chdir \"%s\"", dir_name);
     }
-  msg("pass2");
-  CHECK (i > 200, "created files and directories only to level %d", i);
   quiet = false;
+  CHECK (i > 200, "created files and directories only to level %d", i);
+  
 
   msg ("removing all but top 10 levels of files and directories...");
-  quiet = true;
   while (i-- > 10) 
     {
       char file_name[16], dir_name[16];

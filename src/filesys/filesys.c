@@ -107,7 +107,6 @@ filesys_remove (const char *name)
     return false;
   if ( !strcmp(file_name,".") || !strcmp(file_name, ".."))
   {
-    PRINTF("can't remove . and ..");
     return false;
   }
   
@@ -187,7 +186,7 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
     cur_dir = dir_open(inode);
   }
   //TODO:
-  printf("dir=%p, extracted file name = %s\n", cur_dir, tail);
+  //printf("dir=%p, extracted file name = %s\n", cur_dir, tail);
     
   *dir = cur_dir;
   *file_name = tail;
