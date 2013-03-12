@@ -5,38 +5,34 @@
 /* struct for cache entry */
 struct cache_entry
 {
-  block_sector_t sector_id;                     /* sector id */
-  bool accessed;                                        /* whether the entry is recently accessed */
-  bool dirty;                                           /* whether this cache is dirty */
+  block_sector_t sector_id;        /* sector id */
+  bool accessed;                   /* whether the entry is recently accessed */
+  bool dirty;                      /* whether this cache is dirty */
   /* TODO: need to check whether loading is necessary */
-  bool loading;                                         /* whether this cache is being loaded */
+  bool loading;                    /* whether this cache is being loaded */
   /* TODO: need to check whether flushing is necessary */
-  bool flushing;                                        /* whether this cache is being flushed */
-  uint32_t AW;                                          /* # of processes actively writing */
-  uint32_t AR;                                          /* # of processes actively reading */
-  uint32_t WW;                                          /* # of processes waiting to write */
-  uint32_t WR;                                          /* # of processes waiting to read */
-  struct condition can_read;            /* whether this cache can be read now */
-  struct condition can_write;           /* whether this cache can be written now */
-  struct lock lock;             /* fine grained lock for a single cache */
-  uint8_t data[BLOCK_SECTOR_SIZE];      /* data for this sector */
+  bool flushing;                   /* whether this cache is being flushed */
+  uint32_t AW;                     /* # of processes actively writing */
+  uint32_t AR;                     /* # of processes actively reading */
+  uint32_t WW;                     /* # of processes waiting to write */
+  uint32_t WR;                     /* # of processes waiting to read */
+  struct condition load_complete;  /* whether this cache can be read now */
+  struct lock lock;                /* fine grained lock for a single cache */
+  uint8_t data[BLOCK_SECTOR_SIZE]; /* data for this sector */
 };
-
 typedef struct cache_entry cache_entry_t;
 
 /* global buffer cache */
 static cache_entry_t buffer_cache[BUFFER_CACHE_SIZE];
-
 static uint32_t hand;
-//static struct cache_entry * cache_eviction ();
-//static struct cache_entry * cache_get_block (block_sector_t sector_id);
-//static int is_in_cache (block_sector_t sector_id);
+static struct lock global_cache_lock;
 
 /* Initialize cache */
 void
 cache_init (void)
 {
   hand = 0;
+  lock_init(&global_cache_lock);
   int i = 0;
   for (i = 0; i < BUFFER_CACHE_SIZE; i++)
   {
@@ -49,8 +45,7 @@ cache_init (void)
         buffer_cache[i].AR = 0;
         buffer_cache[i].WW = 0;
         buffer_cache[i].WR = 0;
-        cond_init(&buffer_cache[i].can_read);
-        cond_init(&buffer_cache[i].can_write);
+        cond_init(&buffer_cache[i].load_complete);
         lock_init(&buffer_cache[i].lock);
         memset(buffer_cache[i].data, 0, BLOCK_SECTOR_SIZE*sizeof(uint8_t));
   }
@@ -68,6 +63,11 @@ is_in_cache (block_sector_t sector)
         lock_acquire(&buffer_cache[i].lock);
         if(buffer_cache[i].sector_id == sector)
         {
+          if(buffer_cache[i].flushing)
+          {
+            lock_release(&buffer_cache[i].lock);
+            return -1;
+          }
           lock_release(&buffer_cache[i].lock);
           return i;
         }
@@ -84,6 +84,11 @@ cache_evict_id (void)
 {
   while (1)
   {
+	  if (buffer_cache[hand].flushing || buffer_cache[hand].loading )
+	  {
+	    hand = (hand + 1) % BUFFER_CACHE_SIZE;
+	    continue;
+	  }
         if (buffer_cache[hand].accessed)
         {
           buffer_cache[hand].accessed = false;
@@ -108,19 +113,27 @@ cache_get_entry (block_sector_t sector_id)
   if (cache_hit_id == -1)
   {
     uint32_t evict_id = cache_evict_id();
+    lock_acquire(&buffer_cache[evict_id].lock);
+    lock_release(&global_cache_lock);
+    buffer_cache[evict_id].flushing = true;
+    lock_release(&buffer_cache[evict_id].lock);
     if (buffer_cache[evict_id].dirty)
     {
-          block_write(fs_device, buffer_cache[evict_id].sector_id,
-                                             buffer_cache[evict_id].data);
+      block_write(fs_device, buffer_cache[evict_id].sector_id,
+                                 buffer_cache[evict_id].data);
     }
+    lock_acquire(&buffer_cache[evict_id].lock);
     buffer_cache[evict_id].dirty = false;
     buffer_cache[evict_id].accessed = false;
     buffer_cache[evict_id].sector_id = sector_id;
+    buffer_cache[evict_id].flushing = false;
     return &buffer_cache[evict_id];
   }
   else
   {
-        return &buffer_cache[cache_hit_id];
+  	/* should never reach here */
+  	ASSERT(1==0);
+    return &buffer_cache[cache_hit_id];
   }
 }
 
@@ -138,6 +151,11 @@ cache_read_hit (void *buffer, off_t start, off_t length, uint32_t cache_id)
   struct cache_entry *cur_c;
   cur_c = &buffer_cache[cache_id];
   lock_acquire(&cur_c->lock);
+  lock_release(&global_cache_lock);
+  while(cur_c->loading || cur_c->flushing)
+  {
+    cond_wait(&cur_c->load_complete, &cur_c->lock);
+  }
   memcpy(buffer, cur_c->data + start, length);
   cur_c->accessed = true;
   lock_release(&cur_c->lock);
@@ -149,8 +167,14 @@ cache_read_miss (block_sector_t sector, void *buffer, off_t start, off_t length)
 {
   struct cache_entry *cur_c;
   cur_c = cache_get_entry(sector);
-  lock_acquire(&cur_c->lock);
+  cur_c->loading = true;
+  lock_release(&cur_c->lock);
+
   block_read (fs_device, sector, cur_c->data);
+
+  lock_acquire(&cur_c->lock);
+  cur_c->loading = false;
+  cond_signal(&cur_c->load_complete, &cur_c->lock);
   memcpy(buffer, cur_c->data + start, length);
   cur_c->accessed = true;
   lock_release(&cur_c->lock);
@@ -162,14 +186,15 @@ void
 cache_read_partial (block_sector_t sector, void *buffer,
                                       off_t start, off_t length)
 {
+  lock_acquire(&global_cache_lock);
   int cache_id_hit = is_in_cache(sector);
   if(cache_id_hit != -1)
   {
-        cache_read_hit(buffer, start, length, cache_id_hit);
+    cache_read_hit(buffer, start, length, cache_id_hit);
   }
   else
   {
-        cache_read_miss(sector, buffer, start, length);
+    cache_read_miss(sector, buffer, start, length);
   }
 }
 
@@ -181,6 +206,11 @@ cache_write_hit (const void *buffer, off_t start,
   struct cache_entry *cur_c;
   cur_c = &buffer_cache[cache_id];
   lock_acquire(&cur_c->lock);
+  lock_release(&global_cache_lock);
+  while(cur_c->loading || cur_c->flushing)
+  {
+    cond_wait(&cur_c->load_complete, &cur_c->lock);
+  }
   memcpy(cur_c->data + start, buffer, length);
   cur_c->accessed = true;
   cur_c->dirty = true;
@@ -195,7 +225,7 @@ cache_write_miss (block_sector_t sector, const void *buffer,
 {
   struct cache_entry *cur_c;
   cur_c = cache_get_entry(sector);
-  lock_acquire(&cur_c->lock);
+
   memcpy(cur_c->data + start, buffer, length);
   cur_c->accessed = true;
   cur_c->dirty = true;
@@ -215,6 +245,7 @@ void
 cache_write_partial (block_sector_t sector, const void *buffer,
                                              off_t start, off_t length)
 {
+  lock_acquire(&global_cache_lock);
   int cache_id_hit = is_in_cache (sector);
   if(cache_id_hit != -1)
   {
