@@ -112,34 +112,24 @@ cache_evict_id (void)
 static cache_entry_t *
 cache_get_entry (block_sector_t sector_id)
 {
-  int cache_hit_id = is_in_cache(sector_id);
-  if (cache_hit_id == -1)
+  uint32_t evict_id = cache_evict_id();
+  lock_acquire(&buffer_cache[evict_id].lock);
+  lock_release(&global_cache_lock);
+  buffer_cache[evict_id].flushing = true;
+  lock_release(&buffer_cache[evict_id].lock);
+  if (buffer_cache[evict_id].dirty)
   {
-    uint32_t evict_id = cache_evict_id();
-    lock_acquire(&buffer_cache[evict_id].lock);
-    lock_release(&global_cache_lock);
-    buffer_cache[evict_id].flushing = true;
-    lock_release(&buffer_cache[evict_id].lock);
-    if (buffer_cache[evict_id].dirty)
-    {
-      block_write(fs_device, buffer_cache[evict_id].sector_id,
-                                 buffer_cache[evict_id].data);
-    }
-    lock_acquire(&buffer_cache[evict_id].lock);
-    buffer_cache[evict_id].dirty = false;
-    buffer_cache[evict_id].accessed = false;
-    buffer_cache[evict_id].sector_id = sector_id;
-    buffer_cache[evict_id].flushing = false;
-    cond_signal(&buffer_cache[evict_id].load_complete,
-                            &buffer_cache[evict_id].lock);
-    return &buffer_cache[evict_id];
+    block_write(fs_device, buffer_cache[evict_id].sector_id,
+                               buffer_cache[evict_id].data);
   }
-  else
-  {
-        /* should never reach here */
-        ASSERT(1==0);
-    return &buffer_cache[cache_hit_id];
-  }
+  lock_acquire(&buffer_cache[evict_id].lock);
+  buffer_cache[evict_id].dirty = false;
+  buffer_cache[evict_id].accessed = false;
+  buffer_cache[evict_id].sector_id = sector_id;
+  buffer_cache[evict_id].flushing = false;
+  cond_signal(&buffer_cache[evict_id].load_complete,
+                          &buffer_cache[evict_id].lock);
+  return &buffer_cache[evict_id];
 }
 
 /* Reads sector SECTOR from cache into BUFFER. */
