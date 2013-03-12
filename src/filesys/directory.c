@@ -51,7 +51,7 @@ dir_open (struct inode *inode)
   }
   else
   {
-    inode_cloce (inode);
+    inode_close (inode);
     free (dir);
     return NULL;
   }
