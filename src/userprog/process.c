@@ -23,7 +23,6 @@ static bool load (const char *cmd_line, void (**eip) (void), void **esp);
 void argc_counter(const char*str, int *word_cnt, int *char_cnt);
 bool argument_pasing (const char *cmd_line, char **esp);
 
-extern struct lock global_lock_filesys;
 
 #define WRITE_BYTE_4(addr, value) **((int**) addr) = (int)value
 

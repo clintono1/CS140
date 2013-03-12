@@ -196,7 +196,7 @@ dir_add (struct dir *dir, const char *name,
   strlcpy (e.name, name, sizeof e.name);
   e.inode_sector = inode_sector;
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
-
+  //printf("added name:%s\n", e.name);
 done:
   dir_unlock (dir->inode);
   return success;
@@ -214,7 +214,7 @@ dir_remove (struct dir *dir, const char *name)
 
   if (dir == NULL || name == NULL)
   {
-    //printf("dir or name is null \n");
+    printf("dir or name is null \n");
     return false;
   }
 
@@ -223,7 +223,7 @@ dir_remove (struct dir *dir, const char *name)
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
   {
-    //printf("didn't fine such file or child directory \n");
+    printf("didn't fine such file or child directory \n");
     goto done;
 
   }
@@ -232,35 +232,36 @@ dir_remove (struct dir *dir, const char *name)
   inode = inode_open (e.inode_sector);
   if (inode == NULL)
   {
-    //printf("inode is null \n");
+    printf("inode is null \n");
     goto done;
   }
   if (e.is_dir) 
   {
+    printf("inode open_cnt=%d\n", inode_open_cnt(inode));
     ASSERT (inode_is_dir(inode));
     /* Can't close a non-empty directory */
     if (!dir_empty (inode))
     {
-      //printf("/* Can't close a non-empty directory */ \n");
-      goto done;
+      printf("/* Can't close a non-empty directory */ \n");
+      //goto done;
     }
     /* Can't remove cwd */
     if (inode_get_inumber (inode) == thread_current ()->cwd_sector)
     {
-      //printf("/* Can't remove cwd */\n");
+      printf("/* Can't remove cwd */\n");
       goto done;
     }
     /* Can't remove opened inode */
-    if (inode_open_cnt (inode) > 2) //TODO: 2 is experimental result. only 2 can pass all. Why? reference handout page 53 line 8 and test case of : dir-rm-*.c
+    if (inode_open_cnt (inode) >= 2) //TODO: 2 is experimental result. only 2 can pass all. Why? reference handout page 53 line 8 and test case of : dir-rm-*.c
     {
-      //printf("/* Can't remove opened inode */\n");
-      goto done;
+      printf("/* open_cnt=%d, Can't remove opened inode */\n", inode_open_cnt(inode));
+      //goto done;
     }
   } 
 
   /* Erase directory entry. */
   e.in_use = false;
-  //printf("remove name=%s\n", e.name);
+  printf("remove name=%s\n", e.name);
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e) 
     goto done;
 
@@ -314,11 +315,14 @@ dir_empty (struct inode * inode)
   for (ofs = 0;
       inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;
       ofs += sizeof e)
+  {
+    printf("remain: %s, in_use(%d)\n " , e.name, e.in_use);
     if (e.in_use && strcmp (".", e.name) && strcmp("..", e.name))
     {
-      //printf("remain: %s\n" , e.name);
+      printf("inuse: remain: %s, in_use(%d)\n " , e.name, e.in_use);
       return false;
     }
+  }
   return true;
 }
 

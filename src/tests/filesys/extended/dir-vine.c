@@ -22,7 +22,7 @@ test_main (void)
   quiet = false;
   CHECK (mkdir ("start"), "mkdir \"start\"");
   CHECK (chdir ("start"), "chdir \"start\"");
-  for (i = 0; ; i++) 
+  for (i = 0; i<4 ; i++) 
     {
       char name[3][READDIR_MAX_LEN + 1];
       char file_name[16], dir_name[16];
@@ -30,6 +30,7 @@ test_main (void)
       int fd;
 
       /* Create file. */
+      printf("creating file%d\n", i);
       snprintf (file_name, sizeof file_name, "file%d", i);
       if (!create (file_name, 0))
         break;
@@ -44,6 +45,7 @@ test_main (void)
       close (fd);
       
       /* Create directory. */
+      printf("creating dir%d\n", i);
       snprintf (dir_name, sizeof dir_name, "dir%d", i);
       if (!mkdir (dir_name)) 
         {
@@ -66,12 +68,12 @@ test_main (void)
       /* Descend into directory. */
       CHECK (chdir (dir_name), "chdir \"%s\"", dir_name);
     }
+  CHECK (i > 0, "created files and directories only to level %d", i);
   quiet = false;
-  CHECK (i > 200, "created files and directories only to level %d", i);
-  
 
   msg ("removing all but top 10 levels of files and directories...");
-  while (i-- > 10) 
+  quiet = false;
+  while (i-- > 0) 
     {
       char file_name[16], dir_name[16];
 
