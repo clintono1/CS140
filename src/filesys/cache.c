@@ -1,6 +1,10 @@
 #include "filesys/cache.h"
+#include "devices/timer.h"
+#include "threads/thread.h"
 
 #define BUFFER_CACHE_SIZE 64
+#define WRITE_BEHIND_INTERVAL 5
+
 
 /* struct for cache entry */
 struct cache_entry
@@ -26,6 +30,46 @@ typedef struct cache_entry cache_entry_t;
 static cache_entry_t buffer_cache[BUFFER_CACHE_SIZE];
 static uint32_t hand;
 
+/* write-behind queue */
+static struct list write_behind_q;
+/* write-behind queue lock */
+static struct lock wb_q_lock;
+struct write_b
+{
+  cache_entry_t * c_ptr;
+  struct list_elem elem;
+};
+typedef struct write_b write_b_t;
+
+/* write-behind function */
+static void
+write_behind_period(void * aux UNUSED)
+{
+  while(true)
+  {
+	timer_sleep(TIMER_FREQ*WRITE_BEHIND_INTERVAL);
+	uint32_t c_ind = 0;
+	for(c_ind = 0; c_ind < BUFFER_CACHE_SIZE; c_ind++ )
+	{
+	  lock_acquire(&buffer_cache[c_ind].lock);
+	  if(buffer_cache[c_ind].dirty)
+	  {
+	    buffer_cache[c_ind].flushing = true;
+	    lock_release(&buffer_cache[c_ind].lock);
+
+	    block_write(fs_device, buffer_cache[c_ind].sector_id,
+	    		                   buffer_cache[c_ind].data);
+	    lock_acquire(&buffer_cache[c_ind].lock);
+	    buffer_cache[c_ind].flushing = false;
+	    cond_signal(&buffer_cache[c_ind].load_complete,
+	    		            &buffer_cache[c_ind].lock);
+	    buffer_cache[c_ind].dirty = false;
+	    lock_release(&buffer_cache[c_ind].lock);
+	  }
+	}
+  }
+}
+
 /* Initialize cache */
 void
 cache_init (void)
@@ -47,6 +91,10 @@ cache_init (void)
         lock_init(&buffer_cache[i].lock);
         memset(buffer_cache[i].data, 0, BLOCK_SECTOR_SIZE*sizeof(uint8_t));
   }
+  list_init(&write_behind_q);
+  lock_init(&wb_q_lock);
+  thread_create ("write_behind_period_t", PRI_DEFAULT,
+		                    write_behind_period, NULL);
 }
 
 /* See whether there is a hit for sector. If yes, return cache id.
@@ -93,24 +141,45 @@ cache_evict_id (void)
 {
   while (1)
   {
+	  lock_acquire(&buffer_cache[hand].lock);
           if (buffer_cache[hand].flushing || buffer_cache[hand].loading
                   ||
                   buffer_cache[hand].AW + buffer_cache[hand].AR
                   + buffer_cache[hand].WW + buffer_cache[hand].WR > 0)
           {
+        	lock_release(&buffer_cache[hand].lock);
             hand = (hand + 1) % BUFFER_CACHE_SIZE;
             continue;
           }
         if (buffer_cache[hand].accessed)
         {
           buffer_cache[hand].accessed = false;
+          lock_release(&buffer_cache[hand].lock);
           hand = (hand + 1) % BUFFER_CACHE_SIZE;
         }
         else
         {
-          uint32_t result = hand;
-          hand = (hand + 1) % BUFFER_CACHE_SIZE;
-          return result;
+//          if(buffer_cache[hand].dirty)
+//          {
+//        	printf("push into write_behind queue\n");
+//        	buffer_cache[hand].flushing = true;
+//        	lock_release(&buffer_cache[hand].lock);
+//        	write_b_t * wb_ptr = (write_b_t *)malloc(sizeof(write_b_t));
+//        	lock_acquire(&wb_q_lock);
+//        	list_push_back(&write_behind_q, &wb_ptr->elem);
+//        	lock_release(&wb_q_lock);
+//            hand = (hand + 1) % BUFFER_CACHE_SIZE;
+//            continue;
+//          }
+//          else
+//          {
+        	uint32_t result = hand;
+//        	buffer_cache[hand].dirty = false;
+//        	buffer_cache[hand].accessed = false;
+//        	buffer_cache[hand].flushing = false;
+		    hand = (hand + 1) % BUFFER_CACHE_SIZE;
+        	return result;
+//          }
         }
   }
   /* will never reach here */
@@ -122,7 +191,7 @@ static cache_entry_t *
 cache_get_entry (block_sector_t sector_id)
 {
   uint32_t evict_id = cache_evict_id();
-  lock_acquire(&buffer_cache[evict_id].lock);
+//  lock_acquire(&buffer_cache[evict_id].lock);
   buffer_cache[evict_id].flushing = true;
   lock_release(&buffer_cache[evict_id].lock);
   if (buffer_cache[evict_id].dirty)

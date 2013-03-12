@@ -354,6 +354,7 @@ inode_init (void)
 {
   hash_init (&open_inodes, inode_hash_func, inode_hash_less, NULL);
   lock_init (&lock_open_inodes);
+  cache_init();
 }
 
 /* Initializes an inode with LENGTH bytes of data and writes the new inode
