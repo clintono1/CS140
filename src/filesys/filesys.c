@@ -38,7 +38,6 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
-  //major TODO: need flush all the cache to disk in order to pass 23 *persistance test!
   cache_flush();
   free_map_close ();
 }
