@@ -30,6 +30,54 @@ static uint32_t hand;
 /* global buffer cache */
 static struct lock global_cache_lock;
 
+/* read-ahead queue */
+static struct list read_ahead_q;
+/* read-ahead queue lock */
+static struct lock ra_q_lock;
+/* read-ahead queue ready condition variable */
+static struct condition ra_q_ready;
+struct read_a
+{
+  block_sector_t sector;
+  struct list_elem elem;
+};
+typedef struct read_a read_a_t;
+
+
+/* Prefetch interface */
+void
+cache_readahead(block_sector_t sector)
+{
+  lock_acquire(&ra_q_lock);
+  read_a_t * r_ptr = (read_a_t *) malloc(sizeof(read_a_t));
+  r_ptr->sector = sector;
+  list_push_back(&read_ahead_q, &r_ptr->elem);
+  cond_signal(&ra_q_ready, &ra_q_lock);
+  lock_release(&ra_q_lock);
+}
+
+/* Prefetch Daemon */
+static void
+cache_readahead_daemon(void * aux UNUSED)
+{
+  while(true)
+  {
+	lock_acquire(&ra_q_lock);
+	while(list_empty(&read_ahead_q))
+	{
+      cond_wait(&ra_q_ready, &ra_q_lock);
+	}
+	struct list_elem * e_ptr = list_pop_front(&read_ahead_q);
+	read_a_t * ra_ptr = list_entry(e_ptr, read_a_t, elem);
+	block_sector_t sector = ra_ptr->sector;
+	free(ra_ptr);
+	lock_release(&ra_q_lock);
+	void * tmp_buffer = (void *) malloc(BLOCK_SECTOR_SIZE);
+	cache_read(sector, tmp_buffer);
+	free(tmp_buffer);
+  }
+}
+
 /* Wite-behind function */
 static void
 write_behind_period(void * aux UNUSED)
@@ -80,8 +128,12 @@ cache_init (void)
     memset(buffer_cache[i].data, 0, BLOCK_SECTOR_SIZE*sizeof(uint8_t));
   }
   lock_init(&global_cache_lock);
+  list_init(&read_ahead_q);
+  lock_init(&ra_q_lock);
+  cond_init(&ra_q_ready);
   thread_create ("write_behind_period_t", PRI_DEFAULT,
                            write_behind_period, NULL);
+  thread_create ("read_ahead_t", PRI_DEFAULT, cache_readahead_daemon, NULL);
 }
 
 /* See whether there is a hit for sector. If yes, return cache id.
