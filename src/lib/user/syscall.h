@@ -13,7 +13,7 @@ typedef int mapid_t;
 #define MAP_FAILED ((mapid_t) -1)
 
 /* Maximum characters in a filename written by readdir(). */
-#define READDIR_MAX_LEN 40
+#define READDIR_MAX_LEN 14
 
 /* Typical return values from main() and arguments to exit(). */
 #define EXIT_SUCCESS 0          /* Successful execution. */
