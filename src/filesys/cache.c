@@ -78,6 +78,30 @@ cache_readahead_daemon(void * aux UNUSED)
   }
 }
 
+/* write every dirty cache block back to disk */
+void
+cache_flush(void)
+{
+  uint32_t c_ind = 0;
+  for(c_ind = 0; c_ind < BUFFER_CACHE_SIZE; c_ind++ )
+  {
+    lock_acquire(&buffer_cache[c_ind].lock);
+    if(buffer_cache[c_ind].dirty)
+    {
+      buffer_cache[c_ind].flushing = true;
+      lock_release(&buffer_cache[c_ind].lock);
+      block_write(fs_device, buffer_cache[c_ind].sector_id,
+                                     buffer_cache[c_ind].data);
+      lock_acquire(&buffer_cache[c_ind].lock);
+      buffer_cache[c_ind].flushing = false;
+      buffer_cache[c_ind].dirty = false;
+      cond_signal(&buffer_cache[c_ind].cache_ready,
+                              &buffer_cache[c_ind].lock);
+      lock_release(&buffer_cache[c_ind].lock);
+    }
+  }
+}
+
 /* Wite-behind function */
 static void
 write_behind_period(void * aux UNUSED)
@@ -85,24 +109,7 @@ write_behind_period(void * aux UNUSED)
   while(true)
   {
 	timer_sleep(TIMER_FREQ*WRITE_BEHIND_INTERVAL);
-    uint32_t c_ind = 0;
-    for(c_ind = 0; c_ind < BUFFER_CACHE_SIZE; c_ind++ )
-    {
-      lock_acquire(&buffer_cache[c_ind].lock);
-      if(buffer_cache[c_ind].dirty)
-      {
-        buffer_cache[c_ind].flushing = true;
-        lock_release(&buffer_cache[c_ind].lock);
-        block_write(fs_device, buffer_cache[c_ind].sector_id,
-                                       buffer_cache[c_ind].data);
-        lock_acquire(&buffer_cache[c_ind].lock);
-        buffer_cache[c_ind].flushing = false;
-        buffer_cache[c_ind].dirty = false;
-        cond_signal(&buffer_cache[c_ind].cache_ready,
-                                &buffer_cache[c_ind].lock);
-        lock_release(&buffer_cache[c_ind].lock);
-      }
-    }
+	cache_flush();
   }
 }
 

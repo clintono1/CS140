@@ -8,6 +8,7 @@
 #include "filesys/directory.h"
 #include "threads/malloc.h"
 #include "threads/thread.h"
+#include "filesys/cache.h"
 
 /* Partition that contains the file system. */
 struct block *fs_device;
@@ -38,6 +39,7 @@ void
 filesys_done (void) 
 {
   //major TODO: need flush all the cache to disk in order to pass 23 *persistance test!
+  cache_flush();
   free_map_close ();
 }
 

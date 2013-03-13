@@ -21,5 +21,6 @@ void cache_read_partial(block_sector_t sector, void *buffer,
 void cache_write_partial(block_sector_t sector, const void *buffer,
                                 off_t start, off_t length);
 void cache_readahead(block_sector_t sector);
+void cache_flush(void);
 
 #endif /* filesys/cache.h */
