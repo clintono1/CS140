@@ -235,19 +235,16 @@ dir_remove (struct dir *dir, const char *name)
     /* Can't remove opened inode */
     if (inode_open_cnt (inode) > 1) 
     {
-      //printf("/* open_cnt=%d, Can't remove opened inode */\n", inode_open_cnt(inode));
       goto done;
     }
     /* Can't close a non-empty directory */
     if (!dir_empty (inode))
     {
-      //printf("/* Can't close a non-empty directory */ \n");
       goto done;
     }
     /* Can't remove cwd */
     if (inode_get_inumber (inode) == thread_current ()->cwd_sector)
     {
-      //printf("/* Can't remove cwd */\n");
       goto done;
     }
   } 
