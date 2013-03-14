@@ -594,6 +594,12 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     size -= bytes_to_read;
     offset += bytes_to_read;
     bytes_read += bytes_to_read;
+    /* If there are still contents to read, then prefetch a sector. */
+    if (size > 0 && offset < inode->length)
+    {
+      block_sector_t sector_prefetch = byte_to_sector (inode_dsk, offset);
+      cache_readahead(sector_prefetch);
+    }
   }
   free (inode_dsk);
   return bytes_read;
