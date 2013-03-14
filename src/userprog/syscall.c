@@ -435,7 +435,7 @@ _chdir (const char *name)
 bool
 _mkdir (const char *name)
 {
-  
+  bool success = false;
   if (!valid_vaddr_range (name, 0))
     _exit (-1);
   if (!valid_vaddr_range (name, strlen (name)))
@@ -448,27 +448,32 @@ _mkdir (const char *name)
   char *dir_name;
   
   if(!filesys_parse(name, &dir, &dir_name)) 
-    return false;
-  bool success = ( dir != NULL &&
-               free_map_allocate (1, &inode_sector)); /* Allocate sector to store inode*/
-  if (success)
   {
-    success &= inode_create (inode_sector, 0, true); /* Write inode to this sector. */
+    dir_close (dir);
+    return false;
   }
-  if (success)
+  if (! (dir != NULL && free_map_allocate (1, &inode_sector)))
+  {
+    dir_close (dir);
+    return false;
+  }
+  /* Write inode to this sector. */  
+  if (inode_create (inode_sector, 0, true))
   { 
     /* Add this inode to parent dir */
-    success &= dir_add (dir, dir_name, inode_sector, true);
+    success = dir_add (dir, dir_name, inode_sector, true);
     /* Add . and .. to the new directory */
-    new_dir  = dir_open (inode_open (inode_sector));
-    success &= dir_add (new_dir, ".", inode_sector, true);
-    success &= dir_add (new_dir, "..", inode_get_inumber(dir_get_inode(dir)), true);
-    dir_close(new_dir);
-    if (!success)
-      dir_remove(dir, dir_name);
+    if (success)
+    {
+      new_dir  = dir_open (inode_open (inode_sector));
+      success &= dir_add (new_dir, ".", inode_sector, true);
+      if (success)
+        success &= dir_add (new_dir, "..", inode_get_inumber(dir_get_inode(dir)), true);
+      dir_close(new_dir);
+      if (!success)
+        dir_remove(dir, dir_name);
+    }
   }
-  
-
   dir_close (dir);
   return success;
 }
@@ -476,7 +481,6 @@ _mkdir (const char *name)
 bool
 _readdir (int fd, char name[READDIR_MAX_LEN + 1])
 {
-  //TODO: page 53, line 6 under readdir() is not considered yet 
   if (!valid_vaddr_range (name, 0))
     _exit (-1);
   if (!valid_vaddr_range (name, strlen (name)))
