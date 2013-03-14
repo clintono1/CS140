@@ -211,7 +211,9 @@ inode_extend_single (struct inode_disk *inode_disk)
 {
   block_sector_t data_sector = allocate_zeroed_sector();
   if ((int) data_sector == -1)
+  { 
     return false;
+  }
   off_t file_offset = inode_disk->length - 1;
   inode_disk->length += BLOCK_SECTOR_SIZE;
   /* Case 1: Add a block in the direct level */
@@ -324,7 +326,10 @@ inode_extend_to_size (struct inode_disk *inode_disk, const off_t length)
     while (inode_disk->length < length)
     {
       if (!inode_extend_single (inode_disk))
+      {
         return false;
+        break;
+      }
     }
     inode_disk->length = length;
     return true;
@@ -555,10 +560,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   inode_dsk = malloc (sizeof *inode_dsk);
   if (inode_dsk == NULL)
   {
-    PRINTF("can't malloc inode_dsk!\n");
     return 0;
   }
-  PRINTF("inode.sector=%d\n", inode->sector);
   cache_read (inode->sector, inode_dsk);
   while (size > 0) 
   {

@@ -361,6 +361,7 @@ _write (int fd, const void *buffer, unsigned size)
     }
     
     result = file_write (file, buffer, size);
+
   }
   return result;
 }
@@ -420,7 +421,6 @@ _chdir (const char *name)
 
   struct dir *dir;
   char *dir_name;
-  PRINTF("\nchdir called! name:%s\n", name);
   if(!filesys_parse(name, &dir, &dir_name)) 
     return false;
   struct inode *inode = NULL;
@@ -436,7 +436,6 @@ bool
 _mkdir (const char *name)
 {
   
-  PRINTF("\nmkdir called! name:%s\n", name);
   if (!valid_vaddr_range (name, 0))
     _exit (-1);
   if (!valid_vaddr_range (name, strlen (name)))
@@ -450,21 +449,26 @@ _mkdir (const char *name)
   
   if(!filesys_parse(name, &dir, &dir_name)) 
     return false;
-  bool success = (dir != NULL
-    && free_map_allocate (1, &inode_sector) /* Allocate sector to store inode*/
-    && inode_create (inode_sector, 0, true) /* Write inode to this sector. */
-    && dir_add (dir, dir_name, inode_sector, true)); /* Add this inode to parent dir */
-  if (!success && inode_sector != 0)
-    free_map_release (inode_sector, 1);
+  bool success = ( dir != NULL &&
+               free_map_allocate (1, &inode_sector)); /* Allocate sector to store inode*/
+  if (success)
+  {
+    success &= inode_create (inode_sector, 0, true); /* Write inode to this sector. */
+  }
   if (success)
   { 
+    /* Add this inode to parent dir */
+    success &= dir_add (dir, dir_name, inode_sector, true);
     /* Add . and .. to the new directory */
     new_dir  = dir_open (inode_open (inode_sector));
     success &= dir_add (new_dir, ".", inode_sector, true);
     success &= dir_add (new_dir, "..", inode_get_inumber(dir_get_inode(dir)), true);
     dir_close(new_dir);
+    if (!success)
+      dir_remove(dir, dir_name);
   }
-  PRINTF("mkdir success(%d)\n", success);
+  
+
   dir_close (dir);
   return success;
 }

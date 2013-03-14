@@ -50,7 +50,6 @@ filesys_done (void)
 bool
 filesys_create (const char *name, off_t initial_size) 
 {
-  //TODO: parse out the path and real name from NAME
   block_sector_t inode_sector = 0;
   struct dir *dir;
   char *file_name;
@@ -60,8 +59,6 @@ filesys_create (const char *name, off_t initial_size)
   {
     return false;
   }
-  //TODO;
-  //printf(" name =%s, filename = %s, dir not null? %d\n", name, file_name, dir!=NULL);
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size, false)
@@ -70,7 +67,6 @@ filesys_create (const char *name, off_t initial_size)
     free_map_release (inode_sector, 1);
   dir_close (dir);
 
-  PRINTF("filesys creat success(%d)\n", success);
   return success;
 }
 
@@ -154,8 +150,6 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
   while ( tail >= begin && *tail != '/')
     tail--;
   tail++;
-  //TODO:
-  //printf("begin:%s   tail: %s\n\n", begin, tail);
   /* find the first word */
   while (*begin == ' ')
     begin++;
@@ -174,13 +168,10 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
   else
   {
     cur_dir = dir_open_current();
-    PRINTF("root_dir = %p\n", cur_dir);
-    PRINTF( "cur_dir's inumber=%d \n", inode_get_inumber(dir_get_inode(cur_dir)));
   }
   for (token = strtok_r (begin, "/", &save_ptr); token != tail;
        token = strtok_r (NULL, "/", &save_ptr))
   {
-    PRINTF ("token is %s\n", token);
     struct inode *inode = NULL;
     /* Find the name<->inode_sector pair in cur_dir, return false 
        if not found*/
@@ -189,8 +180,6 @@ filesys_parse(const char *path, struct dir **dir, char **file_name)
     dir_close(cur_dir);
     cur_dir = dir_open(inode);
   }
-  //TODO:
-  //printf("dir=%p, extracted file name = %s\n", cur_dir, tail);
     
   *dir = cur_dir;
   *file_name = tail;

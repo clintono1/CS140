@@ -87,7 +87,6 @@ dir_close (struct dir *dir)
 {
   if (dir != NULL)
   {
-    PRINTF("dir%p inode(%d) closed\n", dir, inode_get_inumber(dir->inode));
     inode_close (dir->inode);
     free (dir);
   }
@@ -170,11 +169,7 @@ dir_add (struct dir *dir, const char *name,
   
   /* Check NAME for validity. */
   if (*name == '\0' || strlen (name) > NAME_MAX)
-  {
-    //TODO:
-    //printf("too long!\n");
     return false;
-  }
 
   dir_lock (dir->inode);
 
@@ -200,7 +195,6 @@ dir_add (struct dir *dir, const char *name,
   strlcpy (e.name, name, sizeof e.name);
   e.inode_sector = inode_sector;
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
-  //printf("added name:%s\n", e.name);
 done:
   dir_unlock (dir->inode);
   return success;
@@ -288,11 +282,8 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e) 
   {
     dir->pos += sizeof e;
-    //TODO:
-    //printf("e.name=%s  in_use(%d)\n", e.name, e.in_use);
     if (e.in_use && strcmp(e.name, ".") && strcmp(e.name, ".."))
     {
-      //printf("INSIDE: e.name=%s, in_use(%d)\n", e.name, e.in_use);
       strlcpy (name, e.name, NAME_MAX + 1);
       dir_unlock (dir->inode);
       return true;
@@ -314,10 +305,8 @@ dir_empty (struct inode * inode)
       inode_read_at (inode, &e, sizeof e, ofs) == sizeof e;
       ofs += sizeof e)
   {
-    //printf("remain: %s, in_use(%d)\n " , e.name, e.in_use);
     if (e.in_use && strcmp (".", e.name) && strcmp("..", e.name))
     {
-      //printf("inuse: remain: %s, in_use(%d)\n " , e.name, e.in_use);
       return false;
     }
   }
