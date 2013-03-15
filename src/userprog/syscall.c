@@ -405,7 +405,6 @@ _close (int fd)
 }
 
 /* Part3: syscalls for sub-directories */
-//TODO: no sync yet!
 bool
 _chdir (const char *name)
 {

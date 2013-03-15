@@ -432,7 +432,6 @@ inode_open (block_sector_t sector)
   lock_release (&lock_open_inodes);
 
   struct inode_disk *inode_dsk;
-  // TODO: whether need inode->length??
   inode_dsk = malloc (sizeof *inode_dsk);
   if (inode_dsk == NULL)
     return NULL;

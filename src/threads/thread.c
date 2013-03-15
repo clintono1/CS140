@@ -732,19 +732,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  if ( t != initial_thread )
-  {
-      t->cwd_sector = thread_current()->cwd_sector;
-      //TODO:
-      PRINTF("parent: pid=%d, cur_dir=%d\n", thread_current()->tid, thread_current()->cwd_sector);
-      PRINTF("child: pid=%d, cur_dir=%d\n", t->tid, t->cwd_sector);
-  }
+  if (t != initial_thread)
+    t->cwd_sector = thread_current()->cwd_sector;
   
-
-  
-  if(thread_mlfqs)
+  if (thread_mlfqs)
   {
-    if(t == initial_thread)
+    if (t == initial_thread)
     {
       t->nice = 0;
       t->recent_cpu = 0;

@@ -8,7 +8,7 @@
 #include "threads/malloc.h"
 #include "filesys/directory.h"
 
-// TODO: Remove before submit
+/* Hack to suppress IDE parsing errors */
 #ifndef USERPROG
 #define USERPROG
 #endif
