@@ -413,7 +413,7 @@ _chdir (const char *name)
     _exit (-1);
   if (!valid_vaddr_range (name, strlen (name)))
     _exit (-1);
-  if(!strcmp(name, "/"))
+  if (!strcmp(name, "/"))
   {
     thread_current()->cwd_sector = ROOT_DIR_SECTOR;
     return true;
@@ -421,14 +421,20 @@ _chdir (const char *name)
 
   struct dir *dir;
   char *dir_name;
-  if(!filesys_parse(name, &dir, &dir_name)) 
+  if (!filesys_parse (name, &dir, &dir_name))
     return false;
+
   struct inode *inode = NULL;
-  if (!dir_lookup(dir, dir_name, &inode))
+  if (!dir_lookup (dir, dir_name, &inode))
+  {
+    dir_close (dir);
+    free (dir_name);
     return false;
-  dir_close(dir);
-  thread_current()->cwd_sector = inode_get_inumber(inode);
-  inode_close(inode);
+  }
+  dir_close (dir);
+  free (dir_name);
+  thread_current ()->cwd_sector = inode_get_inumber (inode);
+  inode_close (inode);
   return true;
 }
 
@@ -447,19 +453,18 @@ _mkdir (const char *name)
   struct dir *dir, *new_dir;
   char *dir_name;
   
-  if(!filesys_parse(name, &dir, &dir_name)) 
-  {
-    dir_close (dir);
+  if (!filesys_parse (name, &dir, &dir_name))
     return false;
-  }
+
   if (! (dir != NULL && free_map_allocate (1, &inode_sector)))
   {
     dir_close (dir);
+    free (dir_name);
     return false;
   }
   /* Write inode to this sector. */  
   if (inode_create (inode_sector, 0, true))
-  { 
+  {
     /* Add this inode to parent dir */
     success = dir_add (dir, dir_name, inode_sector, true);
     /* Add . and .. to the new directory */
@@ -468,13 +473,16 @@ _mkdir (const char *name)
       new_dir  = dir_open (inode_open (inode_sector));
       success &= dir_add (new_dir, ".", inode_sector, true);
       if (success)
-        success &= dir_add (new_dir, "..", inode_get_inumber(dir_get_inode(dir)), true);
-      dir_close(new_dir);
+        success &= dir_add (new_dir, "..",
+                            inode_get_inumber(dir_get_inode(dir)),
+                            true);
+      dir_close (new_dir);
       if (!success)
-        dir_remove(dir, dir_name);
+        dir_remove (dir, dir_name);
     }
   }
   dir_close (dir);
+  free (dir_name);
   return success;
 }
 

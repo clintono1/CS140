@@ -53,12 +53,13 @@ filesys_create (const char *name, off_t initial_size)
   block_sector_t inode_sector = 0;
   struct dir *dir;
   char *file_name;
-  if (!strcmp(name, "/"))
+
+  if (!strcmp (name, "/"))
     return false;
+
   if(!filesys_parse (name, &dir, &file_name))
-  {
     return false;
-  }
+
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size, false)
@@ -66,7 +67,7 @@ filesys_create (const char *name, off_t initial_size)
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
-
+  free (file_name);
   return success;
 }
 
@@ -82,12 +83,15 @@ filesys_open (const char *name)
   char *file_name;
   if ( !strcmp(name, "/"))
     return file_open (inode_open (ROOT_DIR_SECTOR));
+
   if(!filesys_parse (name, &dir, &file_name))
     return NULL;
+
   struct inode *inode = NULL;
   if (dir != NULL)
     dir_lookup (dir, file_name, &inode);
   dir_close (dir);
+  free (file_name);
   return file_open (inode);
 }
 
@@ -98,21 +102,23 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name) 
 {
-  //struct dir *dir = dir_open_root ();
   struct dir *dir;
   char *file_name;
-  if(!strcmp(name, "/"))
+  if(!strcmp (name, "/"))
     return false;
-  if(!filesys_parse(name, &dir, &file_name)) 
+  if(!filesys_parse (name, &dir, &file_name))
     return false;
-  if ( !strcmp(file_name,".") || !strcmp(file_name, ".."))
+
+  if ( !strcmp (file_name,".") || !strcmp (file_name, ".."))
   {
+    dir_close (dir);
+    free (file_name);
     return false;
   }
   
   bool success = dir != NULL && dir_remove (dir, file_name);
   dir_close (dir); 
-
+  free (file_name);
   return success;
 }
 
@@ -133,58 +139,68 @@ do_format (void)
 }
 
 bool
-filesys_parse(const char *path, struct dir **dir, char **file_name)
+filesys_parse (const char *path, struct dir **dir, char **file_name)
 {
+  *file_name = NULL;
+  *dir = NULL;
   size_t len = strlen (path);
   if (len == 0)
     return false;
-  //TODO: this buf is never freed.
-  char *buf = malloc(len+1);
-  memcpy(buf, path, len+1);
+  char *buf = malloc (len+1);
+  memcpy (buf, path, len+1);
   char *token, *save_ptr;
   struct dir *cur_dir;
   bool is_root = false;
   char *begin = buf;
   /* Tail is the last file name */
-  char *tail = buf + strlen(buf)-1;
+  char *tail = buf + strlen (buf)-1;
   while ( tail >= begin && *tail != '/')
-    tail--;
-  tail++;
-  /* find the first word */
+    tail --;
+  tail ++;
+  /* Find the first word */
   while (*begin == ' ')
-    begin++;
+    begin ++;
   while (*begin == '/')
   {
-    begin++;
+    begin ++;
     is_root = true;
   }
-    
+
+  /* Open current directory */
   if (is_root)
   {
-    cur_dir = dir_open_root();
-    if (tail==NULL) /* Don't parse if the input path is just "/" */
+    cur_dir = dir_open_root ();
+    if (tail == NULL) /* Don't parse if the input path is just "/" */
+    {
+      dir_close (cur_dir);
+      free (buf);
       return false;
+    }
   }
   else
-  {
-    cur_dir = dir_open_current();
-  }
+    cur_dir = dir_open_current ();
+
+  /* Open each directory in the path */
   for (token = strtok_r (begin, "/", &save_ptr); token != tail;
        token = strtok_r (NULL, "/", &save_ptr))
   {
     struct inode *inode = NULL;
     /* Find the name<->inode_sector pair in cur_dir, return false 
        if not found*/
-    if (!dir_lookup(cur_dir, token, &inode))
+    if (!dir_lookup (cur_dir, token, &inode))
+    {
+      dir_close (cur_dir);
+      free (buf);
       return false;
-    dir_close(cur_dir);
-    cur_dir = dir_open(inode);
+    }
+    dir_close (cur_dir);
+    cur_dir = dir_open (inode);
   }
-    
+
   *dir = cur_dir;
-  *file_name = tail;
+  size_t tail_length = strlen (tail) + 1;
+  *file_name = malloc (tail_length);
+  memcpy (*file_name, tail, tail_length);
+  free (buf);
   return true;
 }
-
-
-

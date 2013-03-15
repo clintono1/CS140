@@ -26,4 +26,4 @@ void dir_lock(struct inode *inode);
 bool inode_is_dir(struct inode *inode);
 int inode_open_cnt(struct inode *inode);
 
-#endif
+#endif /* filesys/inode.h */
