@@ -1,0 +1,313 @@
+             +-------------------------+
+             | CS 140                  |
+             | PROJECT 4: FILE SYSTEMS |
+             | DESIGN DOCUMENT         |
+             +-------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Song Han <songhan@stanford.edu>
+Jinchao Ye <jcye@stanford.edu>
+Bo Wang <bowang@stanford.edu>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+None.
+
+>> Describe briefly which parts of the assignment were implemented by
+>> each member of your team. If some team members contributed significantly
+>> more or less than others (e.g. 2x), indicate that here.
+
+Song Han: file extension, sub directory
+Jinchao Ye: buffer cache, design doc
+Bo Wang: design doc, file and dir synchronization
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+None.
+
+             INDEXED AND EXTENSIBLE FILES
+             ============================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+ /* A single directory entry. */
+ struct dir_entry 
+   {
+     block_sector_t inode_sector;        /* Sector number of header. */
+     char name[NAME_MAX + 1];            /* Null terminated file name. */
+     bool in_use;                        /* In use or free? */
+     bool is_dir;                        /* Directory or file? */
+   };
+
+/* 128 indexes per sector */
+#define DIRECT_IDX_CNT 122
+#define IDX_PER_SECTOR (BLOCK_SECTOR_SIZE / 4)
+#define CAPACITY_L0    (DIRECT_IDX_CNT * BLOCK_SECTOR_SIZE)
+#define CAPACITY_L1    (IDX_PER_SECTOR * BLOCK_SECTOR_SIZE)
+#define CAPACITY_L2    (IDX_PER_SECTOR * IDX_PER_SECTOR * BLOCK_SECTOR_SIZE)
+
+/* Hash of open inodes, so that opening a single inode twice
+   returns the same 'struct inode'. */
+static struct hash open_inodes;
+static struct lock lock_open_inodes;
+
+ /* On-disk inode.
+    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
+ struct inode_disk
+   {
+     block_sector_t sector;                 /* Sector number of disk location.*/
+     off_t length;                          /* File size in bytes. */
+     unsigned magic;                        /* Magic number. */
+     int is_dir;                            /* 1 if this inode is a dir,
+                                               0 otherwise. */
+     block_sector_t idx0 [DIRECT_IDX_CNT];  /* Direct index. */
+     block_sector_t idx1;                   /* Single indirect index. */
+     block_sector_t idx2;                   /* Double indirect index. */
+   };
+
+ struct indirect_block
+   {
+     block_sector_t idx [IDX_PER_SECTOR];
+   };
+
+ /* In-memory inode. */
+ struct inode 
+   {
+     struct hash_elem elem;              /* Element in inode hash. */
+     block_sector_t sector;              /* Sector number of disk location. */
+     int open_cnt;                       /* Number of openers. */
+     bool to_be_removed;                 /* True if deleted when open_cnt
+                                            reaches zero. */
+     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
+     off_t length;                       /* File size in bytes. */
+     bool is_dir;                        /* True if inode is for directory */
+     struct lock lock_inode;             /* Inode lock */
+     struct lock lock_dir;               /* Dir lock */
+   };
+
+>> A2: What is the maximum size of a file supported by your inode
+>> structure?  Show your work.
+
+Our maximum size of a file is 8,516,608 bytes, i.e. 8.12MB. This number can be
+calculated as following.
+
+number of direct block:             (512 - 4*6) / 4 = 122
+number of indirect block:                   512 / 4 = 128
+number of doubly indirect block:              128^2 = 16,384
+total number of blocks:           122 + 128 + 16384 = 16,634
+total number of bytes:                 16,634 * 512 = 8,516,608 bytes
+
+---- SYNCHRONIZATION ----
+
+>> A3: Explain how your code avoids a race if two processes attempt to
+>> extend a file at the same time.
+
+We use the inode->lock_inode to avoid the race condition. When a process tries
+to extend a file, i.e. offset + size > inode_disk->length, it has to acquire
+inode->lock_inode. A process that needs to extend the file but cannot acquire
+this lock will sleep and wait.
+
+>> A4: Suppose processes A and B both have file F open, both
+>> positioned at end-of-file.  If A reads and B writes F at the same
+>> time, A may read all, part, or none of what B writes.  However, A
+>> may not read data other than what B writes, e.g. if B writes
+>> nonzero data, A is not allowed to see all zeros.  Explain how your
+>> code avoids this race.
+
+There are two length variables for a file's inode, i.e. inode->length and
+inode_disk->length. inode_disk->length is the allocated length of an inode;
+inode->length is the initialized/readable length of an inode. At the beginning,
+inode->length and inode_disk->length are equal. When B begins to write at the
+end-of-file, it first acquires inode->lock_inode and extends inode_disk to
+the final length of the write. The inode_disk->length is also updated here.
+Then B starts to write the data. Once B finishes writing a sector of data, it
+updates inode->length to this offset. When A reads data, it does not need to
+acquire any lock and only checks inode->length. Since each time inode->length
+is updated the data up to inode->length is written, A will always read data 
+that B has written.
+
+>> A5: Explain how your synchronization design provides "fairness".
+>> File access is "fair" if readers cannot indefinitely block writers
+>> or vice versa.  That is, many processes reading from a file cannot
+>> prevent forever another process from writing the file, and many
+>> processes writing to a file cannot prevent another process forever
+>> from reading the file.
+
+In our design, readers do not need to acquire any locks. Only writers that need
+to extend the file need to acquire inode->lock_inode. Thus reading and writing
+will not block each other. Only one extension blocks other extensions.
+
+---- RATIONALE ----
+
+>> A6: Is your inode structure a multilevel index?  If so, why did you
+>> choose this particular combination of direct, indirect, and doubly
+>> indirect blocks?  If not, why did you choose an alternative inode
+>> structure, and what advantages and disadvantages does your
+>> structure have, compared to a multilevel index?
+
+Yes. Our inode structure is a multilevel index.
+We chose this structure because we find it is a good fit for both small and
+large files. For small files, the indirect index blocks are not allocated. 
+Thus it is spatial efficient. Additionally, it is good for random access since
+it only requires reading at most three index to find the actual data block.
+
+                SUBDIRECTORIES
+                ==============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+ /* A single directory entry. */
+ struct dir_entry 
+   {
+     ...
+     bool is_dir;                        /* Directory or file? */
+     ...
+   };
+
+ /* In-memory inode. */
+ struct inode 
+   {
+     ...
+     bool is_dir;                        /* True if inode is for directory */
+     ...
+   }
+
+ /* On-disk inode.
+    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
+ struct inode_disk
+   {
+     ...
+     int is_dir;                         /* 1 if this inode is a dir,
+                                            0 otherwise. */
+     ...
+   }
+
+ struct thread
+   {
+     ...
+     block_sector_t cwd_sector;          /* Current directory sector number */
+     ...
+   }
+
+---- ALGORITHMS ----
+
+>> B2: Describe your code for traversing a user-specified path.  How
+>> do traversals of absolute and relative paths differ?
+
+The code for traversing a user-specified path is in filesys_parse in filesys.c
+The basic process of traversing is as follows.
+  (1) Find the first non-space character in the user-specified path
+      If this character is '/', open root directory as the current directory;
+      otherwise open the process working directory as the current directory.
+  (2) Starting from the current directory, open each directory in the path
+      until the last segment separated by '/'.
+      Close the parent directory when the child directory is opened. 
+  (3) Return the lastly opened directory and the file / dir name (the last 
+      segment in the path)
+
+In brief, we firstly find the current directory then parse the path one
+directory at a time using an iterative method.
+
+---- SYNCHRONIZATION ----
+
+>> B4: How do you prevent races on directory entries?  For example,
+>> only one of two simultaneous attempts to remove a single file
+>> should succeed, as should only one of two simultaneous attempts to
+>> create a file with the same name, and so on.
+
+Directory operations are synchronized by inode->lock_dir. Directory operations
+like lookup, add, remove, read are protected by the lock in the directory inode
+to avoid races.
+
+>> B5: Does your implementation allow a directory to be removed if it
+>> is open by a process or if it is in use as a process's current
+>> working directory?  If so, what happens to that process's future
+>> file system operations?  If not, how do you prevent it?
+
+Our implementation does not allow a directory to be removed if it is opened by
+a process. The dir_remove function will check whether the inode->open_cnt is
+larger than 1. If not, then this directory is allowed to remove. To prevent
+removing working directory, each process keeps an open inode of the current
+working directory. When a process exists, it closes its current working
+directory. The inode is also closed if the process changes its current working
+directory, while the new working directory's inode is opened.
+
+---- RATIONALE ----
+
+>> B6: Explain why you chose to represent the current directory of a
+>> process the way you did.
+
+We chose to store the inode to the current working directory in the thread
+struct. 
+
+                 BUFFER CACHE
+                 ============
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+---- ALGORITHMS ----
+
+>> C2: Describe how your cache replacement algorithm chooses a cache
+>> block to evict.
+
+>> C3: Describe your implementation of write-behind.
+
+>> C4: Describe your implementation of read-ahead.
+
+---- SYNCHRONIZATION ----
+
+>> C5: When one process is actively reading or writing data in a
+>> buffer cache block, how are other processes prevented from evicting
+>> that block?
+
+>> C6: During the eviction of a block from the cache, how are other
+>> processes prevented from attempting to access the block?
+
+---- RATIONALE ----
+
+>> C7: Describe a file workload likely to benefit from buffer caching,
+>> and workloads likely to benefit from read-ahead and write-behind.
+
+               SURVEY QUESTIONS
+               ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students in future quarters?
+
+>> Any other comments?
