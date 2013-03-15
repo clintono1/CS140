@@ -9,6 +9,7 @@
 struct cache_entry
 {
   block_sector_t sector_id;        /* sector id */
+  block_sector_t next_id;          /* id of sector to be loaded if flushing */
   bool accessed;                   /* whether the entry is recently accessed */
   bool dirty;                      /* whether this cache is dirty */
   bool loading;                    /* whether this cache is being loaded */
@@ -88,7 +89,14 @@ cache_flush(void)
     lock_acquire(&buffer_cache[c_ind].lock);
     if(buffer_cache[c_ind].dirty)
     {
+	  /* wait until this cache block is fully written to disk */
+	  if(buffer_cache[c_ind].flushing)
+	  {
+		lock_release(&buffer_cache[c_ind].lock);
+		continue;
+	  }
       buffer_cache[c_ind].flushing = true;
+      buffer_cache[c_ind].next_id = UINT32_MAX;
       lock_release(&buffer_cache[c_ind].lock);
       block_write(fs_device, buffer_cache[c_ind].sector_id,
                                      buffer_cache[c_ind].data);
@@ -122,6 +130,7 @@ cache_init (void)
   for (i = 0; i < BUFFER_CACHE_SIZE; i++)
   {
     buffer_cache[i].sector_id = UINT32_MAX;
+    buffer_cache[i].next_id = UINT32_MAX;
     buffer_cache[i].accessed = false;
     buffer_cache[i].dirty = false;
     buffer_cache[i].loading = false;
@@ -174,6 +183,29 @@ is_in_cache (block_sector_t sector, bool write_flag)
         lock_release(&buffer_cache[i].lock);
         return -1;
       }
+    }
+    else if(buffer_cache[i].flushing && buffer_cache[i].next_id == sector)
+    {
+      /* wait until this cache block is fully written to disk */
+	  while(buffer_cache[i].flushing)
+	  {
+		cond_wait(&buffer_cache[i].cache_ready, &buffer_cache[i].lock);
+	  }
+	  /* hit : the block is still in cache after written to disk */
+		if(buffer_cache[i].sector_id == sector)
+		{
+		  if(write_flag)
+		  buffer_cache[i].WW++;
+		  else
+		  buffer_cache[i].WR++;
+		  return i;
+		}
+		/* miss : the block was being evicted, release lock */
+		else
+		{
+		  lock_release(&buffer_cache[i].lock);
+		  return -1;
+		}
     }
     lock_release(&buffer_cache[i].lock);
   }
@@ -229,6 +261,7 @@ cache_get_entry (block_sector_t sector_id)
   if (buffer_cache[evict_id].dirty)
   {
     buffer_cache[evict_id].flushing = true;
+    buffer_cache[evict_id].next_id = sector_id;
     lock_release(&buffer_cache[evict_id].lock);
     /* IO */
     block_write(fs_device, buffer_cache[evict_id].sector_id,
@@ -239,6 +272,7 @@ cache_get_entry (block_sector_t sector_id)
   buffer_cache[evict_id].dirty = false;
   buffer_cache[evict_id].accessed = false;
   buffer_cache[evict_id].sector_id = sector_id;
+  buffer_cache[evict_id].next_id = UINT32_MAX;
   buffer_cache[evict_id].flushing = false;
   /* flush complete, signal */
   cond_signal(&buffer_cache[evict_id].cache_ready,
