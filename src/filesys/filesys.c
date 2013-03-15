@@ -80,7 +80,7 @@ filesys_open (const char *name)
 {
   struct dir *dir;
   char *file_name;
-  if ( !strcmp(name, "/"))
+  if (!strcmp(name, "/"))
     return file_open (inode_open (ROOT_DIR_SECTOR));
 
   if(!filesys_parse (name, &dir, &file_name))
@@ -133,6 +133,7 @@ do_format (void)
   struct dir *dir = dir_open_root();
   dir_add (dir,".", ROOT_DIR_SECTOR, true);
   dir_add (dir,"..", ROOT_DIR_SECTOR, true);
+  dir_close (dir);
   free_map_close ();
   printf ("done.\n");
 }

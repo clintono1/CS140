@@ -42,7 +42,7 @@ dir_create (block_sector_t sector, size_t entry_cnt)
 struct dir *  
 dir_open (struct inode *inode)
 {
-  ASSERT (inode_is_dir(inode));
+  ASSERT (inode_is_dir (inode));
   struct dir *dir = calloc (1, sizeof *dir);
   if (dir != NULL)
   {
@@ -70,7 +70,8 @@ dir_open_root (void)
 struct dir*
 dir_open_current(void)
 {
-  return dir_open (inode_open (thread_current()->cwd_sector));
+  /* Reopen the current working directory */
+  return dir_open (inode_reopen (thread_current()->cwd->inode));
 }
 
 /* Opens and returns a new directory for the same inode as DIR.
@@ -239,11 +240,6 @@ dir_remove (struct dir *dir, const char *name)
     }
     /* Can't close a non-empty directory */
     if (!dir_empty (inode))
-    {
-      goto done;
-    }
-    /* Can't remove cwd */
-    if (inode_get_inumber (inode) == thread_current ()->cwd_sector)
     {
       goto done;
     }

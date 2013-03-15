@@ -201,7 +201,7 @@ it only requires reading at most three index to find the actual data block.
  struct thread
    {
      ...
-     block_sector_t cwd_sector;          /* Current directory sector number */
+     struct dir *cwd;                    /* Current working directory */
      ...
    }
 

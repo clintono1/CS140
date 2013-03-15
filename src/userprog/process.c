@@ -11,6 +11,7 @@
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
@@ -22,7 +23,6 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmd_line, void (**eip) (void), void **esp);
 void argc_counter(const char*str, int *word_cnt, int *char_cnt);
 bool argument_pasing (const char *cmd_line, char **esp);
-
 
 #define WRITE_BYTE_4(addr, value) **((int**) addr) = (int)value
 
@@ -302,6 +302,8 @@ process_exit (void)
       file_close (cur->process_file);
   }
 
+  /* Close current working directory */
+  dir_close (cur->cwd);
 }
 
 /* Sets up the CPU for running user code in the current

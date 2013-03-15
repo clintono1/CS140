@@ -22,28 +22,33 @@ struct cache_entry
   struct lock lock;                /* fine grained lock for a single cache */
   uint8_t data[BLOCK_SECTOR_SIZE]; /* data for this sector */
 };
+
 typedef struct cache_entry cache_entry_t;
 
 /* cache array */
 static cache_entry_t buffer_cache[BUFFER_CACHE_SIZE];
+
 /* clock hand for clock algorithm */
 static uint32_t hand;
+
 /* global buffer cache */
 static struct lock global_cache_lock;
 
 /* read-ahead queue */
 static struct list read_ahead_q;
+
 /* read-ahead queue lock */
 static struct lock ra_q_lock;
+
 /* read-ahead queue ready condition variable */
 static struct condition ra_q_ready;
+
 struct read_a
 {
   block_sector_t sector;
   struct list_elem elem;
 };
 typedef struct read_a read_a_t;
-
 
 /* Prefetch interface */
 void
@@ -61,6 +66,7 @@ cache_readahead(block_sector_t sector)
 static void
 cache_readahead_daemon(void * aux UNUSED)
 {
+  thread_current ()->cwd = dir_open_root ();
   while(true)
   {
     lock_acquire(&ra_q_lock);
@@ -92,19 +98,19 @@ cache_flush(void)
       /* wait until this cache block is fully written to disk */
       if(buffer_cache[c_ind].flushing)
       {
-      lock_release(&buffer_cache[c_ind].lock);
-      continue;
+        lock_release(&buffer_cache[c_ind].lock);
+        continue;
       }
       buffer_cache[c_ind].flushing = true;
       buffer_cache[c_ind].next_id = UINT32_MAX;
       lock_release(&buffer_cache[c_ind].lock);
       block_write(fs_device, buffer_cache[c_ind].sector_id,
-                                     buffer_cache[c_ind].data);
+                  buffer_cache[c_ind].data);
       lock_acquire(&buffer_cache[c_ind].lock);
       buffer_cache[c_ind].flushing = false;
       buffer_cache[c_ind].dirty = false;
       cond_signal(&buffer_cache[c_ind].cache_ready,
-                              &buffer_cache[c_ind].lock);
+                  &buffer_cache[c_ind].lock);
       lock_release(&buffer_cache[c_ind].lock);
     }
   }
@@ -112,12 +118,13 @@ cache_flush(void)
 
 /* Write-behind function */
 static void
-write_behind_period(void * aux UNUSED)
+write_behind_period (void * aux UNUSED)
 {
-  while(true)
+  thread_current ()->cwd = dir_open_root ();
+  while (true)
   {
-    timer_sleep(TIMER_FREQ*WRITE_BEHIND_INTERVAL);
-    cache_flush();
+    timer_sleep (TIMER_FREQ * WRITE_BEHIND_INTERVAL);
+    cache_flush ();
   }
 }
 
@@ -147,9 +154,8 @@ cache_init (void)
   list_init(&read_ahead_q);
   lock_init(&ra_q_lock);
   cond_init(&ra_q_ready);
-  thread_create ("write_behind_period_t", PRI_DEFAULT,
-                           write_behind_period, NULL);
-  thread_create ("read_ahead_t", PRI_DEFAULT, cache_readahead_daemon, NULL);
+  thread_create ("write_behind", PRI_DEFAULT, write_behind_period, NULL);
+  thread_create ("read_ahead", PRI_DEFAULT, cache_readahead_daemon, NULL);
 }
 
 /* See whether there is a hit for sector. If yes, return cache id.
@@ -173,9 +179,9 @@ is_in_cache (block_sector_t sector, bool write_flag)
       if(buffer_cache[i].sector_id == sector)
       {
         if(write_flag)
-        buffer_cache[i].WW++;
+          buffer_cache[i].WW++;
         else
-        buffer_cache[i].WR++;
+          buffer_cache[i].WR++;
         return i;
       }
       /* miss : the sector was being evicted, release lock */
@@ -197,9 +203,9 @@ is_in_cache (block_sector_t sector, bool write_flag)
       if(buffer_cache[i].sector_id == sector)
       {
         if(write_flag)
-        buffer_cache[i].WW++;
+          buffer_cache[i].WW++;
         else
-        buffer_cache[i].WR++;
+          buffer_cache[i].WR++;
         return i;
       }
       /* miss : the sector is no longer in cache */
@@ -268,7 +274,7 @@ cache_get_entry (block_sector_t sector_id)
     lock_release(&buffer_cache[evict_id].lock);
     /* IO */
     block_write(fs_device, buffer_cache[evict_id].sector_id,
-                               buffer_cache[evict_id].data);
+                buffer_cache[evict_id].data);
     lock_acquire(&buffer_cache[evict_id].lock);
   }
   /* completely new cache block! */
@@ -279,7 +285,7 @@ cache_get_entry (block_sector_t sector_id)
   buffer_cache[evict_id].flushing = false;
   /* flush complete, signal */
   cond_signal(&buffer_cache[evict_id].cache_ready,
-                    &buffer_cache[evict_id].lock);
+              &buffer_cache[evict_id].lock);
   return &buffer_cache[evict_id];
 }
 
@@ -293,7 +299,7 @@ cache_read ( block_sector_t sector, void * buffer)
 /* Routine for cache read no matter miss or hit */
 static void
 cache_read_routine (cache_entry_t * cur_c, void *buffer,
-                              off_t start, off_t length)
+                    off_t start, off_t length)
 {
   /* multiple reader, single writer to the same block */
   while (cur_c->loading || cur_c->flushing || cur_c->WW + cur_c->AW > 0)
@@ -351,7 +357,7 @@ cache_read_miss (block_sector_t sector, void *buffer, off_t start, off_t length)
  * BUFFER. */
 void
 cache_read_partial (block_sector_t sector, void *buffer,
-                              off_t start, off_t length)
+                    off_t start, off_t length)
 {
   lock_acquire(&global_cache_lock);
   int cache_id_hit = is_in_cache(sector, false);
@@ -372,7 +378,7 @@ cache_read_partial (block_sector_t sector, void *buffer,
 /* Routine for cache write no matter miss or hit */
 static void
 cache_write_routine (cache_entry_t * cur_c, const void *buffer,
-                                     off_t start, off_t length)
+                     off_t start, off_t length)
 {
   /* multiple reader, single writer to the same block */
   while(cur_c->loading || cur_c->flushing || cur_c->AR + cur_c->AW > 0)

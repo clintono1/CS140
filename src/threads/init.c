@@ -125,6 +125,8 @@ main (void)
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
+  /* Set the current working directory of the initial thread and idle thread */
+  thread_init_cwd ();
 #endif
 
   printf ("Boot complete.\n");

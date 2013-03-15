@@ -112,7 +112,7 @@ struct thread
     int nice;                           /* Nice value of each thread*/
     bool is_kernel;                     /* True if this is a kernel process */
     bool in_syscall;                    /* True if thread is in system call */
-    block_sector_t cwd_sector;          /* Current directory sector number */
+    struct dir *cwd;                    /* Current working directory */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -123,7 +123,7 @@ struct thread
 
     struct file **file_handlers;       /* File handler array */
     int file_handlers_size;            /* Size of allocated file handlers */
-    int file_handlers_num;             /* Num of current file handlers */
+    int file_handlers_num;             /* Number of current file handlers */
     struct file *process_file;         /* File of this current process */
 #endif
     unsigned magic;                    /* Detects stack overflow. */
@@ -156,6 +156,7 @@ struct load_status
 extern bool thread_mlfqs;
 
 void thread_init (void);
+void thread_init_cwd (void);
 void thread_start (void);
 
 void thread_tick (void);

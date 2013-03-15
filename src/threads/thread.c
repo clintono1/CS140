@@ -108,8 +108,17 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  initial_thread->cwd_sector = ROOT_DIR_SECTOR;
+  /* initial_thread->cwd is not initialized here
+     since we cannot acquire lock yet */
+  initial_thread->cwd = NULL;
   load_avg = 0;
+}
+
+void
+thread_init_cwd (void)
+{
+  initial_thread->cwd = dir_open_root ();
+  idle_thread->cwd = dir_open_root ();
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -217,7 +226,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
   
-  if(thread_mlfqs)
+  if (thread_mlfqs)
   {
     if (thread_current()->priority < t->priority)
       thread_yield ();
@@ -732,8 +741,13 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  if (t != initial_thread)
-    t->cwd_sector = thread_current()->cwd_sector;
+
+  /* Do not set current working directory until initial_thread->cwd is set,
+     since the filesys may not have been successfully initialized yet. */
+  if (initial_thread->cwd != NULL)
+  {
+    t->cwd = dir_open_current ();
+  }
   
   if (thread_mlfqs)
   {

@@ -412,9 +412,11 @@ _chdir (const char *name)
     _exit (-1);
   if (!valid_vaddr_range (name, strlen (name)))
     _exit (-1);
+
+  struct thread *cur = thread_current ();
   if (!strcmp(name, "/"))
   {
-    thread_current()->cwd_sector = ROOT_DIR_SECTOR;
+    cur->cwd = dir_open_root ();
     return true;
   }
 
@@ -432,8 +434,8 @@ _chdir (const char *name)
   }
   dir_close (dir);
   free (dir_name);
-  thread_current ()->cwd_sector = inode_get_inumber (inode);
-  inode_close (inode);
+  dir_close (cur->cwd);
+  cur->cwd = dir_open (inode);
   return true;
 }
 
