@@ -63,23 +63,23 @@ cache_readahead_daemon(void * aux UNUSED)
 {
   while(true)
   {
-	lock_acquire(&ra_q_lock);
-	while(list_empty(&read_ahead_q))
-	{
+    lock_acquire(&ra_q_lock);
+    while(list_empty(&read_ahead_q))
+    {
       cond_wait(&ra_q_ready, &ra_q_lock);
-	}
-	struct list_elem * e_ptr = list_pop_front(&read_ahead_q);
-	read_a_t * ra_ptr = list_entry(e_ptr, read_a_t, elem);
-	block_sector_t sector = ra_ptr->sector;
-	free(ra_ptr);
-	lock_release(&ra_q_lock);
-	void * tmp_buffer = (void *) malloc(BLOCK_SECTOR_SIZE);
-	cache_read(sector, tmp_buffer);
-	free(tmp_buffer);
+    }
+    struct list_elem * e_ptr = list_pop_front(&read_ahead_q);
+    read_a_t * ra_ptr = list_entry(e_ptr, read_a_t, elem);
+    block_sector_t sector = ra_ptr->sector;
+    free(ra_ptr);
+    lock_release(&ra_q_lock);
+    void * tmp_buffer = (void *) malloc(BLOCK_SECTOR_SIZE);
+    cache_read(sector, tmp_buffer);
+    free(tmp_buffer);
   }
 }
 
-/* write every dirty cache block back to disk */
+/* Write every dirty cache block back to disk */
 void
 cache_flush(void)
 {
@@ -89,12 +89,12 @@ cache_flush(void)
     lock_acquire(&buffer_cache[c_ind].lock);
     if(buffer_cache[c_ind].dirty)
     {
-	  /* wait until this cache block is fully written to disk */
-	  if(buffer_cache[c_ind].flushing)
-	  {
-		lock_release(&buffer_cache[c_ind].lock);
-		continue;
-	  }
+      /* wait until this cache block is fully written to disk */
+      if(buffer_cache[c_ind].flushing)
+      {
+      lock_release(&buffer_cache[c_ind].lock);
+      continue;
+      }
       buffer_cache[c_ind].flushing = true;
       buffer_cache[c_ind].next_id = UINT32_MAX;
       lock_release(&buffer_cache[c_ind].lock);
@@ -110,14 +110,14 @@ cache_flush(void)
   }
 }
 
-/* Wite-behind function */
+/* Write-behind function */
 static void
 write_behind_period(void * aux UNUSED)
 {
   while(true)
   {
-	timer_sleep(TIMER_FREQ*WRITE_BEHIND_INTERVAL);
-	cache_flush();
+    timer_sleep(TIMER_FREQ*WRITE_BEHIND_INTERVAL);
+    cache_flush();
   }
 }
 
@@ -161,6 +161,7 @@ is_in_cache (block_sector_t sector, bool write_flag)
   for (i = 0; i < BUFFER_CACHE_SIZE; i++)
   {
     lock_acquire(&buffer_cache[i].lock);
+    /* if this sector is currently in cache */
     if(buffer_cache[i].sector_id == sector)
     {
       /* wait until this cache block is fully written to disk */
@@ -168,7 +169,7 @@ is_in_cache (block_sector_t sector, bool write_flag)
       {
         cond_wait(&buffer_cache[i].cache_ready, &buffer_cache[i].lock);
       }
-      /* hit : the block is still in cache after written to disk */
+      /* hit : the sector is still in cache after written to disk */
       if(buffer_cache[i].sector_id == sector)
       {
         if(write_flag)
@@ -177,36 +178,38 @@ is_in_cache (block_sector_t sector, bool write_flag)
         buffer_cache[i].WR++;
         return i;
       }
-      /* miss : the block was being evicted, release lock */
+      /* miss : the sector was being evicted, release lock */
       else
       {
         lock_release(&buffer_cache[i].lock);
         return -1;
       }
     }
+    /* if this sector is going to be loaded into cache */
     else if(buffer_cache[i].flushing && buffer_cache[i].next_id == sector)
     {
       /* wait until this cache block is fully written to disk */
-	  while(buffer_cache[i].flushing)
-	  {
-		cond_wait(&buffer_cache[i].cache_ready, &buffer_cache[i].lock);
-	  }
-	  /* hit : the block is still in cache after written to disk */
-		if(buffer_cache[i].sector_id == sector)
-		{
-		  if(write_flag)
-		  buffer_cache[i].WW++;
-		  else
-		  buffer_cache[i].WR++;
-		  return i;
-		}
-		/* miss : the block was being evicted, release lock */
-		else
-		{
-		  lock_release(&buffer_cache[i].lock);
-		  return -1;
-		}
+      while(buffer_cache[i].flushing)
+      {
+        cond_wait(&buffer_cache[i].cache_ready, &buffer_cache[i].lock);
+      }
+      /* hit : the sector is in cache */
+      if(buffer_cache[i].sector_id == sector)
+      {
+        if(write_flag)
+        buffer_cache[i].WW++;
+        else
+        buffer_cache[i].WR++;
+        return i;
+      }
+      /* miss : the sector is no longer in cache */
+      else
+      {
+        lock_release(&buffer_cache[i].lock);
+        return -1;
+      }
     }
+    /* not this cache entry, rlease lock, continue */
     lock_release(&buffer_cache[i].lock);
   }
   return -1;
