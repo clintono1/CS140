@@ -6,13 +6,9 @@
 #include "devices/timer.h"
 #include "threads/io.h"
 #include "threads/thread.h"
-#ifdef USERPROG
 #include "userprog/exception.h"
-#endif
-#ifdef FILESYS
 #include "devices/block.h"
 #include "filesys/filesys.h"
-#endif
 
 /* Keyboard control register port. */
 #define CONTROL_REG 0x64
@@ -90,9 +86,7 @@ shutdown_power_off (void)
   const char s[] = "Shutdown";
   const char *p;
 
-#ifdef FILESYS
   filesys_done ();
-#endif
 
   print_stats ();
 
@@ -120,12 +114,8 @@ print_stats (void)
 {
   timer_print_stats ();
   thread_print_stats ();
-#ifdef FILESYS
   block_print_stats ();
-#endif
   console_print_stats ();
   kbd_print_stats ();
-#ifdef USERPROG
   exception_print_stats ();
-#endif
 }

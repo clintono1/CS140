@@ -4,9 +4,7 @@
 #include <round.h>
 #include <stdio.h>
 #include "threads/malloc.h"
-#ifdef FILESYS
 #include "filesys/file.h"
-#endif
 
 /* Element type.
 
@@ -327,7 +325,6 @@ bitmap_scan_and_flip (struct bitmap *b, size_t start, size_t cnt, bool value)
 
 /* File input and output. */
 
-#ifdef FILESYS
 /* Returns the number of bytes needed to store B in a file. */
 size_t
 bitmap_file_size (const struct bitmap *b) 
@@ -358,7 +355,6 @@ bitmap_write (const struct bitmap *b, struct file *file)
   off_t size = byte_cnt (b->bit_cnt);
   return file_write_at (file, b->bits, size, 0) == size;
 }
-#endif /* FILESYS */
 
 /* Debugging. */
 
