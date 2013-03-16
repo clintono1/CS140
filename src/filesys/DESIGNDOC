@@ -172,32 +172,6 @@ it only requires reading at most three index to find the actual data block.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
- /* A single directory entry. */
- struct dir_entry 
-   {
-     ...
-     bool is_dir;                        /* Directory or file? */
-     ...
-   };
-
- /* In-memory inode. */
- struct inode 
-   {
-     ...
-     bool is_dir;                        /* True if inode is for directory */
-     ...
-   }
-
- /* On-disk inode.
-    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
- struct inode_disk
-   {
-     ...
-     int is_dir;                         /* 1 if this inode is a dir,
-                                            0 otherwise. */
-     ...
-   }
-
  struct thread
    {
      ...
@@ -243,18 +217,24 @@ to avoid races.
 Our implementation does not allow a directory to be removed if it is opened by
 a process. The dir_remove function will check whether the inode->open_cnt is
 larger than 1. If not, then this directory is allowed to remove. To prevent
-removing working directory, each process keeps an open inode of the current
-working directory. When a process exists, it closes its current working
-directory. The inode is also closed if the process changes its current working
-directory, while the new working directory's inode is opened.
+removing current working directory of a process, each process keeps an open
+dir struct for its own current working directory. When a process exists, it
+closes its current working directory. Thus, the open_cnt is never 0 when a
+directory is used as the current working directory.
+
+If the process changes its current working directory, the current working
+directory is closed while the new working directory is opened.
 
 ---- RATIONALE ----
 
 >> B6: Explain why you chose to represent the current directory of a
 >> process the way you did.
 
-We chose to store the inode to the current working directory in the thread
-struct. 
+We chose to store the dir struct to the current working directory in the thread
+struct. This is convenient to keep track of whether this directory is being
+used by any processes (for example, as current working directory) so it will
+not be deleted and lead to undefined state. When the system needs the current
+working directory, it can be immediately returned and used.
 
                  BUFFER CACHE
                  ============
