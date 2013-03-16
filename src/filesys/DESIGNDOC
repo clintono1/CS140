@@ -325,12 +325,15 @@ occupied and from then on clock algorithm starts to evict the "least recently
 used" (approximately) cache block.
 
 >> C3: Describe your implementation of write-behind.
+
 We create a write-behind thread when the buffer cache is initialized. This
 thread periodically (every 30 seconds, in our implementation) checks whether
 there are dirty cache blocks and write every dirty cache block back to disk
 int the background unless the cache is currently being flushed or being loaded.
 
 >> C4: Describe your implementation of read-ahead.
+
+We 
 
 ---- SYNCHRONIZATION ----
 
