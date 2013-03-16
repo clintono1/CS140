@@ -95,8 +95,9 @@ cache_flush(void)
     lock_acquire(&buffer_cache[c_ind].lock);
     if(buffer_cache[c_ind].dirty)
     {
-      /* wait until this cache block is fully written to disk */
-      if(buffer_cache[c_ind].flushing)
+      /* if this cache is being flushed, skip this block
+       * since it will be "clean" after it is flushed */
+      if(buffer_cache[c_ind].flushing || buffer_cache[c_ind].loading)
       {
         lock_release(&buffer_cache[c_ind].lock);
         continue;
