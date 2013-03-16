@@ -245,6 +245,62 @@ working directory, it can be immediately returned and used.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+/* Define buffer cache size */
+#define BUFFER_CACHE_SIZE 64
+
+/* Define write behind interval */
+#define WRITE_BEHIND_INTERVAL 30
+
+/* struct for cache entry */
+struct cache_entry
+{
+  block_sector_t sector_id;        /* sector id */
+  block_sector_t next_id;          /* id of sector to be loaded if flushing */
+  bool accessed;                   /* whether the entry is recently accessed */
+  bool dirty;                      /* whether this cache is dirty */
+  bool loading;                    /* whether this cache is being loaded */
+  bool flushing;                   /* whether this cache is being flushed */
+  uint32_t AW;                     /* # of processes actively writing */
+  uint32_t AR;                     /* # of processes actively reading */
+  uint32_t WW;                     /* # of processes waiting to write */
+  uint32_t WR;                     /* # of processes waiting to read */
+  struct condition cache_ready;    /* whether this cache can be read/written */
+  struct lock lock;                /* fine grained lock for a single cache */
+  uint8_t data[BLOCK_SECTOR_SIZE]; /* data for this sector */
+};
+
+/* typedef struct cache_entry for convenience */
+typedef struct cache_entry cache_entry_t;
+
+/* cache array, contain 64 entries */
+static cache_entry_t buffer_cache[BUFFER_CACHE_SIZE];
+
+/* clock hand for clock algorithm */
+static uint32_t hand;
+
+/* global buffer cache */
+static struct lock global_cache_lock;
+
+/* read-ahead queue */
+static struct list read_ahead_q;
+
+/* read-ahead queue lock */
+static struct lock ra_q_lock;
+
+/* read-ahead queue ready condition variable */
+static struct condition ra_q_ready;
+
+/* element in read-ahead queue, mainly stores sector number */
+struct read_a
+{
+  block_sector_t sector;
+  struct list_elem elem;
+};
+
+/* typedef struct read_a for convenience */
+typedef struct read_a read_a_t;
+
+
 ---- ALGORITHMS ----
 
 >> C2: Describe how your cache replacement algorithm chooses a cache
