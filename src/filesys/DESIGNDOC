@@ -359,6 +359,43 @@ operations.
 >> buffer cache block, how are other processes prevented from evicting
 >> that block?
 
+Our implementation of buffer cache allows multiple readers and single writer at
+the same time. Our buffer cache is truly concurrent in the sense that multiple
+readers can read the cache at the same time! We release every lock (both 
+global cache lock and fined-grained entry lock) during memcpy(), block_write()
+and block_read().
+
+To prevent other processes from evicting a block that is being actively read
+or written by another process, we define following variables in every cache
+entry:
+ uint32_t AW;                     /* # of processes actively writing */
+ uint32_t AR;                     /* # of processes actively reading */
+ uint32_t WW;                     /* # of processes waiting to write */
+ uint32_t WR;                     /* # of processes waiting to read */
+
+During the eviction process, whenever we see that AW + AR + WW + WR > 0, we
+skip this cache block and scan the next block.
+
+Whenever a process wants to read a sector in the cache, it increments WR of the
+cache block by 1. Then it checks whether AW + WW is larger than 0. If it is,
+conditional wait on cache_ready variable of this cache block. Otherwise, it
+decrements WR and increments AR. Then it releases the fined-grained lock and 
+call memcpy(). Then it acquires the cache entry lock, decrements AR by 1, 
+conditional signal on cache_ready so that some other process might be able to 
+write it, and then release the cache entry lock.
+
+Whenever a process wants to write a sector in the cache, it increments WW of the
+cache block by 1. Then it checks whether AR + AW is larger than 0. If it is,
+conditional wait on cache_ready variable of this cache block. Otherwise, it
+decrements WW and increments AW. Then it releases the fined-grained lock and 
+call memcpy(). Then it acquires the cache entry lock, decrements AW by 1, 
+conditional signal on cache_ready so that some other process might be able to 
+read or write it, and then release the cache entry lock.
+
+During the eviction process, for every cache block, we check whether
+AW + AR + WW + WR is larger than 0. If it is,  we skip this cache block and 
+scan the next block.
+
 >> C6: During the eviction of a block from the cache, how are other
 >> processes prevented from attempting to access the block?
 
