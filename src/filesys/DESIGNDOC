@@ -333,7 +333,25 @@ int the background unless the cache is currently being flushed or being loaded.
 
 >> C4: Describe your implementation of read-ahead.
 
-We 
+We used a list read_ahead_q (actually a queue) of struct read_a, a lock 
+ra_q_lock and a condition variable ra_q_ready for the read-ahead thread. See C1 
+for deails of these definitions.
+
+We create a read-ahead thread when the buffer cache is initialzed. We used 
+consumer-provider scheme (no queue size limit, though) to implement the 
+read-ahead thread.
+
+On one side, whenever we need to read ahead a sector, we call cache_readahead()
+to put this sector into the read ahead queue and conditional signal the read
+ahead thread on ra_q_ready variable. Of course, a lock is used for 
+synchronization during push operations.
+
+On the other side, the read ahead thread constantly checks whetehr the queue is 
+empty. If the queue is empty, conditional wait on the ra_q_ready variable.
+Otherwise, pop every struct read_a sequentially to get the id's of the sectors 
+to be read until the queue is empty. Call cache_read() to actually read these 
+sectors into cache. Of course, a lock is used for synchronization during pop 
+operations.
 
 ---- SYNCHRONIZATION ----
 
