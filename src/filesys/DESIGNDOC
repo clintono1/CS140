@@ -306,6 +306,24 @@ typedef struct read_a read_a_t;
 >> C2: Describe how your cache replacement algorithm chooses a cache
 >> block to evict.
 
+Our cache replacement uses clock algorithm. Every time the clock hand scans
+cache block array, there are several scenarios: 
+If a block is being written, waiting to be written, being read, waiting to be 
+read, being flushed to disk or being loaded from disk, then we simply skip this
+cache block to scan the next one.
+Else If a block has been accessed recently, we reset its accessed bit to be 
+false and then continue to scan the next cache block.
+Else we will choose this block to evict because it isn't being used and it 
+hasn't been visited recently. Of course, if the cache block is dirty, we need 
+to write it back to disk before we load the new sector from disk into cache.  
+
+At the beginning, all unused cache blocks are at the end of the cache array.
+Every time cache_evict_id() is called, the clock algorithm simply returns the
+id of an empty cache block and increment the clock hand to make it point to the
+next empty cache block. This process continues until every cache block is 
+occupied and from then on clock algorithm starts to evict the "least recently 
+used" (approximately) cache block.
+
 >> C3: Describe your implementation of write-behind.
 
 >> C4: Describe your implementation of read-ahead.
