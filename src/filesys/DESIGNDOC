@@ -399,10 +399,62 @@ scan the next block.
 >> C6: During the eviction of a block from the cache, how are other
 >> processes prevented from attempting to access the block?
 
+Before eviction of a block from the cache, we will set the flushing bit of
+the cache block to be true. The flushing bit will be reset to false after 
+block_write(). Whenever other processes want to access that cache block, it 
+needs to check whether the flushing bit of the cache block true. If it is, this
+process will conditional wait on the cache_ready variable until the flush is 
+complete. In this way, other processes cannot access the block if they want to 
+visit the old sector in the cache block.
+
+During block_write() process, all locks are released. After block_write(), we
+will set flushing bit to false and set the sector_id to be the new sector id. 
+
+Another case is to prevent other processes attempting to visit the sector yet
+to be loaded into the cache block. In is_in_cache() function, 
+The process first checks the whether the sector_id matches the sector queried. 
+If yes, 
+  it will wait until the flushing bit is false. 
+  Then check whether sector id's match.
+  If yes, return sector id.
+  If no, return -1.
+If no,
+  it will check whether next_id matches the sector_id queried.
+  If yes, it will wait until the flushing bit and loading bit are false.
+  Then check whether sector id's match.
+  If yes, return sector id.
+  If no, return -1.
+
+It is important that during the eviction process, we need to set the next_id
+of the cache block to be the new sector id (# of the sector to be loaded) when 
+the old sector in the cache block is being flushed to disk. And after the old
+content is written back to disk, we will set the sector_id to be the new sector
+id and set next_id to UINT32_MAX.
+
 ---- RATIONALE ----
 
 >> C7: Describe a file workload likely to benefit from buffer caching,
 >> and workloads likely to benefit from read-ahead and write-behind.
+
+When some data blocks in some files needs to be read/written frequently, then
+the workload will benefit from buffer caching. This is because instead of IO
+which is time consuming, the process only needs to do memcpy(), which is much
+faster than IO.
+
+When a large file is being read sequentially, then the workload will benefit
+from read-ahead. Because instead of loading file into cache sector by sector 
+sequentially, prefetch can read next sector ahead into cache asynchronously and 
+therefore save a lot of time.
+
+A process visit some sectors, write to them, and then visit some new sectors.
+If this keeps going on, then the workload can benifit from write-behind. This
+is because write-behind periodically write dirty cache blocks into disk so
+that they are not dirty anymore. When the process wants to visit new data
+sectors, it has to evict some old cache blocks. And many of the cache blocks
+might be "clean" since they've already been written back to disk by the
+write-behind thread. So the process doesn't need to write these back to disk
+and can simply write to these cache blocks.
+
 
                SURVEY QUESTIONS
                ================
