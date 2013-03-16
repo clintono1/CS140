@@ -6,6 +6,9 @@
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
 #include "filesys/directory.h"
+#include "threads/malloc.h"
+#include "threads/thread.h"
+#include "filesys/cache.h"
 
 /* Partition that contains the file system. */
 struct block *fs_device;
@@ -35,6 +38,7 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
+  cache_flush();
   free_map_close ();
 }
 
@@ -46,15 +50,23 @@ bool
 filesys_create (const char *name, off_t initial_size) 
 {
   block_sector_t inode_sector = 0;
-  struct dir *dir = dir_open_root ();
+  struct dir *dir;
+  char *file_name;
+
+  if (!strcmp (name, "/"))
+    return false;
+
+  if(!filesys_parse (name, &dir, &file_name))
+    return false;
+
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size)
-                  && dir_add (dir, name, inode_sector));
+                  && inode_create (inode_sector, initial_size, false)
+                  && dir_add (dir, file_name, inode_sector, false));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
-
+  free (file_name);
   return success;
 }
 
@@ -66,13 +78,19 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
-  struct dir *dir = dir_open_root ();
+  struct dir *dir;
+  char *file_name;
+  if (!strcmp(name, "/"))
+    return file_open (inode_open (ROOT_DIR_SECTOR));
+
+  if(!filesys_parse (name, &dir, &file_name))
+    return NULL;
+
   struct inode *inode = NULL;
-
   if (dir != NULL)
-    dir_lookup (dir, name, &inode);
+    dir_lookup (dir, file_name, &inode);
   dir_close (dir);
-
+  free (file_name);
   return file_open (inode);
 }
 
@@ -83,10 +101,23 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name) 
 {
-  struct dir *dir = dir_open_root ();
-  bool success = dir != NULL && dir_remove (dir, name);
-  dir_close (dir); 
+  struct dir *dir;
+  char *file_name;
+  if(!strcmp (name, "/"))
+    return false;
+  if(!filesys_parse (name, &dir, &file_name))
+    return false;
 
+  if ( !strcmp (file_name,".") || !strcmp (file_name, ".."))
+  {
+    dir_close (dir);
+    free (file_name);
+    return false;
+  }
+  
+  bool success = dir != NULL && dir_remove (dir, file_name);
+  dir_close (dir); 
+  free (file_name);
   return success;
 }
 
@@ -96,8 +127,80 @@ do_format (void)
 {
   printf ("Formatting file system...");
   free_map_create ();
-  if (!dir_create (ROOT_DIR_SECTOR, 16))
+  /* Creat a root directory that only contains . and .. */
+  if (!dir_create (ROOT_DIR_SECTOR, 2))
     PANIC ("root directory creation failed");
+  struct dir *dir = dir_open_root();
+  dir_add (dir,".", ROOT_DIR_SECTOR, true);
+  dir_add (dir,"..", ROOT_DIR_SECTOR, true);
+  dir_close (dir);
   free_map_close ();
   printf ("done.\n");
+}
+
+bool
+filesys_parse (const char *path, struct dir **dir, char **file_name)
+{
+  *file_name = NULL;
+  *dir = NULL;
+  size_t len = strlen (path);
+  if (len == 0)
+    return false;
+  char *buf = malloc (len+1);
+  memcpy (buf, path, len+1);
+  char *token, *save_ptr;
+  struct dir *cur_dir;
+  bool is_root = false;
+  char *begin = buf;
+  /* Tail is the last file name */
+  char *tail = buf + strlen (buf)-1;
+  while ( tail >= begin && *tail != '/')
+    tail --;
+  tail ++;
+  /* Find the first word */
+  while (*begin == ' ')
+    begin ++;
+  while (*begin == '/')
+  {
+    begin ++;
+    is_root = true;
+  }
+
+  /* Open current directory */
+  if (is_root)
+  {
+    cur_dir = dir_open_root ();
+    if (tail == NULL) /* Don't parse if the input path is just "/" */
+    {
+      dir_close (cur_dir);
+      free (buf);
+      return false;
+    }
+  }
+  else
+    cur_dir = dir_open_current ();
+
+  /* Open each directory in the path */
+  for (token = strtok_r (begin, "/", &save_ptr); token != tail;
+       token = strtok_r (NULL, "/", &save_ptr))
+  {
+    struct inode *inode = NULL;
+    /* Find the name<->inode_sector pair in cur_dir, return false 
+       if not found*/
+    if (!dir_lookup (cur_dir, token, &inode))
+    {
+      dir_close (cur_dir);
+      free (buf);
+      return false;
+    }
+    dir_close (cur_dir);
+    cur_dir = dir_open (inode);
+  }
+
+  *dir = cur_dir;
+  size_t tail_length = strlen (tail) + 1;
+  *file_name = malloc (tail_length);
+  memcpy (*file_name, tail, tail_length);
+  free (buf);
+  return true;
 }

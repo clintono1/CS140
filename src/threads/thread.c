@@ -11,10 +11,10 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#ifdef USERPROG
 #include "userprog/process.h"
-#endif
 #include "threads/fixed-point.h"
+#include "filesys/filesys.h"
+#include "filesys/cache.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -106,7 +106,17 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  /* initial_thread->cwd is not initialized here
+     since we cannot acquire lock yet */
+  initial_thread->cwd = NULL;
   load_avg = 0;
+}
+
+void
+thread_init_cwd (void)
+{
+  initial_thread->cwd = dir_open_root ();
+  idle_thread->cwd = dir_open_root ();
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -138,10 +148,8 @@ thread_tick (void)
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
-#ifdef USERPROG
   else if (t->pagedir != NULL)
     user_ticks++;
-#endif
   else
     kernel_ticks++;
 
@@ -214,7 +222,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
   
-  if(thread_mlfqs)
+  if (thread_mlfqs)
   {
     if (thread_current()->priority < t->priority)
       thread_yield ();
@@ -336,9 +344,7 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
-#ifdef USERPROG
   process_exit ();
-#endif
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
@@ -729,9 +735,17 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  if(thread_mlfqs)
+
+  /* Do not set current working directory until initial_thread->cwd is set,
+     since the filesys may not have been successfully initialized yet. */
+  if (initial_thread->cwd != NULL)
   {
-    if(t == initial_thread)
+    t->cwd = dir_open_current ();
+  }
+  
+  if (thread_mlfqs)
+  {
+    if (t == initial_thread)
     {
       t->nice = 0;
       t->recent_cpu = 0;
@@ -831,10 +845,8 @@ thread_schedule_tail (struct thread *prev)
   /* Start new time slice. */
   thread_ticks = 0;
 
-#ifdef USERPROG
   /* Activate the new address space. */
   process_activate ();
-#endif
 
   /* If the thread we switched from is dying, destroy its struct
      thread.  This must happen late so that thread_exit() doesn't

@@ -22,21 +22,15 @@
 #include "threads/palloc.h"
 #include "threads/pte.h"
 #include "threads/thread.h"
-#ifdef USERPROG
 #include "userprog/process.h"
 #include "userprog/exception.h"
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
 #include "userprog/tss.h"
-#else
-#include "tests/threads/tests.h"
-#endif
-#ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
-#endif
 #include "vm/page.h"
 #include "vm/swap.h"
 
@@ -51,7 +45,6 @@ struct lock file_flush_lock;
 struct condition file_flush_cond;
 
 
-#ifdef FILESYS
 /* -f: Format the file system? */
 static bool format_filesys;
 
@@ -59,10 +52,7 @@ static bool format_filesys;
    overriding the defaults. */
 static const char *filesys_bdev_name;
 static const char *scratch_bdev_name;
-#ifdef VM
 static const char *swap_bdev_name;
-#endif
-#endif /* FILESYS */
 
 /* -ul: Maximum number of pages to put into palloc's user pool. */
 static size_t user_page_limit = SIZE_MAX;
@@ -75,10 +65,8 @@ static char **parse_options (char **argv);
 static void run_actions (char **argv);
 static void usage (void);
 
-#ifdef FILESYS
 static void locate_block_devices (void);
 static void locate_block_device (enum block_type, const char *name);
-#endif
 
 int main (void) NO_RETURN;
 
@@ -115,33 +103,29 @@ main (void)
   paging_init ();
 
   /* Segmentation. */
-#ifdef USERPROG
   tss_init ();
   gdt_init ();
-#endif
 
   /* Initialize interrupt handlers. */
   intr_init ();
   timer_init ();
   kbd_init ();
   input_init ();
-#ifdef USERPROG
   exception_init ();
   syscall_init ();
-#endif
 
   /* Start thread scheduler and enable interrupts. */
   thread_start ();
   serial_init_queue ();
   timer_calibrate ();
 
-#ifdef FILESYS
   /* Initialize file system. */
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
   swap_table_init(&swap_table);
-#endif
+  /* Set the current working directory of the initial thread and idle thread */
+  thread_init_cwd ();
 
   printf ("Boot complete.\n");
   
@@ -260,26 +244,20 @@ parse_options (char **argv)
         shutdown_configure (SHUTDOWN_POWER_OFF);
       else if (!strcmp (name, "-r"))
         shutdown_configure (SHUTDOWN_REBOOT);
-#ifdef FILESYS
       else if (!strcmp (name, "-f"))
         format_filesys = true;
       else if (!strcmp (name, "-filesys"))
         filesys_bdev_name = value;
       else if (!strcmp (name, "-scratch"))
         scratch_bdev_name = value;
-#ifdef VM
       else if (!strcmp (name, "-swap"))
         swap_bdev_name = value;
-#endif
-#endif
       else if (!strcmp (name, "-rs"))
         random_init (atoi (value));
       else if (!strcmp (name, "-mlfqs"))
         thread_mlfqs = true;
-#ifdef USERPROG
       else if (!strcmp (name, "-ul"))
         user_page_limit = atoi (value);
-#endif
       else
         PANIC ("unknown option `%s' (use -h for help)", name);
     }
@@ -304,11 +282,7 @@ run_task (char **argv)
   const char *task = argv[1];
   
   printf ("Executing '%s':\n", task);
-#ifdef USERPROG
   process_wait (process_execute (task));
-#else
-  run_test (task);
-#endif
   printf ("Execution of '%s' complete.\n", task);
 }
 
@@ -329,13 +303,11 @@ run_actions (char **argv)
   static const struct action actions[] = 
     {
       {"run", 2, run_task},
-#ifdef FILESYS
       {"ls", 1, fsutil_ls},
       {"cat", 2, fsutil_cat},
       {"rm", 2, fsutil_rm},
       {"extract", 1, fsutil_extract},
       {"append", 2, fsutil_append},
-#endif
       {NULL, 0, NULL},
     };
 
@@ -372,50 +344,35 @@ usage (void)
           "Options must precede actions.\n"
           "Actions are executed in the order specified.\n"
           "\nAvailable actions:\n"
-#ifdef USERPROG
           "  run 'PROG [ARG...]' Run PROG and wait for it to complete.\n"
-#else
-          "  run TEST           Run TEST.\n"
-#endif
-#ifdef FILESYS
           "  ls                 List files in the root directory.\n"
           "  cat FILE           Print FILE to the console.\n"
           "  rm FILE            Delete FILE.\n"
           "Use these actions indirectly via `pintos' -g and -p options:\n"
           "  extract            Untar from scratch device into file system.\n"
           "  append FILE        Append FILE to tar file on scratch device.\n"
-#endif
           "\nOptions:\n"
           "  -h                 Print this help message and power off.\n"
           "  -q                 Power off VM after actions or on panic.\n"
           "  -r                 Reboot after actions.\n"
-#ifdef FILESYS
           "  -f                 Format file system device during startup.\n"
           "  -filesys=BDEV      Use BDEV for file system instead of default.\n"
           "  -scratch=BDEV      Use BDEV for scratch instead of default.\n"
-#ifdef VM
           "  -swap=BDEV         Use BDEV for swap instead of default.\n"
-#endif
-#endif
           "  -rs=SEED           Set random number seed to SEED.\n"
           "  -mlfqs             Use multi-level feedback queue scheduler.\n"
-#ifdef USERPROG
           "  -ul=COUNT          Limit user memory to COUNT pages.\n"
-#endif
           );
   shutdown_power_off ();
 }
 
-#ifdef FILESYS
 /* Figure out what block devices to cast in the various Pintos roles. */
 static void
 locate_block_devices (void)
 {
   locate_block_device (BLOCK_FILESYS, filesys_bdev_name);
   locate_block_device (BLOCK_SCRATCH, scratch_bdev_name);
-#ifdef VM
   locate_block_device (BLOCK_SWAP, swap_bdev_name);
-#endif
 }
 
 /* Figures out what block device to use for the given ROLE: the
@@ -446,4 +403,3 @@ locate_block_device (enum block_type role, const char *name)
       block_set_role (role, block);
     }
 }
-#endif

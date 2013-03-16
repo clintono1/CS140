@@ -52,7 +52,7 @@ static void
 do_remove (const char *format, ...) 
 {
   char name[128];
-  va_list args;
+  va_list args; 
 
   va_start (args, format);
   vsnprintf (name, sizeof name, format, args);

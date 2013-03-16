@@ -20,7 +20,6 @@ extern struct lock swap_flush_lock;
 extern struct condition swap_flush_cond;
 extern struct lock file_flush_lock;
 extern struct condition file_flush_cond;
-extern struct lock global_lock_filesys;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
@@ -153,9 +152,7 @@ load_page_from_file (struct suppl_pte *spte, uint8_t *upage, bool pin)
      If uninitialized data, load zero page 
      This is self-explanatory by s_pte->bytes_read and memset zeros*/
   off_t bytes_read;
-  lock_acquire (&global_lock_filesys);
   bytes_read = file_read_at ( spte->file, kpage, spte->bytes_read, spte->offset);
-  lock_release (&global_lock_filesys);
 
   if ( bytes_read != (int) spte->bytes_read)
   {

@@ -11,6 +11,7 @@
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
@@ -25,8 +26,6 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmd_line, void (**eip) (void), void **esp);
 void argc_counter(const char*str, int *word_cnt, int *char_cnt);
 bool argument_pasing (const char *cmd_line, char **esp);
-
-extern struct lock global_lock_filesys;
 
 #define WRITE_BYTE_4(addr, value) **((int**) addr) = (int)value
 
@@ -270,10 +269,6 @@ process_exit (void)
     sema_up (&cur->exit_status->sema_wait);
   }
 
-  /* Release the locks possibly held by the thread */
-  if (lock_held_by_current_thread (&global_lock_filesys))
-    lock_release (&global_lock_filesys);
-
   /* Release file resources hold by current thread */
   if (cur->file_handlers != NULL)
   {
@@ -282,9 +277,7 @@ process_exit (void)
     {
       if (cur->file_handlers[fd] != NULL)
       {
-        lock_acquire (&global_lock_filesys);
         file_close (cur->file_handlers[fd]);
-        lock_release (&global_lock_filesys);
       }
     }
     free (cur->file_handlers);
@@ -293,28 +286,29 @@ process_exit (void)
   /* Reenable write to this file */
   if (cur->process_file)
   {
-    lock_acquire (&global_lock_filesys);
     file_allow_write (cur->process_file);
     file_close (cur->process_file);
-    lock_release (&global_lock_filesys);
   }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
   if (pd != NULL) 
-    {
-      /* Correct ordering here is crucial.  We must set
-         cur->pagedir to NULL before switching page directories,
-         so that a timer interrupt can't switch back to the
-         process page directory.  We must activate the base page
-         directory before destroying the process's page
-         directory, or our active page directory will be one
-         that's been freed (and cleared). */
-      cur->pagedir = NULL;
-      pagedir_activate (NULL);
-      pagedir_destroy (pd);
-    }
+  {
+    /* Correct ordering here is crucial.  We must set
+       cur->pagedir to NULL before switching page directories,
+       so that a timer interrupt can't switch back to the
+       process page directory.  We must activate the base page
+       directory before destroying the process's page
+       directory, or our active page directory will be one
+       that's been freed (and cleared). */
+    cur->pagedir = NULL;
+    pagedir_activate (NULL);
+    pagedir_destroy (pd);
+  }
+
+  /* Close current working directory */
+  dir_close (cur->cwd);
 }
 
 /* Sets up the CPU for running user code in the current

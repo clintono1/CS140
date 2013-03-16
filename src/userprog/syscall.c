@@ -15,12 +15,23 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "vm/mmap.h"
+#include "filesys/free-map.h"
+#include "filesys/inode.h"
+#include "filesys/directory.h"
+#include "devices/input.h"
+#include "threads/pte.h"
 
 static void syscall_handler (struct intr_frame *);
 static inline bool valid_vaddr_range(const void * vaddr, unsigned size);
 static bool preload_user_memory (const void *vaddr, size_t size,
                                  bool allocate, uint8_t *esp);
 static bool unpin_user_memory (uint32_t *pd, const void *vaddr, size_t size);
+static void syscall_handler (struct intr_frame *);
+static inline bool valid_vaddr_range(const void * vaddr, unsigned size);
+
+#ifdef EXPLICIT_MEM_CHECK
+static bool check_user_memory (const void *vaddr, size_t size, bool to_be_written);
+#endif
 
 void  _exit (int status);
 static void  _halt (void);
@@ -37,14 +48,16 @@ static unsigned _tell (int fd);
 static void  _close (int fd);
 static mapid_t  _mmap (int fd, void *addr);
 static void  _munmap (mapid_t mapping);
-
-struct lock global_lock_filesys;  /* global lock for file system*/
+static bool _chdir (const char *dir);
+static bool _mkdir (const char *dir);
+static bool _readdir (int fd, char *name);
+static bool _isdir (int fd);
+static int  _inumber (int fd);
 
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  lock_init (&global_lock_filesys);
 }
 /* Check then Retrieve the n-th argument */
 static uint32_t
@@ -159,6 +172,32 @@ syscall_handler (struct intr_frame *f UNUSED)
       arg1 = get_argument (esp, 1);
       _munmap ((mapid_t)arg1);
       break;
+    
+    case SYS_CHDIR:
+      arg1 = get_argument(esp, 1);
+      f->eax = (uint32_t) _chdir ((const char*)arg1);
+      break;
+    
+    case SYS_MKDIR:
+      arg1 = get_argument(esp, 1);
+      f->eax = (uint32_t) _mkdir ((const char*)arg1);
+      break;
+    
+    case SYS_READDIR:
+      arg1 = get_argument(esp, 1);
+      arg2 = get_argument(esp, 2);
+      f->eax = (uint32_t) _readdir ((int)arg1, (char*)arg2);
+      break;
+
+    case SYS_ISDIR:
+      arg1 = get_argument(esp, 1);
+      f->eax = (uint32_t) _isdir((int)arg1);
+      break;
+
+    case SYS_INUMBER:
+      arg1 = get_argument(esp, 1);
+      f->eax = (uint32_t) _inumber((int)arg1);
+      break;
 
     default:
       break;
@@ -207,16 +246,12 @@ _exec (const char *cmd_line, uint8_t *esp)
     _exit (-1);
   }  
   /* Lock on process_execute since it needs to open the executable file */
-  lock_acquire (&global_lock_filesys);
   struct file *file = filesys_open (file_path);
   if (file == NULL ) 
   { 
-     lock_release (&global_lock_filesys);
      return -1; 
   }
   pid_t pid = (pid_t) process_execute (cmd_line);
-  lock_release (&global_lock_filesys);
-  
   unpin_user_memory (thread_current()->pagedir, cmd_line, strlen (cmd_line));
   if (pid == (pid_t) TID_ERROR)
     return -1;
@@ -252,9 +287,7 @@ _create (const char *file, unsigned initial_size, uint8_t *esp)
   if (!preload_user_memory (file, strlen (file), false, esp))
     _exit (-1);
 
-  lock_acquire (&global_lock_filesys);
   bool success = filesys_create (file, initial_size);
-  lock_release (&global_lock_filesys);
   unpin_user_memory (thread_current()->pagedir, file, strlen (file));
   return success;
 }
@@ -271,9 +304,8 @@ _remove (const char *file, uint8_t *esp)
   if (!preload_user_memory (file, strlen (file), false, esp))
     _exit (-1);
 
-  lock_acquire (&global_lock_filesys);
   bool success = filesys_remove (file);
-  lock_release (&global_lock_filesys);
+
   unpin_user_memory (thread_current()->pagedir, file, strlen (file));
   return success;
 }
@@ -283,16 +315,13 @@ _open (const char *file, uint8_t *esp)
 {
   if (!valid_vaddr_range (file, 0))
     _exit (-1);
-
   if (!valid_vaddr_range (file, strlen (file)))
     _exit (-1);
 
   if (!preload_user_memory (file, strlen (file), false, esp))
     _exit (-1);
 
-  lock_acquire (&global_lock_filesys);
   struct file *f = filesys_open (file);
-  lock_release (&global_lock_filesys);
   unpin_user_memory (thread_current()->pagedir, file, strlen (file));
 
   if (f == NULL)
@@ -308,9 +337,7 @@ _filesize (int fd)
   if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !valid_file_handler(t, fd))
     _exit (-1);
 
-  lock_acquire (&global_lock_filesys);
   int size = (int) file_length (t->file_handlers[fd]);
-  lock_release (&global_lock_filesys);
 
   return size;
 }
@@ -320,6 +347,11 @@ _read (int fd, void *buffer, unsigned size, uint8_t *esp)
 {
   if (!valid_vaddr_range (buffer, size))
      _exit (-1);
+
+#ifdef EXPLICIT_MEM_CHECK
+  if (!check_user_memory (buffer, size, true))
+    _exit (-1);
+#endif
 
   if (fd == STDOUT_FILENO)
     return -1;
@@ -352,12 +384,10 @@ _read (int fd, void *buffer, unsigned size, uint8_t *esp)
       unpin_user_memory (t->pagedir, buffer, size);
       return result;
   }
-  else if(valid_file_handler (t, fd))
+  else if (valid_file_handler (t, fd))
   {
       struct file *file = t->file_handlers[fd];
-      lock_acquire (&global_lock_filesys );
       result = file_read (file, buffer, size);
-      lock_release (&global_lock_filesys);
       unpin_user_memory (t->pagedir, buffer, size);
       return result;
   }
@@ -369,8 +399,15 @@ _write (int fd, const void *buffer, unsigned size, uint8_t *esp)
 {
   if (!valid_vaddr_range (buffer, size))
     _exit (-1);
+
+#ifdef EXPLICIT_MEM_CHECK
+  if (!check_user_memory (buffer, size, false))
+    _exit (-1);
+#endif
+
   if (size <= 0)
     return 0;
+
   if (fd == STDIN_FILENO)
     return -1;
 
@@ -387,9 +424,15 @@ _write (int fd, const void *buffer, unsigned size, uint8_t *esp)
   else if (valid_file_handler (t, fd))
   {
     struct file *file = t->file_handlers[fd];
-    lock_acquire (&global_lock_filesys);
+    bool is_dir = (inode_is_dir(file_get_inode(file)));
+    
+    if (is_dir)
+    {
+      return -1;
+    }
+    
     result = file_write (file, buffer, size);
-    lock_release (&global_lock_filesys);
+
   }
   unpin_user_memory (t->pagedir, buffer, size);
   return result;
@@ -404,9 +447,7 @@ _seek (int fd, unsigned position)
   if ( !valid_file_handler (t, fd) || fd < 2)
     _exit(-1);
 
-   lock_acquire (&global_lock_filesys);
    file_seek (file, position);
-   lock_release (&global_lock_filesys);
 
 }
 
@@ -419,9 +460,7 @@ _tell (int fd)
   if ( !valid_file_handler (t, fd) || fd < 2)
     _exit(-1);
 
-  lock_acquire (&global_lock_filesys);
   off_t n= file_tell (file);
-  lock_release (&global_lock_filesys);
   return n;
 }
 
@@ -432,9 +471,7 @@ _close (int fd)
   if (fd == STDIN_FILENO || fd == STDOUT_FILENO || !valid_file_handler(t, fd))
     return;
 
-  lock_acquire (&global_lock_filesys);
   file_close (t->file_handlers[fd]);
-  lock_release (&global_lock_filesys);
 
   thread_remove_file_handler (t, fd);
 }
@@ -463,9 +500,8 @@ _mmap (int fd, void *addr)
       return MAP_FAILED;
   }
 
-  lock_acquire (&global_lock_filesys);
   struct file *file_to_map = file_reopen (t->file_handlers[fd]);
-  lock_release (&global_lock_filesys);
+
   if(!file_to_map)
     return MAP_FAILED;
 
@@ -611,3 +647,162 @@ unpin_user_memory (uint32_t *pd, const void *vaddr, size_t size)
   }
   return true;
 }
+
+/* Part3: syscalls for sub-directories */
+static bool
+_chdir (const char *name)
+{
+  if (!valid_vaddr_range (name, 0))
+    _exit (-1);
+  if (!valid_vaddr_range (name, strlen (name)))
+    _exit (-1);
+
+  struct thread *cur = thread_current ();
+  if (!strcmp(name, "/"))
+  {
+    cur->cwd = dir_open_root ();
+    return true;
+  }
+
+  struct dir *dir;
+  char *dir_name;
+  if (!filesys_parse (name, &dir, &dir_name))
+    return false;
+
+  struct inode *inode = NULL;
+  if (!dir_lookup (dir, dir_name, &inode))
+  {
+    dir_close (dir);
+    free (dir_name);
+    return false;
+  }
+  dir_close (dir);
+  free (dir_name);
+  dir_close (cur->cwd);
+  cur->cwd = dir_open (inode);
+  return true;
+}
+
+static bool
+_mkdir (const char *name)
+{
+  bool success = false;
+  if (!valid_vaddr_range (name, 0))
+    _exit (-1);
+  if (!valid_vaddr_range (name, strlen (name)))
+    _exit (-1);
+  
+  if (!strcmp(name, "") || !strcmp(name, "/"))
+    return false;
+  block_sector_t inode_sector = 0;
+  struct dir *dir, *new_dir;
+  char *dir_name;
+  
+  if (!filesys_parse (name, &dir, &dir_name))
+    return false;
+
+  if (! (dir != NULL && free_map_allocate (1, &inode_sector)))
+  {
+    dir_close (dir);
+    free (dir_name);
+    return false;
+  }
+  /* Write inode to this sector. */  
+  if (inode_create (inode_sector, 0, true))
+  {
+    /* Add this inode to parent dir */
+    success = dir_add (dir, dir_name, inode_sector, true);
+    /* Add . and .. to the new directory */
+    if (success)
+    {
+      new_dir  = dir_open (inode_open (inode_sector));
+      success &= dir_add (new_dir, ".", inode_sector, true);
+      if (success)
+        success &= dir_add (new_dir, "..",
+                            inode_get_inumber(dir_get_inode(dir)),
+                            true);
+      dir_close (new_dir);
+      if (!success)
+        dir_remove (dir, dir_name);
+    }
+  }
+  dir_close (dir);
+  free (dir_name);
+  return success;
+}
+
+static bool
+_readdir (int fd, char name[READDIR_MAX_LEN + 1])
+{
+  if (!valid_vaddr_range (name, 0))
+    _exit (-1);
+  if (!valid_vaddr_range (name, strlen (name)))
+    _exit (-1);
+
+  struct thread *t  = thread_current();
+  struct file *file = t->file_handlers[fd];
+  off_t pos = file_tell(file);
+  if ( !valid_file_handler (t, fd) || fd < 2)
+    _exit(-1);
+
+  struct inode *inode = file_get_inode(file);
+  /* Make sure we are reading a directory, not a file*/
+  if (!inode_is_dir(inode))
+    return false;
+  struct dir *dir = dir_open(inode);
+  dir_set_pos(dir, pos);
+  bool success = dir_readdir(dir, name);
+  file_seek(file, dir_get_pos(dir));
+  free(dir);
+  return success;
+}
+
+static bool
+_isdir (int fd)
+{
+  struct thread *t  = thread_current();
+  struct file *file = t->file_handlers[fd];
+  
+  if ( !valid_file_handler (t, fd) || fd < 2)
+    _exit(-1);
+  bool is_dir = (inode_is_dir(file_get_inode(file)));
+  return is_dir;
+}
+
+static int
+_inumber (int fd)
+{
+  struct thread *t  = thread_current();
+  struct file *file = t->file_handlers[fd];
+
+  if ( !valid_file_handler (t, fd) || fd < 2)
+    _exit(-1);
+
+  int inumber = (inode_get_inumber(file_get_inode(file)));
+  return inumber;
+}
+
+#ifdef EXPLICIT_MEM_CHECK
+/* Check whether specified user memory range [ADDR, ADDR + SIZE) is valid. */
+static bool
+check_user_memory (const void *vaddr, size_t size, bool to_be_written)
+{
+  if (vaddr + size > PHYS_BASE)
+    return false;
+
+  void *upage = pg_round_down (vaddr);
+
+  while (upage < vaddr + size)
+  {
+    uint32_t *pte = lookup_page (thread_current()->pagedir, upage, false);
+    if (pte == NULL || *pte == 0)
+      return false;
+    if (!(*pte & PTE_P) || !(*pte & PTE_U))
+      return false;
+    if (to_be_written && !(*pte & PTE_W))
+      return false;
+    upage += PGSIZE;
+  }
+  return true;
+}
+#endif

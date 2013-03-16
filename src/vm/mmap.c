@@ -6,8 +6,6 @@
 #include "userprog/pagedir.h"
 #include "threads/palloc.h"
 
-extern struct lock global_lock_filesys;
-
 /* Mmap_files hash function */
 static unsigned
 mmap_files_hash_func (const struct hash_elem *e, void *aux UNUSED)
@@ -71,7 +69,6 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
         *pte &= ~PTE_P;
         invalidate_pagedir (thread_current ()->pagedir);
 
-        lock_acquire (&global_lock_filesys);
         off_t bytes_written;
         if (file_is_writable (spte->file))
         {
@@ -82,7 +79,6 @@ mmap_free_file (struct hash_elem *elem, void *aux UNUSED)
           ASSERT (bytes_written >= 0 &&
                   (size_t)bytes_written == spte->bytes_read);
         }
-        lock_release (&global_lock_filesys);
       }
       palloc_free_page (kpage);
 
@@ -98,9 +94,7 @@ release_spte:
     free (spte);
   }
 
-  lock_acquire (&global_lock_filesys);
   file_close (mmf_ptr->file);
-  lock_release (&global_lock_filesys);
   free (mmf_ptr);
 }
 

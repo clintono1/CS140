@@ -16,7 +16,7 @@ bool pagedir_is_accessed (uint32_t *pd, const void *upage);
 void pagedir_set_accessed_pte (uint32_t *pd, uint32_t *pte, bool accessed);
 void pagedir_set_accessed (uint32_t *pd, const void *upage, bool accessed);
 void pagedir_activate (uint32_t *pd);
-uint32_t * lookup_page (uint32_t *pd, const void *vaddr, bool create);
+uint32_t *lookup_page (uint32_t *pd, const void *vaddr, bool create);
 bool unpin_pte (uint32_t *pte);
 bool unpin_page (uint32_t *pd, const void *page);
 void invalidate_pagedir (uint32_t *pd);

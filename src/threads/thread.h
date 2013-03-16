@@ -9,11 +9,7 @@
 #include "threads/pte.h"
 #include "lib/kernel/hash.h"
 #include "vm/page.h"
-
-/* Hack to suppress IDE parsing errors */
-#ifndef USERPROG
-#define USERPROG
-#endif
+#include "filesys/directory.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -116,8 +112,8 @@ struct thread
     bool in_syscall;                    /* True if thread is in system call */
     void *esp;                          /* Saved stack pointer for interrupt
                                            in the kernel */
+    struct dir *cwd;                    /* Current working directory */
 
-#ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                 /* Page directory. */
     struct hash suppl_pt;              /* Supplemental page table */
@@ -126,10 +122,9 @@ struct thread
     struct lock list_lock;             /* Lock on child exit status list  */
 
     struct file **file_handlers;       /* File handler array */
-    int file_handlers_size;            /* Size of file_handlers array */
-    int file_handlers_num;             /* Num of current file handlers */
+    int file_handlers_size;            /* Size of allocated file handlers */
+    int file_handlers_num;             /* Number of current file handlers */
     struct file *process_file;         /* File of this current process */
-#endif
 
     struct hash mmap_files;            /* Hashtable of memory mapped files */
     int mmap_files_num_ever;           /* # of files ever mapped, used as key */
@@ -163,6 +158,7 @@ struct load_status
 extern bool thread_mlfqs;
 
 void thread_init (void);
+void thread_init_cwd (void);
 void thread_start (void);
 
 void thread_tick (void);
